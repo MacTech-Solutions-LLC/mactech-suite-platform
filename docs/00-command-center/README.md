@@ -1,0 +1,27 @@
+# Command Center
+
+This directory is the operating index for MacTech Suite Platform foundation work.
+
+## Foundation Status
+
+- Workflow Foundation v1 is active.
+- Product features are not yet in scope.
+- Deployment automation is not yet in scope.
+- Evidence and decision records should be added as the repository evolves.
+
+## Primary References
+
+- Governance: `../01-governance/repo-governance.md`
+- Security model: `../02-security-model/security-model.md`
+- QMS readiness notes: `../03-qms-readiness/qms-readiness-notes.md`
+- Evidence index: `../04-evidence/evidence-index.md`
+- Platform architecture: `../05-architecture/platform-architecture.md`
+- Decisions: `../06-decisions/`
+
+## Routine Workflow
+
+1. Define a small, reviewable change.
+2. Check whether governance, security, architecture, evidence, or decisions need
+   updates.
+3. Run `powershell -ExecutionPolicy Bypass -File .\scripts\check-repo-hygiene.ps1`.
+4. Open a pull request using the repository template.
