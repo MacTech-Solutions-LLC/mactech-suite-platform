@@ -2,7 +2,8 @@ name: Risk Review
 description: Capture security, data, operational, or governance risk review notes.
 title: "[Risk Review]: "
 labels:
-  - risk-review
+  - type:risk-review
+  - status:backlog
 body:
   - type: textarea
     id: context
@@ -16,12 +17,25 @@ body:
     attributes:
       label: Primary risk area
       options:
-        - Security
-        - Data handling
-        - Operations
-        - Governance
-        - Architecture
-        - Other
+        - risk:security
+        - risk:data-handling
+        - risk:operations
+        - risk:governance
+        - risk:architecture
+        - compliance:review-needed
+        - risk:other
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: Select the initial priority for triage.
+      options:
+        - priority:p2-normal
+        - priority:p0-blocker
+        - priority:p1-high
+        - priority:p3-low
     validations:
       required: true
   - type: textarea
@@ -38,6 +52,13 @@ body:
       description: Describe proposed mitigation, accepted risk, or next action.
     validations:
       required: true
+  - type: textarea
+    id: closing_evidence
+    attributes:
+      label: Closing evidence
+      description: Link the pull request, review note, decision record, or test run used to close this review.
+    validations:
+      required: false
   - type: checkboxes
     id: constraints
     attributes:
