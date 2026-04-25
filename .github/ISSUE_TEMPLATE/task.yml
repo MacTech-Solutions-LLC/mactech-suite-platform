@@ -1,0 +1,38 @@
+name: Task
+description: Track a repository foundation task.
+title: "[Task]: "
+labels:
+  - task
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the work to be done.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: List the files, folders, or workflows expected to change.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety checks
+      options:
+        - label: No secrets, credentials, API keys, tokens, or customer data will be added.
+          required: true
+        - label: No production, CMMC, FedRAMP, ISO, or certification claims will be made.
+          required: true
+        - label: No deployment workflow is included.
+          required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation plan
+      description: Describe how the change will be checked.
+    validations:
+      required: true

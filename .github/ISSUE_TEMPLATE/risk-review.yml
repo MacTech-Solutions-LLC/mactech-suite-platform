@@ -1,0 +1,49 @@
+name: Risk Review
+description: Capture security, data, operational, or governance risk review notes.
+title: "[Risk Review]: "
+labels:
+  - risk-review
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Describe the change, decision, or concern being reviewed.
+    validations:
+      required: true
+  - type: dropdown
+    id: risk_area
+    attributes:
+      label: Primary risk area
+      options:
+        - Security
+        - Data handling
+        - Operations
+        - Governance
+        - Architecture
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Describe potential impact and affected repository areas.
+    validations:
+      required: true
+  - type: textarea
+    id: mitigation
+    attributes:
+      label: Mitigation or decision
+      description: Describe proposed mitigation, accepted risk, or next action.
+    validations:
+      required: true
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: This review does not include secrets, credentials, tokens, or customer data.
+          required: true
+        - label: This review does not make production or certification claims.
+          required: true
