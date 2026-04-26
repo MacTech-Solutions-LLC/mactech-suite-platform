@@ -50,11 +50,13 @@ const DEVELOPER_NAME = process.env.SEED_DEVELOPER_NAME ||
   'Brian Developer'; // <-- REPLACE THIS
 
 /**
- * The bootstrap tenant's external ID (from Clerk Organizations or placeholder)
- * If not using Clerk orgs yet, use a placeholder like "tenant_bootstrap_001"
+ * The bootstrap tenant's external ID (from Clerk Organizations)
+ * 
+ * Clerk Org format: "org_xxxxxxxxxxxxxxxxxxxxxxxx"
+ * This is Brian's Clerk Org: org_3CpMVyinL6o6SydBwIPaz188MWk
  */
 const TENANT_EXTERNAL_ID = process.env.SEED_TENANT_EXTERNAL_ID || 
-  'tenant_bootstrap_001'; // <-- Update if using Clerk orgs
+  'org_3CpMVyinL6o6SydBwIPaz188MWk'; // <-- Brian's Clerk Organization
 
 // ============================================================================
 // SEED LOGIC
