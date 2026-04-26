@@ -1,0 +1,146 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// MembershipRole enum - simple role system for first slice
+// Dynamic Role/Permission tables deferred until permission matrix is defined
+enum MembershipRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+// Tenant - The root isolation unit
+// tenantId is an internal MacTech abstraction, NOT permanently coupled to Clerk org_id
+model Tenant {
+  id          String   @id @default(cuid())
+  externalId  String?  @unique // Maps to Clerk org_id or other IdP, but decoupled
+  name        String
+  slug        String   @unique
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  memberships Membership[]
+  auditEvents AuditEvent[]
+
+  @@index([externalId])
+  @@index([slug])
+  @@index([isActive])
+}
+
+// User - Stable reference linked via externalId (Google/Clerk ID)
+model User {
+  id          String   @id @default(cuid())
+  externalId  String   @unique // Clerk user_id or Google sub - the stable identifier
+  email       String   @unique
+  name        String?
+  avatarUrl   String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  memberships Membership[]
+  auditEvents AuditEvent[]
+
+  @@index([externalId])
+  @@index([email])
+  @@index([isActive])
+}
+
+// Membership - The join table defining which User belongs to which Tenant
+// Also carries the role for that membership
+model Membership {
+  id        String        @id @default(cuid())
+  tenantId  String
+  userId    String
+  role      MembershipRole @default(VIEWER)
+  isActive  Boolean       @default(true)
+  joinedAt  DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  // Relations
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
+  @@index([role])
+  @@index([isActive])
+}
+
+// AuditEvent - Tenant-scoped audit trail
+// All audit events belong to a tenant for isolation
+model AuditEvent {
+  id          String   @id @default(cuid())
+  tenantId    String
+  userId      String?
+  action      String   // e.g., "CREATE", "UPDATE", "DELETE", "LOGIN"
+  entity      String   // e.g., "Project", "Document", "User"
+  entityId    String?  // The ID of the affected resource
+  metadata    Json?    // Flexible metadata for context
+  ipAddress   String?
+  userAgent   String?
+  timestamp   DateTime @default(now())
+
+  // Relations
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([timestamp])
+  @@index([tenantId, timestamp]) // Common query: tenant events by time
+}
+
+// Example: Tenant-scoped Project model
+// All tenant-scoped models MUST include tenantId and appropriate indexes
+// This demonstrates the "No Naked Tables" rule - every table has tenantId
+model Project {
+  id          String   @id @default(cuid())
+  tenantId    String   // REQUIRED: Every tenant-scoped row has tenantId
+  name        String
+  description String?
+  status      String   @default("draft")
+  createdBy   String   // User ID who created it
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId])           // REQUIRED: Always index tenantId
+  @@index([tenantId, status])  // Common query pattern
+  @@index([createdAt])
+  @@index([tenantId, createdAt])
+}
+
+// Example: Tenant-scoped Document model
+// Another demonstration of the "No Naked Tables" rule
+model Document {
+  id          String   @id @default(cuid())
+  tenantId    String   // REQUIRED: Every tenant-scoped row has tenantId
+  projectId   String?
+  title       String
+  content     String?
+  status      String   @default("draft")
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([projectId])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+}
