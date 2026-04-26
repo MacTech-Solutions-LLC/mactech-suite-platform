@@ -61,15 +61,49 @@ Defines a governance-level model for database access. This document intentionall
 - Rotation:
   - Rotate credentials/keys where applicable; avoid shared credentials.
 
+## Tenant isolation rules
+
+### No naked tenant tables
+- All tenant-scoped tables must include a `tenantId` column.
+- Queries without explicit `tenantId` filtering are prohibited at the application layer.
+
+### Global exception guidance
+- Global tables (non-tenant-scoped) should be explicitly marked and minimized.
+- Examples: platform configuration, system-wide feature flags, shared reference data.
+- All global tables require explicit documentation and approval.
+
+### Server-side tenant enforcement
+- Tenant filtering must happen server-side, never client-side.
+- API layer must enforce `tenantId` on all data access operations.
+- Row-level security (RLS) policies are recommended where supported by the database engine.
+
+### Tenant-safe query pattern
+```
+// Required pattern for all tenant-scoped queries
+WHERE tenantId = :tenantId
+
+// Prohibited: queries without tenant filter
+SELECT * FROM users  // ❌ No tenant filter
+
+// Required: explicit tenant filter
+SELECT * FROM users WHERE tenantId = :tenantId  // ✓ Tenant filtered
+```
+
+### tenantId abstraction
+- `tenantId` is an internal MacTech tenant abstraction.
+- It should **not** be permanently coupled to Clerk `org_id`.
+- Maintain a mapping layer to allow flexibility if identity provider changes.
+
 ## Evidence expectations
 
 - Access request records and approvals.
 - Periodic access review outputs.
 - Audit log retention policy and sample extracts (sanitized).
 - Inventory of service identities and their grants.
+- Tenant isolation design documentation (where applicable).
 
 ## Open questions
 
 - Which database engine(s) are in scope?
-- Is there a requirement for row-level security or tenant isolation?
 - What is the audit log retention period requirement?
+- What tenant isolation mechanism will be used (RLS, application layer, or both)?
