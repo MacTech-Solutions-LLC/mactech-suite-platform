@@ -1,0 +1,52 @@
+# Disposable Local Development Environment
+# MT-019: Docker Postgres Sandbox
+# 
+# Usage:
+#   docker-compose up -d    # Start services
+#   docker-compose down -v  # Stop and destroy all data (the "reset button")
+# 
+# Compliance Note: Keeps dev telemetry local until cloud testing is intentional.
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: mactech-postgres
+    environment:
+      POSTGRES_USER: mactech_dev
+      POSTGRES_PASSWORD: mactech_dev_pass
+      POSTGRES_DB: mactech_local
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mactech_dev -d mactech_local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mactech-network
+
+  # Optional: Adminer for database inspection (lightweight alternative to pgAdmin)
+  adminer:
+    image: adminer:latest
+    container_name: mactech-adminer
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - mactech-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  mactech-network:
+    driver: bridge
