@@ -125,53 +125,12 @@ export async function withTenant<T>(
 }
 
 /**
- * Higher-order function for creating tenant-scoped repository methods
- * 
- * @example
- * const ProjectRepository = createTenantRepository({
- *   findByStatus: (db, status: string) => 
- *     db.project.findMany({ where: { status } }),
- *   
- *   findById: (db, id: string) =>
- *     db.project.findFirst({ where: { id } })
- * });
- * 
- * // Usage
- * const authContext = await getMacTechAuthContext();
- * const projects = await ProjectRepository.findByStatus(authContext, 'active');
- */
-export function createTenantRepository<T extends Record<string, Function>>(
-  methods: T
-): { [K in keyof T]: (authContext: MacTechAuthContext | null, ...args: Parameters<T[K]> extends [any, ...infer R] ? R : never) => Promise<ReturnType<T[K]>> } {
-  
-  const wrapped = {} as { [K in keyof T]: Function };
-  
-  for (const [key, method] of Object.entries(methods)) {
-    wrapped[key as keyof T] = async (authContext: MacTechAuthContext | null, ...args: any[]) => {
-      validateAuthContext(authContext);
-      return method(prisma, ...args);
-    };
-  }
-  
-  return wrapped as { [K in keyof T]: (authContext: MacTechAuthContext | null, ...args: Parameters<T[K]> extends [any, ...infer R] ? R : never) => Promise<ReturnType<T[K]>> };
-}
-
-/**
  * Middleware pattern for Prisma to enforce tenantId on all queries
  * This is a placeholder for future implementation
+ * 
+ * TODO: Implement Prisma middleware that automatically injects tenantId
+ * into where clauses for specified models
  */
 export function createTenantMiddleware(requiredModels: string[]) {
-  // TODO: Implement Prisma middleware that automatically injects tenantId
-  // into where clauses for specified models
-  // 
-  // Example:
-  // prisma.$use(async (params, next) => {
-  //   if (requiredModels.includes(params.model)) {
-  //     // Ensure tenantId is present in where clause
-  //     // Throw TenantIsolationError if missing
-  //   }
-  //   return next(params);
-  // });
-  
   return null;
 }
