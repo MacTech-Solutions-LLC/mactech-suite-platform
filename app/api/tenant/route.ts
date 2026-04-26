@@ -18,6 +18,9 @@ import { getMacTechAuthContext, UnauthorizedError } from '../../../lib/auth/adap
 import { withTenant, InactiveMembershipError, TenantIsolationError } from '../../../lib/db/withTenant';
 import { prisma } from '../../../lib/db/prisma';
 
+// Force dynamic rendering - this route uses auth headers
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/tenant
  * 
