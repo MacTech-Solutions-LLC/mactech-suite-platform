@@ -140,11 +140,11 @@ export async function withTenant<T>(
  * const authContext = await getMacTechAuthContext();
  * const projects = await ProjectRepository.findByStatus(authContext, 'active');
  */
-export function createTenantRepository<T extends Record<string, Function>>(
+export function createTenantRepository<T extends Record<string, (...args: any[]) => any>>(
   methods: T
 ): { [K in keyof T]: (authContext: MacTechAuthContext | null, ...args: Parameters<T[K]> extends [any, ...infer R] ? R : never) => Promise<ReturnType<T[K]>> } {
   
-  const wrapped = {} as { [K in keyof T]: Function };
+  const wrapped = {} as { [K in keyof T]: (...args: any[]) => any };
   
   for (const [key, method] of Object.entries(methods)) {
     wrapped[key as keyof T] = async (authContext: MacTechAuthContext | null, ...args: any[]) => {
