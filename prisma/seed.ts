@@ -35,7 +35,7 @@ const prisma = new PrismaClient();
  * Google format: "xxxxxxxxxxxxxxxxxxxxxxxxx" (numeric sub as string)
  */
 const DEVELOPER_EXTERNAL_ID = process.env.SEED_DEVELOPER_EXTERNAL_ID || 
-  'EXTERNAL_ID_PLACEHOLDER'; // <-- REPLACE THIS
+  'user_3CrhZXkqPum9QUhYBsoxnWQRhrX'; // <-- Brian's Clerk User ID
 
 /**
  * Your email address
