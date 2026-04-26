@@ -12,6 +12,8 @@ certification claim.
 - Keep changes scoped and traceable.
 - Do not add secrets, customer data, or sensitive operational details.
 - Use issue templates for planned tasks and risk reviews.
+- Use `issue-tracking.md` for label groups, milestone names, and issue workflow
+  states.
 - Record meaningful architecture or workflow decisions in `docs/06-decisions/`.
 - Maintain evidence references under `docs/04-evidence/` and `evidence/` as the
   project matures.
@@ -25,6 +27,7 @@ Reviewers should check:
 - Whether security or data-handling impact is described
 - Whether docs, evidence, or decisions need updates
 - Whether unsupported production or certification claims were introduced
+- Whether issue labels, status, milestone, and closing evidence are appropriate
 
 ## Automation Boundary
 

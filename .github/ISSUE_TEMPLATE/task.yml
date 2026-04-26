@@ -2,7 +2,8 @@ name: Task
 description: Track a repository foundation task.
 title: "[Task]: "
 labels:
-  - task
+  - type:task
+  - status:backlog
 body:
   - type: textarea
     id: summary
@@ -16,6 +17,34 @@ body:
     attributes:
       label: Scope
       description: List the files, folders, or workflows expected to change.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Select the primary repository area.
+      options:
+        - area:governance
+        - area:security
+        - area:documentation
+        - area:automation
+        - area:architecture
+        - area:evidence
+        - area:codex
+        - area:other
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: Select the initial priority for triage.
+      options:
+        - priority:p2-normal
+        - priority:p0-blocker
+        - priority:p1-high
+        - priority:p3-low
     validations:
       required: true
   - type: checkboxes
@@ -36,3 +65,10 @@ body:
       description: Describe how the change will be checked.
     validations:
       required: true
+  - type: textarea
+    id: closing_evidence
+    attributes:
+      label: Closing evidence
+      description: Link the pull request, review note, decision record, or test run used to close this task.
+    validations:
+      required: false

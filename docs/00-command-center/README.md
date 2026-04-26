@@ -12,6 +12,7 @@ This directory is the operating index for MacTech Suite Platform foundation work
 ## Primary References
 
 - Governance: `../01-governance/repo-governance.md`
+- Issue tracking: `../01-governance/issue-tracking.md`
 - Security model: `../02-security-model/security-model.md`
 - QMS readiness notes: `../03-qms-readiness/qms-readiness-notes.md`
 - Evidence index: `../04-evidence/evidence-index.md`
@@ -21,7 +22,8 @@ This directory is the operating index for MacTech Suite Platform foundation work
 ## Routine Workflow
 
 1. Define a small, reviewable change.
-2. Check whether governance, security, architecture, evidence, or decisions need
+2. Triage the issue using `../01-governance/issue-tracking.md`.
+3. Check whether governance, security, architecture, evidence, or decisions need
    updates.
-3. Run `powershell -ExecutionPolicy Bypass -File .\scripts\check-repo-hygiene.ps1`.
-4. Open a pull request using the repository template.
+4. Run `powershell -ExecutionPolicy Bypass -File .\scripts\check-repo-hygiene.ps1`.
+5. Open a pull request using the repository template.
