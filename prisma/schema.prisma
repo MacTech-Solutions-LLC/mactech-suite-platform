@@ -13,9 +13,9 @@ datasource db {
 // MembershipRole enum - simple role system for first slice
 // Dynamic Role/Permission tables deferred until permission matrix is defined
 enum MembershipRole {
+  OWNER
   ADMIN
-  OPERATOR
-  REVIEWER
+  MEMBER
   VIEWER
 }
 
@@ -88,12 +88,12 @@ model AuditEvent {
   tenantId    String
   userId      String?
   action      String   // e.g., "CREATE", "UPDATE", "DELETE", "LOGIN"
-  resource    String   // e.g., "Project", "Document", "User"
-  resourceId  String?  // The ID of the affected resource
+  entity      String   // e.g., "Project", "Document", "User"
+  entityId    String?  // The ID of the affected resource
   metadata    Json?    // Flexible metadata for context
   ipAddress   String?
   userAgent   String?
-  occurredAt  DateTime @default(now())
+  timestamp   DateTime @default(now())
 
   // Relations
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -102,9 +102,9 @@ model AuditEvent {
   @@index([tenantId])
   @@index([userId])
   @@index([action])
-  @@index([resource])
-  @@index([occurredAt])
-  @@index([tenantId, occurredAt]) // Common query: tenant events by time
+  @@index([entity])
+  @@index([timestamp])
+  @@index([tenantId, timestamp]) // Common query: tenant events by time
 }
 
 // Example: Tenant-scoped Project model
