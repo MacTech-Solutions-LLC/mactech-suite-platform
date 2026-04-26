@@ -5,20 +5,25 @@
  * This implements the "No Naked Tables" rule from the security model:
  * every tenant-scoped query MUST include tenantId filtering.
  * 
+ * This version integrates with MacTechAuthContext to ensure
+ * membership validation happens before any database access.
+ * 
  * Usage:
- *   const projects = await withTenant(tenantId, (db) => 
+ *   const projects = await withTenant(authContext, (db) => 
  *     db.project.findMany({ where: { status: 'active' } })
  *   );
  * 
- * The wrapper automatically injects tenantId into the where clause.
+ * The wrapper verifies ACTIVE membership status before executing the callback.
  */
 
 import { prisma } from './prisma';
+import { MacTechAuthContext, UnauthorizedError } from '../auth/adapter';
 
 export type TenantContext = {
   tenantId: string;
-  userId?: string;
-  role?: string;
+  userId: string;
+  role: string;
+  membershipStatus: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
 };
 
 /**
@@ -32,32 +37,52 @@ export class TenantIsolationError extends Error {
 }
 
 /**
- * Validates tenantId is present and valid
+ * Error thrown when membership is not ACTIVE
  */
-function validateTenantId(tenantId: string | undefined): asserts tenantId is string {
-  if (!tenantId) {
+export class InactiveMembershipError extends Error {
+  constructor(message = 'Membership not active: Cannot access tenant data') {
+    super(message);
+    this.name = 'InactiveMembershipError';
+  }
+}
+
+/**
+ * Validates MacTechAuthContext and ensures ACTIVE membership
+ */
+function validateAuthContext(authContext: MacTechAuthContext | null): asserts authContext is MacTechAuthContext {
+  if (!authContext) {
+    throw new UnauthorizedError('Authentication required: No valid MacTech context');
+  }
+  
+  if (!authContext.tenantId) {
     throw new TenantIsolationError(
       'Tenant ID is required for all tenant-scoped queries. ' +
       'This query would violate the "No Naked Tables" rule.'
     );
   }
   
-  if (typeof tenantId !== 'string' || tenantId.length === 0) {
-    throw new TenantIsolationError('Invalid tenantId format');
+  // Critical: Verify membership status is ACTIVE
+  if (authContext.membershipStatus !== 'ACTIVE') {
+    throw new InactiveMembershipError(
+      `Membership status is ${authContext.membershipStatus}: Cannot access tenant data`
+    );
   }
 }
 
 /**
  * Wraps a database operation with mandatory tenant scoping
  * 
- * @param tenantId - The tenant scope for this operation
+ * @param authContext - The MacTechAuthContext containing tenantId and membership status
  * @param operation - Database operation callback receiving scoped prisma client
  * @returns Result of the database operation
- * @throws TenantIsolationError if tenantId is missing or invalid
+ * @throws UnauthorizedError if authContext is null
+ * @throws TenantIsolationError if tenantId is missing
+ * @throws InactiveMembershipError if membershipStatus is not 'ACTIVE'
  * 
  * @example
  * // Query all projects for a tenant
- * const projects = await withTenant(tenantId, (db) =>
+ * const authContext = await getMacTechAuthContext();
+ * const projects = await withTenant(authContext, (db) =>
  *   db.project.findMany({
  *     where: { status: 'active' },
  *     orderBy: { createdAt: 'desc' }
@@ -66,27 +91,31 @@ function validateTenantId(tenantId: string | undefined): asserts tenantId is str
  * 
  * @example
  * // Create a new project with tenant scope
- * const project = await withTenant(tenantId, (db) =>
+ * const authContext = await getMacTechAuthContext();
+ * const project = await withTenant(authContext, (db) =>
  *   db.project.create({
  *     data: {
- *       tenantId, // Explicitly set (also enforced by wrapper)
+ *       tenantId: authContext.tenantId, // From auth context
  *       name: 'New Project',
  *       status: 'draft',
- *       createdBy: userId
+ *       createdBy: authContext.internalUserId
  *     }
  *   })
  * );
  */
 export async function withTenant<T>(
-  tenantId: string | undefined,
+  authContext: MacTechAuthContext | null,
   operation: (db: typeof prisma) => Promise<T>
 ): Promise<T> {
-  // Validate tenantId is present - enforces "No Naked Tables" at API layer
-  validateTenantId(tenantId);
+  // Validate auth context and ACTIVE membership status
+  validateAuthContext(authContext);
+  
+  // From this point, authContext is validated and membership is ACTIVE
+  const { tenantId, internalUserId } = authContext;
   
   // Log tenant context for audit trail (in production, use proper audit system)
   if (process.env.NODE_ENV === 'development') {
-    console.log(`[TenantScoping] Operation scoped to tenant: ${tenantId}`);
+    console.log(`[TenantScoping] User ${internalUserId} accessing tenant: ${tenantId}`);
   }
   
   // Execute the operation
@@ -108,22 +137,23 @@ export async function withTenant<T>(
  * });
  * 
  * // Usage
- * const projects = await ProjectRepository.findByStatus(tenantId, 'active');
+ * const authContext = await getMacTechAuthContext();
+ * const projects = await ProjectRepository.findByStatus(authContext, 'active');
  */
 export function createTenantRepository<T extends Record<string, Function>>(
   methods: T
-): { [K in keyof T]: (tenantId: string, ...args: Parameters<T[K]> extends [any, ...infer R] ? R : never) => Promise<ReturnType<T[K]>> } {
+): { [K in keyof T]: (authContext: MacTechAuthContext | null, ...args: Parameters<T[K]> extends [any, ...infer R] ? R : never) => Promise<ReturnType<T[K]>> } {
   
   const wrapped = {} as { [K in keyof T]: Function };
   
   for (const [key, method] of Object.entries(methods)) {
-    wrapped[key as keyof T] = async (tenantId: string, ...args: any[]) => {
-      validateTenantId(tenantId);
+    wrapped[key as keyof T] = async (authContext: MacTechAuthContext | null, ...args: any[]) => {
+      validateAuthContext(authContext);
       return method(prisma, ...args);
     };
   }
   
-  return wrapped as { [K in keyof T]: (tenantId: string, ...args: Parameters<T[K]> extends [any, ...infer R] ? R : never) => Promise<ReturnType<T[K]>> };
+  return wrapped as { [K in keyof T]: (authContext: MacTechAuthContext | null, ...args: Parameters<T[K]> extends [any, ...infer R] ? R : never) => Promise<ReturnType<T[K]>> };
 }
 
 /**

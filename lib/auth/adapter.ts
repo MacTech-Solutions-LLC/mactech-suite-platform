@@ -1,75 +1,141 @@
 /**
- * Auth Adapter Placeholder
+ * Auth Adapter Layer
  * 
- * This module wraps Clerk/Google identity calls to keep business logic
- * decoupled from specific identity providers. The goal is to allow
- * future provider swaps without touching application code.
+ * This module creates a 'clean room' where the application only cares about
+ * internalUserId and tenantId. External identity providers (Clerk, Google)
+ * are resolved into internal MacTech abstractions at the boundary.
  * 
- * TODO: Implement actual Clerk integration
- * TODO: Add session validation
- * TODO: Add tenant context extraction from session
+ * Goal: Allow future provider swaps without touching business logic.
+ * 
+ * Critical Constraint: No Clerk IDs leak into business services.
+ * All downstream code uses internal MacTech identifiers only.
  */
 
-export interface AuthUser {
-  id: string;           // Internal MacTech user ID
-  externalId: string;   // Clerk user_id or Google sub
+import { auth } from '@clerk/nextjs/server';
+import { prisma } from '../db/prisma';
+import { MembershipRole } from '@prisma/client';
+
+/**
+ * MacTechAuthContext
+ * 
+ * The canonical internal authorization context used throughout the application.
+ * This contains NO external provider IDs (no Clerk user_id, no Clerk org_id).
+ */
+export interface MacTechAuthContext {
+  internalUserId: string;  // MacTech User.id (NOT Clerk user_id)
+  tenantId: string;        // MacTech Tenant.id (NOT Clerk org_id)
+  membershipId: string;    // MacTech Membership.id
+  role: MembershipRole;    // Role within this tenant context
+  membershipStatus: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
   email: string;
   name?: string;
-  avatarUrl?: string;
-}
-
-export interface AuthSession {
-  user: AuthUser;
-  tenantId?: string;    // Current active tenant from session
-  membershipRole?: string;
 }
 
 /**
- * Placeholder: Get current session from request context
- * This will integrate with Clerk's getAuth() or similar
+ * AuthAdapter Interface
+ * 
+ * Defines the contract for resolving external sessions into internal context.
  */
-export async function getSession(): Promise<AuthSession | null> {
-  // TODO: Implement actual session retrieval from Clerk
-  // For now, return null to enforce explicit auth checks
-  return null;
+export interface AuthAdapter {
+  resolveSession(): Promise<MacTechAuthContext | null>;
 }
 
 /**
- * Placeholder: Extract tenant context from session
- * tenantId is an internal MacTech abstraction, NOT Clerk org_id
+ * ClerkAuthAdapter
+ * 
+ * Resolves Clerk sessions into MacTechAuthContext.
+ * This is the ONLY place where Clerk types are referenced.
  */
-export async function getTenantContext(session: AuthSession): Promise<{
-  tenantId: string;
-  role: string;
-} | null> {
-  if (!session.tenantId) {
-    return null;
+export class ClerkAuthAdapter implements AuthAdapter {
+  async resolveSession(): Promise<MacTechAuthContext | null> {
+    // Get Clerk session (external provider)
+    const clerkSession = await auth();
+    
+    if (!clerkSession.userId) {
+      return null; // No authenticated user
+    }
+    
+    // Extract Clerk identifiers (external)
+    const clerkUserId = clerkSession.userId;
+    const clerkOrgId = clerkSession.orgId; // May be null if no active org
+    
+    if (!clerkOrgId) {
+      // User is authenticated but has no active tenant/org selected
+      return null;
+    }
+    
+    // Resolve external IDs to internal MacTech IDs via database lookup
+    // This is the critical bridge: Clerk IDs -> MacTech IDs
+    const membership = await prisma.membership.findFirst({
+      where: {
+        user: {
+          externalId: clerkUserId, // Lookup by Clerk ID
+        },
+        tenant: {
+          externalId: clerkOrgId,  // Lookup by Clerk org ID
+        },
+        isActive: true,
+      },
+      include: {
+        user: true,
+        tenant: true,
+      },
+    });
+    
+    if (!membership) {
+      // Valid Clerk session, but no internal membership found
+      // This is a fail-closed scenario: authenticated but unauthorized
+      return null;
+    }
+    
+    // Construct the internal MacTech context
+    // From this point forward, NO Clerk IDs are used
+    return {
+      internalUserId: membership.user.id,      // MacTech User.id
+      tenantId: membership.tenant.id,          // MacTech Tenant.id
+      membershipId: membership.id,             // MacTech Membership.id
+      role: membership.role,                   // MembershipRole enum
+      membershipStatus: membership.isActive ? 'ACTIVE' : 'INACTIVE',
+      email: membership.user.email,
+      name: membership.user.name || undefined,
+    };
   }
-  
-  return {
-    tenantId: session.tenantId,
-    role: session.membershipRole || 'VIEWER',
-  };
 }
 
 /**
- * Placeholder: Verify user has required permission
+ * Factory function for AuthAdapter
+ * Currently returns ClerkAuthAdapter, but can be swapped in the future.
  */
-export async function requirePermission(
-  session: AuthSession,
-  requiredRole: string
-): Promise<boolean> {
-  // TODO: Implement role hierarchy check
-  // For now, deny all to enforce explicit permission checks
-  return false;
+export function createAuthAdapter(): AuthAdapter {
+  return new ClerkAuthAdapter();
 }
 
 /**
- * Placeholder: Map Clerk org_id to internal tenantId
- * This maintains the abstraction layer - we don't use Clerk org_id directly
+ * Convenience function to get current MacTech auth context
+ * Use this in API routes and server components
  */
-export async function resolveTenantId(clerkOrgId: string): Promise<string | null> {
-  // TODO: Lookup tenant by externalId mapping
-  // Returns internal MacTech tenantId, NOT the Clerk org_id
-  return null;
+export async function getMacTechAuthContext(): Promise<MacTechAuthContext | null> {
+  const adapter = createAuthAdapter();
+  return adapter.resolveSession();
+}
+
+/**
+ * Error thrown when auth context is required but not available
+ */
+export class UnauthorizedError extends Error {
+  constructor(message = 'Unauthorized: Valid MacTech membership required') {
+    super(message);
+    this.name = 'UnauthorizedError';
+  }
+}
+
+/**
+ * Error thrown when a user has a valid external session
+ * but no internal MacTech membership (fail-closed scenario)
+ */
+export class MembershipRequiredError extends Error {
+  constructor(message = 'Membership required: No active tenant membership found') {
+    super(message);
+    this.name = 'MembershipRequiredError';
+  }
 }
