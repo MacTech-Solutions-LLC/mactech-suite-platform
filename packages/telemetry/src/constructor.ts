@@ -20,7 +20,12 @@ import type {
   TelemetryEventType,
 } from "./types";
 import { TelemetryEventSources } from "./types";
-import type { ShadowContext } from "../../types/index";
+import type {
+  ActorType,
+  ShadowContext,
+  SystemActor,
+  TriggerType,
+} from "../../types/index";
 
 // ============================================================================
 // BASE CONSTRUCTOR
@@ -35,6 +40,9 @@ export type TelemetryEventInput = {
   eventType: TelemetryEventType;
   eventSource?: TelemetryEventSource;
   userId?: string;
+  actorType?: ActorType;
+  triggerType?: TriggerType;
+  systemActor?: SystemActor;
   requestId?: string;
   sessionId?: string;
   componentAnchor?: string;
@@ -63,6 +71,9 @@ export function buildTelemetryEvent(input: TelemetryEventInput): TelemetryEvent 
     eventType,
     eventSource = TelemetryEventSources.TELEMETRY_PACKAGE,
     userId,
+    actorType,
+    triggerType,
+    systemActor,
     requestId,
     sessionId,
     componentAnchor,
@@ -81,6 +92,9 @@ export function buildTelemetryEvent(input: TelemetryEventInput): TelemetryEvent 
     eventType,
     eventSource,
     ...(userId !== undefined && { userId }),
+    ...(actorType !== undefined && { actorType }),
+    ...(triggerType !== undefined && { triggerType }),
+    ...(systemActor !== undefined && { systemActor }),
     ...(requestId !== undefined && { requestId }),
     ...(sessionId !== undefined && { sessionId }),
     ...(componentAnchor !== undefined && { componentAnchor }),

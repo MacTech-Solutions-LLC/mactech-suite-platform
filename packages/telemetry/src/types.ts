@@ -26,9 +26,10 @@
  * - Shadow-test mode
  *
  * MT-NEURAL-001: Type contracts only. No Prisma model. No storage in v1.
+ * MT-NEURAL-002: Add actor/trigger model fields.
  */
 
-import type { ShadowMode } from "../../types/index";
+import type { ActorType, ShadowMode, SystemActor, TriggerType } from "../../types/index";
 
 // ============================================================================
 // TELEMETRY EVENT TYPE
@@ -46,6 +47,9 @@ import type { ShadowMode } from "../../types/index";
 export type TelemetryEvent = {
   tenantId: string;
   userId?: string;
+  actorType?: ActorType;
+  triggerType?: TriggerType;
+  systemActor?: SystemActor;
   requestId?: string;
   sessionId?: string;
   eventType: TelemetryEventType;
