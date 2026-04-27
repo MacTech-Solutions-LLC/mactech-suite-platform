@@ -159,19 +159,10 @@ export function createTenantRepository<T extends Record<string, (...args: any[])
 /**
  * Middleware pattern for Prisma to enforce tenantId on all queries
  * This is a placeholder for future implementation
+ * 
+ * TODO: Implement Prisma middleware that automatically injects tenantId
+ * into where clauses for specified models
  */
 export function createTenantMiddleware(requiredModels: string[]) {
-  // TODO: Implement Prisma middleware that automatically injects tenantId
-  // into where clauses for specified models
-  // 
-  // Example:
-  // prisma.$use(async (params, next) => {
-  //   if (requiredModels.includes(params.model)) {
-  //     // Ensure tenantId is present in where clause
-  //     // Throw TenantIsolationError if missing
-  //   }
-  //   return next(params);
-  // });
-  
   return null;
 }
