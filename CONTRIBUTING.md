@@ -26,6 +26,12 @@ Every pull request should describe:
 - Security or data-handling impact
 - Evidence or decision records updated, if applicable
 
+## Issues
+
+Use issue templates for normal tasks and risk reviews. Label groups, milestone
+names, workflow states, and the minimal issue lifecycle are defined in
+`docs/01-governance/issue-tracking.md`.
+
 ## Local Validation
 
 Run the safe hygiene check before opening a pull request:

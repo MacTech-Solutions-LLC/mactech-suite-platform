@@ -33,10 +33,9 @@ const prisma = new PrismaClient();
  * 
  * Clerk format: "user_xxxxxxxxxxxxxxxxxxxxxxxx"
  * Google format: "xxxxxxxxxxxxxxxxxxxxxxxxx" (numeric sub as string)
- * 
- * SECURITY: Never hardcode real IDs. Set via environment variables only.
  */
-const DEVELOPER_EXTERNAL_ID = process.env.SEED_DEVELOPER_EXTERNAL_ID;
+const DEVELOPER_EXTERNAL_ID = process.env.SEED_DEVELOPER_EXTERNAL_ID || 
+  'EXTERNAL_ID_PLACEHOLDER'; // <-- REPLACE THIS
 
 /**
  * Your email address
@@ -51,13 +50,11 @@ const DEVELOPER_NAME = process.env.SEED_DEVELOPER_NAME ||
   'Brian Developer'; // <-- REPLACE THIS
 
 /**
- * The bootstrap tenant's external ID (from Clerk Organizations)
- * 
- * Clerk Org format: "org_xxxxxxxxxxxxxxxxxxxxxxxx"
- * 
- * SECURITY: Never hardcode real IDs. Set via environment variables only.
+ * The bootstrap tenant's external ID (from Clerk Organizations or placeholder)
+ * If not using Clerk orgs yet, use a placeholder like "tenant_bootstrap_001"
  */
-const TENANT_EXTERNAL_ID = process.env.SEED_TENANT_EXTERNAL_ID;
+const TENANT_EXTERNAL_ID = process.env.SEED_TENANT_EXTERNAL_ID || 
+  'tenant_bootstrap_001'; // <-- Update if using Clerk orgs
 
 // ============================================================================
 // SEED LOGIC
@@ -67,15 +64,12 @@ async function main() {
   console.log('🌱 Starting MT-019 seed script...');
   console.log('');
 
-  // Validate configuration - SECURITY: Require environment variables
-  if (!DEVELOPER_EXTERNAL_ID || !TENANT_EXTERNAL_ID) {
-    throw new Error(
-      'Missing SEED_DEVELOPER_EXTERNAL_ID or SEED_TENANT_EXTERNAL_ID.\n' +
-      'Set them in .env.local for local seeding.\n' +
-      'Example:\n' +
-      '  SEED_DEVELOPER_EXTERNAL_ID=user_xxxxx\n' +
-      '  SEED_TENANT_EXTERNAL_ID=org_xxxxx'
-    );
+  // Validate configuration
+  if (DEVELOPER_EXTERNAL_ID === 'EXTERNAL_ID_PLACEHOLDER') {
+    console.warn('⚠️  WARNING: DEVELOPER_EXTERNAL_ID is not set!');
+    console.warn('   The seed will create a placeholder user that cannot be logged into.');
+    console.warn('   Update prisma/seed.ts or set SEED_DEVELOPER_EXTERNAL_ID env var.');
+    console.log('');
   }
 
   // Step 1: Create the Bootstrap Tenant
@@ -181,6 +175,19 @@ async function main() {
   console.log('│     (Should now return 200 with your tenant data)       │');
   console.log('└─────────────────────────────────────────────────────────┘');
   console.log('');
+
+  // Warning if placeholder still in use
+  if (DEVELOPER_EXTERNAL_ID === 'EXTERNAL_ID_PLACEHOLDER') {
+    console.log('⚠️  IMPORTANT: Update DEVELOPER_EXTERNAL_ID in prisma/seed.ts');
+    console.log('   or set SEED_DEVELOPER_EXTERNAL_ID in your environment.');
+    console.log('');
+    console.log('   To find your Clerk user ID:');
+    console.log('   1. Log in to https://dashboard.clerk.com');
+    console.log('   2. Go to Users');
+    console.log('   3. Find your email, copy the User ID');
+    console.log('   4. Update the seed script and re-run');
+    console.log('');
+  }
 }
 
 main()
