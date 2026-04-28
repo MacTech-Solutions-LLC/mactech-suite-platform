@@ -1,38 +1,40 @@
-/**
- * Next.js Middleware
- * 
- * Detects Clerk session and prepares MacTech authorization context.
- * This is a stub for future implementation.
- * 
- * Responsibilities:
- * 1. Validate authentication via Clerk
- * 2. Extract tenant context from session/org
- * 3. Attach tenantId to request for downstream use
- * 4. Enforce route-level access control
- */
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+const isPublicRoute = createRouteMatcher([
+  "/",
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/access-restricted",
+  "/api/webhooks/clerk",
+  "/api/audit/ingest",
+]);
 
-export async function middleware(request: NextRequest) {
-  // TODO: Implement Clerk session detection
-  // TODO: Extract and validate tenant context
-  // TODO: Attach tenantId to request headers or context
-  // TODO: Redirect unauthenticated users to sign-in
-  
-  // For now, pass through to allow development
+const isAdminRoute = createRouteMatcher(["/admin(.*)", "/dashboard(.*)"]);
+
+export default clerkMiddleware(async (auth, req) => {
+  if (isPublicRoute(req)) {
+    return NextResponse.next();
+  }
+
+  // For admin/dashboard routes we require an authenticated session at the
+  // edge. Fine-grained platform-permission checks happen server-side in the
+  // layouts and page actions via lib/authz.
+  if (isAdminRoute(req)) {
+    const session = await auth();
+    if (!session.userId) {
+      const signInUrl = new URL("/sign-in", req.url);
+      signInUrl.searchParams.set("redirect_url", req.nextUrl.pathname);
+      return NextResponse.redirect(signInUrl);
+    }
+  }
+
   return NextResponse.next();
-}
+});
 
-/**
- * Configure which routes the middleware runs on
- * 
- * For now, exclude static files and public assets.
- * Apply to all API routes and protected pages.
- */
 export const config = {
   matcher: [
-    // Skip static files
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|css|js)$).*)",
+    "/(api|trpc)(.*)",
   ],
 };

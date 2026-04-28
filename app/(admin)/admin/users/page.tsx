@@ -1,0 +1,161 @@
+import Link from "next/link";
+import { PageHeader } from "@/components/layout/admin-shell";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableEmpty,
+} from "@/components/ui/table";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { initialsFor, relativeTime } from "@/lib/utils";
+import { prisma } from "@/lib/db/prisma";
+import { requirePlatformPermission } from "@/lib/authz";
+import { PLATFORM_PERMISSIONS, platformRoleLabel } from "@/lib/permissions";
+import type { Prisma } from "@prisma/client";
+
+export const dynamic = "force-dynamic";
+
+export default async function AllUsersPage({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
+  await requirePlatformPermission(PLATFORM_PERMISSIONS.DASHBOARD_VIEW);
+
+  const q =
+    typeof searchParams?.q === "string" && searchParams.q.length > 0
+      ? searchParams.q
+      : null;
+
+  const where: Prisma.UserProfileWhereInput = {};
+  if (q) {
+    where.OR = [
+      { email: { contains: q, mode: "insensitive" } },
+      { firstName: { contains: q, mode: "insensitive" } },
+      { lastName: { contains: q, mode: "insensitive" } },
+    ];
+  }
+
+  const users = await prisma.userProfile.findMany({
+    where,
+    orderBy: { lastSeenAt: "desc" },
+    take: 200,
+    include: { orgAccess: { include: { customerOrganization: true } } },
+  });
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Users"
+        description="Every UserProfile in the system, both internal MacTech admins and customer users."
+      />
+
+      <Card>
+        <CardContent className="p-4">
+          <form className="grid gap-3 md:grid-cols-3" method="get">
+            <div className="grid gap-1.5 md:col-span-2">
+              <Label htmlFor="q">Search</Label>
+              <Input
+                id="q"
+                name="q"
+                placeholder="Name or email"
+                defaultValue={q ?? ""}
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                type="submit"
+                className="text-xs underline-offset-2 hover:underline text-muted-foreground"
+              >
+                Apply
+              </button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>User</TableHead>
+                <TableHead>Affiliation</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Last seen</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users.length === 0 ? (
+                <TableEmpty colSpan={4} message="No users match." />
+              ) : (
+                users.map((u) => {
+                  const fullName = [u.firstName, u.lastName].filter(Boolean).join(" ");
+                  return (
+                    <TableRow key={u.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-xs font-medium">
+                            {initialsFor(fullName, u.email)}
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium">
+                              {fullName || u.email}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {u.email}
+                            </div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {u.isInternalMacTechUser ? (
+                          <Badge variant="default">{platformRoleLabel(u.platformRole)}</Badge>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {u.orgAccess.length === 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                No org affiliation
+                              </span>
+                            )}
+                            {u.orgAccess.slice(0, 3).map((a) => (
+                              <Link
+                                key={a.id}
+                                href={`/admin/customer-orgs/${a.customerOrganization.id}`}
+                                className="hover:underline"
+                              >
+                                <Badge variant="muted">
+                                  {a.customerOrganization.name} · {a.role}
+                                </Badge>
+                              </Link>
+                            ))}
+                            {u.orgAccess.length > 3 && (
+                              <Badge variant="outline">+{u.orgAccess.length - 3}</Badge>
+                            )}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={u.status} />
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {relativeTime(u.lastSeenAt)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
