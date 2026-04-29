@@ -1,198 +1,236 @@
 /**
- * MT-019: The "Ghost" Seed Script
- * 
- * This script initializes the local development environment with:
- * 1. The Bootstrap Tenant (first organization)
- * 2. The Developer User (your identity mapped to Clerk/Google)
- * 3. An ACTIVE OWNER membership linking them
- * 4. Audit trail of the creation
- * 
- * CRITICAL: Update EXTERNAL_ID_PLACEHOLDER with your actual Clerk user_id
- * before running this script. Get it from:
- * - Clerk Dashboard -> Users -> your email -> User ID
- * - Or after first login attempt, check logs for "User not found" errors
- * 
- * Usage:
- *   npx prisma db seed
- * 
- * Or manually:
- *   npx ts-node prisma/seed.ts
+ * Seed script for the Identity Command Center.
+ *
+ * Idempotent: every upsert is keyed by a stable identifier so repeated runs
+ * never create duplicate rows. Optional env flags let you bootstrap your
+ * own MacTech Super Admin profile alongside the system fixtures.
  */
 
-import { PrismaClient, MembershipRole } from '@prisma/client';
+import { PrismaClient, MembershipRole } from "@prisma/client";
+import {
+  PLATFORM_ROLE_DEFINITIONS,
+  CUSTOMER_ROLE_DEFINITIONS,
+} from "../lib/permissions";
 
 const prisma = new PrismaClient();
 
-// ============================================================================
-// CONFIGURATION: Update these values with YOUR identity
-// ============================================================================
+const APP_FIXTURES = [
+  {
+    appKey: "cui-vault",
+    name: "CUI Vault",
+    description: "Encrypted vault for Controlled Unclassified Information.",
+    category: "vault" as const,
+    baseUrl: "https://vault.mactechsolutionsllc.com",
+    requiresOrgContext: true,
+    isInternalOnly: false,
+    status: "active" as const,
+  },
+  {
+    appKey: "compliance-control-plane",
+    name: "Compliance Control Plane",
+    description: "Continuous compliance posture, controls catalog, and remediation workflows.",
+    category: "compliance" as const,
+    baseUrl: "https://compliance.mactechsolutionsllc.com",
+    requiresOrgContext: true,
+    isInternalOnly: false,
+    status: "active" as const,
+  },
+  {
+    appKey: "evidence-engine",
+    name: "Evidence Engine",
+    description: "Evidence collection, approvals, and assessor-ready exports.",
+    category: "evidence" as const,
+    baseUrl: "https://evidence.mactechsolutionsllc.com",
+    requiresOrgContext: true,
+    isInternalOnly: false,
+    status: "active" as const,
+  },
+  {
+    appKey: "boundary-engine",
+    name: "Boundary Engine",
+    description: "System boundary modeling, data flow analysis, and CUI scoping.",
+    category: "compliance" as const,
+    baseUrl: "https://boundary.mactechsolutionsllc.com",
+    requiresOrgContext: true,
+    isInternalOnly: false,
+    status: "active" as const,
+  },
+  {
+    appKey: "sam-capture-intelligence",
+    name: "SAM Capture Intelligence",
+    description: "Federal opportunity intelligence sourced from SAM.gov.",
+    category: "capture" as const,
+    baseUrl: "https://capture.mactechsolutionsllc.com",
+    requiresOrgContext: true,
+    isInternalOnly: false,
+    status: "active" as const,
+  },
+  {
+    appKey: "contract-intelligence",
+    name: "Contract / Opportunity Intelligence",
+    description: "Contract analysis, win/loss intelligence, and pursuit strategy.",
+    category: "reporting" as const,
+    baseUrl: "https://contracts.mactechsolutionsllc.com",
+    requiresOrgContext: true,
+    isInternalOnly: false,
+    status: "active" as const,
+  },
+  {
+    appKey: "identity-command-center",
+    name: "Identity Command Center",
+    description: "Central SSO, RBAC, entitlement, and audit hub for the suite.",
+    category: "admin" as const,
+    baseUrl: "https://identity.mactechsolutionsllc.com",
+    requiresOrgContext: false,
+    isInternalOnly: true,
+    status: "active" as const,
+  },
+];
 
-/**
- * Your external identity provider ID (from Clerk or Google)
- * This maps the external login to your internal MacTech user
- * 
- * Clerk format: "user_xxxxxxxxxxxxxxxxxxxxxxxx"
- * Google format: "xxxxxxxxxxxxxxxxxxxxxxxxx" (numeric sub as string)
- */
-const DEVELOPER_EXTERNAL_ID = process.env.SEED_DEVELOPER_EXTERNAL_ID || 
-  'EXTERNAL_ID_PLACEHOLDER'; // <-- REPLACE THIS
-
-/**
- * Your email address
- */
-const DEVELOPER_EMAIL = process.env.SEED_DEVELOPER_EMAIL || 
-  'brian@example.com'; // <-- REPLACE THIS
-
-/**
- * Your name
- */
-const DEVELOPER_NAME = process.env.SEED_DEVELOPER_NAME || 
-  'Brian Developer'; // <-- REPLACE THIS
-
-/**
- * The bootstrap tenant's external ID (from Clerk Organizations or placeholder)
- * If not using Clerk orgs yet, use a placeholder like "tenant_bootstrap_001"
- */
-const TENANT_EXTERNAL_ID = process.env.SEED_TENANT_EXTERNAL_ID || 
-  'tenant_bootstrap_001'; // <-- Update if using Clerk orgs
-
-// ============================================================================
-// SEED LOGIC
-// ============================================================================
-
-async function main() {
-  console.log('🌱 Starting MT-019 seed script...');
-  console.log('');
-
-  // Validate configuration
-  if (DEVELOPER_EXTERNAL_ID === 'EXTERNAL_ID_PLACEHOLDER') {
-    console.warn('⚠️  WARNING: DEVELOPER_EXTERNAL_ID is not set!');
-    console.warn('   The seed will create a placeholder user that cannot be logged into.');
-    console.warn('   Update prisma/seed.ts or set SEED_DEVELOPER_EXTERNAL_ID env var.');
-    console.log('');
-  }
-
-  // Step 1: Create the Bootstrap Tenant
-  console.log('🏢 Creating bootstrap tenant...');
-  const tenant = await prisma.tenant.upsert({
-    where: { slug: 'mactech-bootstrap' },
-    update: {}, // Don't update if exists
-    create: {
-      externalId: TENANT_EXTERNAL_ID,
-      name: 'MacTech Bootstrap',
-      slug: 'mactech-bootstrap',
-      isActive: true,
-    },
-  });
-  console.log(`   ✓ Tenant: ${tenant.name} (${tenant.id})`);
-  console.log(`   External ID: ${tenant.externalId}`);
-  console.log('');
-
-  // Step 2: Create the Developer User
-  console.log('👤 Creating developer user...');
-  const user = await prisma.user.upsert({
-    where: { externalId: DEVELOPER_EXTERNAL_ID },
-    update: {}, // Don't update if exists
-    create: {
-      externalId: DEVELOPER_EXTERNAL_ID,
-      email: DEVELOPER_EMAIL,
-      name: DEVELOPER_NAME,
-      isActive: true,
-    },
-  });
-  console.log(`   ✓ User: ${user.name} (${user.id})`);
-  console.log(`   External ID: ${user.externalId}`);
-  console.log(`   Email: ${user.email}`);
-  console.log('');
-
-  // Step 3: Create ACTIVE OWNER Membership
-  console.log('🔗 Creating OWNER membership...');
-  const membership = await prisma.membership.upsert({
-    where: {
-      tenantId_userId: {
-        tenantId: tenant.id,
-        userId: user.id,
+async function seedApps() {
+  for (const app of APP_FIXTURES) {
+    await prisma.appRegistry.upsert({
+      where: { appKey: app.appKey },
+      update: {
+        name: app.name,
+        description: app.description,
+        category: app.category,
+        baseUrl: app.baseUrl,
+        requiresOrgContext: app.requiresOrgContext,
+        isInternalOnly: app.isInternalOnly,
+        status: app.status,
       },
-    },
-    update: {
-      // Ensure membership is active if re-seeding
-      isActive: true,
-      role: MembershipRole.OWNER,
-    },
-    create: {
-      tenantId: tenant.id,
-      userId: user.id,
-      role: MembershipRole.OWNER,
-      isActive: true,
-    },
-  });
-  console.log(`   ✓ Membership: ${membership.id}`);
-  console.log(`   Role: ${membership.role}`);
-  console.log(`   Status: ${membership.isActive ? 'ACTIVE' : 'INACTIVE'}`);
-  console.log('');
-
-  // Step 4: Create Audit Trail Entry
-  console.log('📝 Creating audit event...');
-  const auditEvent = await prisma.auditEvent.create({
-    data: {
-      tenantId: tenant.id,
-      userId: user.id,
-      action: 'TENANT_BOOTSTRAP',
-      entity: 'Tenant',
-      entityId: tenant.id,
-      metadata: {
-        source: 'prisma/seed.ts',
-        reason: 'MT-019 Local Development Bootstrap',
-        userExternalId: DEVELOPER_EXTERNAL_ID,
-      },
-    },
-  });
-  console.log(`   ✓ Audit Event: ${auditEvent.id}`);
-  console.log(`   Action: ${auditEvent.action}`);
-  console.log(`   Timestamp: ${auditEvent.timestamp}`);
-  console.log('');
-
-  // ============================================================================
-  // SUMMARY
-  // ============================================================================
-  console.log('✅ Seed complete! Summary:');
-  console.log('');
-  console.log('┌─────────────────────────────────────────────────────────┐');
-  console.log('│  MACTECH LOCAL SANDBOX                                  │');
-  console.log('├─────────────────────────────────────────────────────────┤');
-  console.log(`│  Tenant:  ${tenant.name.padEnd(42)}│`);
-  console.log(`│  User:     ${user.name?.padEnd(42) || 'N/A'.padEnd(42)}│`);
-  console.log(`│  Email:    ${user.email.padEnd(42)}│`);
-  console.log(`│  Role:     ${membership.role.padEnd(42)}│`);
-  console.log(`│  Status:   ${(membership.isActive ? 'ACTIVE ✓' : 'INACTIVE ✗').padEnd(42)}│`);
-  console.log('├─────────────────────────────────────────────────────────┤');
-  console.log('│  NEXT STEPS:                                            │');
-  console.log('│  1. Copy .env.example to .env                           │');
-  console.log('│  2. Set DATABASE_URL to point to Docker Postgres          │');
-  console.log('│  3. Run: npx prisma migrate dev                         │');
-  console.log('│  4. Start dev server: npm run dev                       │');
-  console.log('│  5. Visit: http://localhost:3000/api/tenant             │');
-  console.log('│     (Should now return 200 with your tenant data)       │');
-  console.log('└─────────────────────────────────────────────────────────┘');
-  console.log('');
-
-  // Warning if placeholder still in use
-  if (DEVELOPER_EXTERNAL_ID === 'EXTERNAL_ID_PLACEHOLDER') {
-    console.log('⚠️  IMPORTANT: Update DEVELOPER_EXTERNAL_ID in prisma/seed.ts');
-    console.log('   or set SEED_DEVELOPER_EXTERNAL_ID in your environment.');
-    console.log('');
-    console.log('   To find your Clerk user ID:');
-    console.log('   1. Log in to https://dashboard.clerk.com');
-    console.log('   2. Go to Users');
-    console.log('   3. Find your email, copy the User ID');
-    console.log('   4. Update the seed script and re-run');
-    console.log('');
+      create: app,
+    });
   }
 }
 
+async function seedRoleTemplates() {
+  for (const role of PLATFORM_ROLE_DEFINITIONS) {
+    await prisma.roleTemplate.upsert({
+      where: { scope_key: { scope: "platform", key: role.key } },
+      update: {
+        name: role.name,
+        description: role.description,
+        permissionsJson: role.permissions as unknown as object,
+        isSystemRole: true,
+      },
+      create: {
+        scope: "platform",
+        key: role.key,
+        name: role.name,
+        description: role.description,
+        permissionsJson: role.permissions as unknown as object,
+        isSystemRole: true,
+      },
+    });
+  }
+
+  for (const role of CUSTOMER_ROLE_DEFINITIONS) {
+    await prisma.roleTemplate.upsert({
+      where: { scope_key: { scope: "customer_org", key: role.key } },
+      update: {
+        name: role.name,
+        description: role.description,
+        permissionsJson: role.permissions as unknown as object,
+        isSystemRole: true,
+      },
+      create: {
+        scope: "customer_org",
+        key: role.key,
+        name: role.name,
+        description: role.description,
+        permissionsJson: role.permissions as unknown as object,
+        isSystemRole: true,
+      },
+    });
+  }
+}
+
+async function seedSuperAdmin() {
+  const email = process.env.SEED_SUPER_ADMIN_EMAIL;
+  const clerkUserId = process.env.SEED_SUPER_ADMIN_CLERK_USER_ID;
+  if (!email) {
+    console.log(
+      "⚠️  Skipping super admin seeding (set SEED_SUPER_ADMIN_EMAIL to bootstrap one).",
+    );
+    return;
+  }
+  await prisma.userProfile.upsert({
+    where: { email },
+    update: {
+      isInternalMacTechUser: true,
+      platformRole: "mactech_super_admin",
+      status: "active",
+      clerkUserId: clerkUserId || undefined,
+    },
+    create: {
+      email,
+      clerkUserId: clerkUserId || `pending_${Date.now()}`,
+      isInternalMacTechUser: true,
+      platformRole: "mactech_super_admin",
+      status: "active",
+    },
+  });
+  console.log(`✓ MacTech Super Admin seeded for ${email}`);
+}
+
+async function seedLegacyTenant() {
+  // Keep the original bootstrap row alive so the existing /api/tenant route
+  // and the auth adapter integration tests still resolve.
+  const tenant = await prisma.tenant.upsert({
+    where: { slug: "mactech-bootstrap" },
+    update: {},
+    create: {
+      slug: "mactech-bootstrap",
+      name: "MacTech Bootstrap",
+      externalId: process.env.SEED_TENANT_EXTERNAL_ID || "tenant_bootstrap_001",
+      isActive: true,
+    },
+  });
+
+  const externalUserId = process.env.SEED_DEVELOPER_EXTERNAL_ID;
+  const developerEmail = process.env.SEED_DEVELOPER_EMAIL;
+  if (!externalUserId || !developerEmail) return;
+
+  const user = await prisma.user.upsert({
+    where: { externalId: externalUserId },
+    update: { email: developerEmail },
+    create: {
+      externalId: externalUserId,
+      email: developerEmail,
+      name: process.env.SEED_DEVELOPER_NAME || "Developer",
+      isActive: true,
+    },
+  });
+
+  await prisma.membership.upsert({
+    where: { tenantId_userId: { tenantId: tenant.id, userId: user.id } },
+    update: { role: MembershipRole.OWNER, isActive: true },
+    create: {
+      tenantId: tenant.id,
+      userId: user.id,
+      role: MembershipRole.OWNER,
+      isActive: true,
+    },
+  });
+}
+
+async function main() {
+  console.log("🌱 Seeding Identity Command Center fixtures...");
+  await seedApps();
+  console.log("✓ App registry seeded");
+  await seedRoleTemplates();
+  console.log("✓ Role templates seeded");
+  await seedLegacyTenant();
+  console.log("✓ Legacy tenant scaffold seeded");
+  await seedSuperAdmin();
+  console.log("✅ Seed complete");
+}
+
 main()
-  .catch((e) => {
-    console.error('❌ Seed failed:', e);
+  .catch((err) => {
+    console.error("❌ Seed failed:", err);
     process.exit(1);
   })
   .finally(async () => {

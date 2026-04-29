@@ -1,5 +1,9 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// MacTech Identity Command Center — Prisma schema.
+// Mixes the original tenancy primitives (Tenant / User / Membership /
+// AuditEvent / Project / Document) with the command-center models
+// (UserProfile, CustomerOrganization, AppRegistry, ProductEntitlement,
+// OrgUserAccess, AuditLog, SecurityEvent, RoleTemplate). Existing tables
+// remain so legacy callers keep working.
 
 generator client {
   provider = "prisma-client-js"
@@ -10,8 +14,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// MembershipRole enum - simple role system for first slice
-// Dynamic Role/Permission tables deferred until permission matrix is defined
+// ============================================================================
+// LEGACY TENANCY (kept; consumed by lib/auth/adapter.ts + lib/db/withTenant.ts)
+// ============================================================================
+
 enum MembershipRole {
   OWNER
   ADMIN
@@ -19,18 +25,15 @@ enum MembershipRole {
   VIEWER
 }
 
-// Tenant - The root isolation unit
-// tenantId is an internal MacTech abstraction, NOT permanently coupled to Clerk org_id
 model Tenant {
   id          String   @id @default(cuid())
-  externalId  String?  @unique // Maps to Clerk org_id or other IdP, but decoupled
+  externalId  String?  @unique
   name        String
   slug        String   @unique
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // Relations
   memberships Membership[]
   auditEvents AuditEvent[]
 
@@ -39,10 +42,9 @@ model Tenant {
   @@index([isActive])
 }
 
-// User - Stable reference linked via externalId (Google/Clerk ID)
 model User {
   id          String   @id @default(cuid())
-  externalId  String   @unique // Clerk user_id or Google sub - the stable identifier
+  externalId  String   @unique
   email       String   @unique
   name        String?
   avatarUrl   String?
@@ -50,7 +52,6 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // Relations
   memberships Membership[]
   auditEvents AuditEvent[]
 
@@ -59,20 +60,17 @@ model User {
   @@index([isActive])
 }
 
-// Membership - The join table defining which User belongs to which Tenant
-// Also carries the role for that membership
 model Membership {
-  id        String        @id @default(cuid())
+  id        String         @id @default(cuid())
   tenantId  String
   userId    String
   role      MembershipRole @default(VIEWER)
-  isActive  Boolean       @default(true)
-  joinedAt  DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  isActive  Boolean        @default(true)
+  joinedAt  DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
 
-  // Relations
-  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, userId])
   @@index([tenantId])
@@ -81,56 +79,48 @@ model Membership {
   @@index([isActive])
 }
 
-// AuditEvent - Tenant-scoped audit trail
-// All audit events belong to a tenant for isolation
 model AuditEvent {
-  id          String   @id @default(cuid())
-  tenantId    String
-  userId      String?
-  action      String   // e.g., "CREATE", "UPDATE", "DELETE", "LOGIN"
-  entity      String   // e.g., "Project", "Document", "User"
-  entityId    String?  // The ID of the affected resource
-  metadata    Json?    // Flexible metadata for context
-  ipAddress   String?
-  userAgent   String?
-  timestamp   DateTime @default(now())
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  ipAddress String?
+  userAgent String?
+  timestamp DateTime @default(now())
 
-  // Relations
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
   @@index([userId])
   @@index([action])
   @@index([entity])
   @@index([timestamp])
-  @@index([tenantId, timestamp]) // Common query: tenant events by time
+  @@index([tenantId, timestamp])
 }
 
-// Example: Tenant-scoped Project model
-// All tenant-scoped models MUST include tenantId and appropriate indexes
-// This demonstrates the "No Naked Tables" rule - every table has tenantId
 model Project {
   id          String   @id @default(cuid())
-  tenantId    String   // REQUIRED: Every tenant-scoped row has tenantId
+  tenantId    String
   name        String
   description String?
   status      String   @default("draft")
-  createdBy   String   // User ID who created it
+  createdBy   String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@index([tenantId])           // REQUIRED: Always index tenantId
-  @@index([tenantId, status])  // Common query pattern
+  @@index([tenantId])
+  @@index([tenantId, status])
   @@index([createdAt])
   @@index([tenantId, createdAt])
 }
 
-// Example: Tenant-scoped Document model
-// Another demonstration of the "No Naked Tables" rule
 model Document {
   id          String   @id @default(cuid())
-  tenantId    String   // REQUIRED: Every tenant-scoped row has tenantId
+  tenantId    String
   projectId   String?
   title       String
   content     String?
@@ -143,4 +133,330 @@ model Document {
   @@index([projectId])
   @@index([tenantId, status])
   @@index([tenantId, createdAt])
+}
+
+// ============================================================================
+// IDENTITY COMMAND CENTER
+// ============================================================================
+
+enum PlatformRole {
+  mactech_super_admin
+  mactech_admin
+  mactech_support
+  mactech_auditor
+  mactech_read_only
+  none
+}
+
+enum UserStatus {
+  active
+  suspended
+  invited
+}
+
+enum CustomerType {
+  dib
+  prime
+  subcontractor
+  internal
+  other
+}
+
+enum CustomerStatus {
+  active
+  onboarding
+  suspended
+  archived
+}
+
+enum SubscriptionTier {
+  starter
+  professional
+  enterprise
+  federal
+}
+
+enum CmmcLevel {
+  level1
+  level2
+  unknown
+}
+
+enum CuiBoundaryType {
+  none
+  vault_only
+  customer_managed
+  hybrid
+}
+
+enum AppStatus {
+  active
+  disabled
+  development
+}
+
+enum AppCategory {
+  vault
+  compliance
+  evidence
+  capture
+  reporting
+  admin
+  other
+}
+
+enum EntitlementPlan {
+  none
+  trial
+  starter
+  professional
+  enterprise
+  custom
+}
+
+enum EntitlementStatus {
+  active
+  trialing
+  expired
+  suspended
+}
+
+enum AuditCategory {
+  auth
+  user
+  org
+  entitlement
+  role
+  security
+  vault
+  evidence
+  boundary
+  capture
+  system
+}
+
+enum AuditSeverity {
+  info
+  warning
+  critical
+}
+
+enum SecuritySeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum SecurityEventStatus {
+  open
+  investigating
+  resolved
+  ignored
+}
+
+enum RoleScope {
+  platform
+  customer_org
+}
+
+model UserProfile {
+  id                    String       @id @default(cuid())
+  clerkUserId           String       @unique
+  email                 String       @unique
+  firstName             String?
+  lastName              String?
+  imageUrl              String?
+  isInternalMacTechUser Boolean      @default(false)
+  platformRole          PlatformRole @default(none)
+  status                UserStatus   @default(active)
+  lastSeenAt            DateTime?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  orgAccess OrgUserAccess[]
+  auditLogs AuditLog[]      @relation("AuditActor")
+
+  @@index([email])
+  @@index([clerkUserId])
+  @@index([platformRole])
+  @@index([status])
+  @@index([isInternalMacTechUser])
+}
+
+model CustomerOrganization {
+  id                  String           @id @default(cuid())
+  clerkOrgId          String?          @unique
+  name                String
+  slug                String           @unique
+  legalName           String?
+  domain              String?
+  cageCode            String?
+  uei                 String?
+  duns                String?
+  industry            String?
+  customerType        CustomerType     @default(other)
+  status              CustomerStatus   @default(onboarding)
+  subscriptionTier    SubscriptionTier @default(starter)
+  cmmcTargetLevel     CmmcLevel        @default(unknown)
+  cuiBoundaryType     CuiBoundaryType  @default(none)
+  primaryContactName  String?
+  primaryContactEmail String?
+  notes               String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  entitlements   ProductEntitlement[]
+  orgUserAccess  OrgUserAccess[]
+  auditLogs      AuditLog[]
+  securityEvents SecurityEvent[]
+
+  @@index([clerkOrgId])
+  @@index([slug])
+  @@index([status])
+  @@index([subscriptionTier])
+  @@index([cmmcTargetLevel])
+  @@index([customerType])
+}
+
+model AppRegistry {
+  id                String      @id @default(cuid())
+  appKey            String      @unique
+  name              String
+  description       String?
+  baseUrl           String?
+  status            AppStatus   @default(active)
+  category          AppCategory @default(other)
+  requiresOrgContext Boolean    @default(true)
+  isInternalOnly    Boolean     @default(false)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  entitlements ProductEntitlement[]
+  auditLogs    AuditLog[]
+
+  @@index([appKey])
+  @@index([status])
+  @@index([category])
+}
+
+model ProductEntitlement {
+  id                     String            @id @default(cuid())
+  customerOrganizationId String
+  appRegistryId          String
+  enabled                Boolean           @default(false)
+  plan                   EntitlementPlan   @default(none)
+  maxUsers               Int?
+  startsAt               DateTime?
+  expiresAt              DateTime?
+  status                 EntitlementStatus @default(active)
+  configurationJson      Json?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  customerOrganization CustomerOrganization @relation(fields: [customerOrganizationId], references: [id], onDelete: Cascade)
+  app                  AppRegistry          @relation(fields: [appRegistryId], references: [id], onDelete: Cascade)
+
+  @@unique([customerOrganizationId, appRegistryId])
+  @@index([customerOrganizationId])
+  @@index([appRegistryId])
+  @@index([status])
+  @@index([enabled])
+}
+
+model OrgUserAccess {
+  id                     String     @id @default(cuid())
+  customerOrganizationId String
+  userProfileId          String
+  clerkMembershipId      String?
+  role                   String
+  permissionsJson        Json?
+  status                 UserStatus @default(invited)
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  customerOrganization CustomerOrganization @relation(fields: [customerOrganizationId], references: [id], onDelete: Cascade)
+  userProfile          UserProfile          @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([customerOrganizationId, userProfileId])
+  @@index([customerOrganizationId])
+  @@index([userProfileId])
+  @@index([status])
+  @@index([role])
+}
+
+model AuditLog {
+  id                     String        @id @default(cuid())
+  timestamp              DateTime      @default(now())
+  actorClerkUserId       String?
+  actorEmail             String?
+  actorUserProfileId     String?
+  customerOrganizationId String?
+  appRegistryId          String?
+  eventType              String
+  eventCategory          AuditCategory
+  severity               AuditSeverity @default(info)
+  action                 String
+  resourceType           String?
+  resourceId             String?
+  ipAddress              String?
+  userAgent              String?
+  requestId              String?
+  metadataJson           Json?
+  createdAt              DateTime      @default(now())
+
+  actor                UserProfile?          @relation("AuditActor", fields: [actorUserProfileId], references: [id], onDelete: SetNull)
+  customerOrganization CustomerOrganization? @relation(fields: [customerOrganizationId], references: [id], onDelete: SetNull)
+  app                  AppRegistry?          @relation(fields: [appRegistryId], references: [id], onDelete: SetNull)
+
+  @@index([timestamp])
+  @@index([eventCategory])
+  @@index([severity])
+  @@index([eventType])
+  @@index([customerOrganizationId])
+  @@index([actorUserProfileId])
+  @@index([actorClerkUserId])
+  @@index([appRegistryId])
+  @@index([customerOrganizationId, timestamp])
+}
+
+model SecurityEvent {
+  id                     String              @id @default(cuid())
+  timestamp              DateTime            @default(now())
+  customerOrganizationId String?
+  actorClerkUserId       String?
+  eventType              String
+  severity               SecuritySeverity    @default(low)
+  sourceAppKey           String?
+  description            String
+  ipAddress              String?
+  userAgent              String?
+  metadataJson           Json?
+  status                 SecurityEventStatus @default(open)
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+
+  customerOrganization CustomerOrganization? @relation(fields: [customerOrganizationId], references: [id], onDelete: SetNull)
+
+  @@index([timestamp])
+  @@index([severity])
+  @@index([status])
+  @@index([customerOrganizationId])
+  @@index([sourceAppKey])
+}
+
+model RoleTemplate {
+  id              String    @id @default(cuid())
+  scope           RoleScope
+  key             String
+  name            String
+  description     String?
+  permissionsJson Json
+  isSystemRole    Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([scope, key])
+  @@index([scope])
+  @@index([isSystemRole])
 }
