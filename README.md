@@ -118,7 +118,9 @@ npm run db:studio                      # Prisma Studio
 
 ## Bootstrapping the first MacTech Super Admin
 
-Two ways:
+There has to be at least one super admin to grant platform access through the
+UI (the `MACTECH_USERS_MANAGE` permission is held by super admins only). Two
+ways to seed that first one:
 
 1. **Seed-driven (recommended):** Set
    `SEED_SUPER_ADMIN_EMAIL=you@mactechsolutionsllc.com` (and optionally
@@ -135,6 +137,32 @@ Two ways:
 
 Sign in at `/sign-in`. The middleware + admin layout then route you to
 `/dashboard`. Everyone else is redirected to `/access-restricted`.
+
+## Promoting and managing users from the UI
+
+Once at least one super admin exists, all subsequent user management happens
+in the UI — the per-row action menus on these pages:
+
+- **`/admin/users`** — every UserProfile. Click the menu on any row → **Grant
+  platform access** to make a regular user an internal MacTech admin (or
+  **Change platform role** to adjust an existing one). **Suspend / Reactivate**
+  flips the entire account on or off.
+- **`/admin/mactech-users`** — same actions, scoped to the existing internal
+  admins. The `you` badge highlights your own row, and self-lockout protection
+  prevents demoting yourself or suspending your own account.
+- **`/admin/customer-orgs/[orgId]/users`** — per-row actions for the customer
+  org plane: **Change role**, **Suspend user**, **Reactivate user**, **Remove
+  from org** (deletes the OrgUserAccess row and, when Clerk is configured,
+  the corresponding Clerk org membership).
+- **`/admin/customer-orgs/[orgId]`** header — **Edit metadata** updates the
+  organization profile, **Suspend** sets the org status to `suspended` (with
+  a required reason that is captured in the audit log).
+
+Every mutation routes through `lib/services/*` server actions which
+- enforce a `requirePlatformPermission(...)` guard,
+- write to `AuditLog` with a human-readable `action` string,
+- and refuse the change if it would lock the platform out (e.g. demoting the
+  last active super admin).
 
 ## Customer organizations and Clerk
 
@@ -276,9 +304,8 @@ lib/
 
 ## Future enhancements
 
-- Promote/demote MacTech admins from the UI (currently DB-driven by design).
 - Customer-facing launch portal (currently MacTech admin only).
-- Org user role-change UI (server action exists; modal pending).
 - Time-series charts on the dashboard via Postgres timeseries views.
 - SCIM provisioning for federated customer SSO.
 - CMMC-aware policy assertions on entitlements (pre-flight checks).
+- Bulk role assignment (currently one user at a time).

@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CustomerOrgTabs } from "./tabs";
+import { CustomerOrgActions } from "@/components/forms/customer-org-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -31,20 +32,23 @@ export default async function CustomerOrgDetailLayout({
         </Button>
       </div>
 
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight">{org.name}</h1>
-          <StatusBadge status={org.status} />
-          <Badge variant="outline">{org.subscriptionTier}</Badge>
-          <Badge variant="muted">CMMC {org.cmmcTargetLevel}</Badge>
-          <Badge variant="muted">{org.customerType}</Badge>
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">{org.name}</h1>
+            <StatusBadge status={org.status} />
+            <Badge variant="outline">{org.subscriptionTier}</Badge>
+            <Badge variant="muted">CMMC {org.cmmcTargetLevel}</Badge>
+            <Badge variant="muted">{org.customerType}</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {org.legalName || org.domain || `/${org.slug}`}
+            {org.cageCode && ` · CAGE ${org.cageCode}`}
+            {org.uei && ` · UEI ${org.uei}`}
+            {org.clerkOrgId && ` · Clerk ${org.clerkOrgId.slice(0, 14)}…`}
+          </p>
         </div>
-        <p className="text-sm text-muted-foreground">
-          {org.legalName || org.domain || `/${org.slug}`}
-          {org.cageCode && ` · CAGE ${org.cageCode}`}
-          {org.uei && ` · UEI ${org.uei}`}
-          {org.clerkOrgId && ` · Clerk ${org.clerkOrgId.slice(0, 14)}…`}
-        </p>
+        <CustomerOrgActions org={org} />
       </div>
 
       <CustomerOrgTabs orgId={org.id} />

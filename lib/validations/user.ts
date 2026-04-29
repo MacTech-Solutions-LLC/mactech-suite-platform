@@ -39,3 +39,10 @@ export const updatePlatformUserSchema = z.object({
 });
 
 export type UpdatePlatformUserInput = z.infer<typeof updatePlatformUserSchema>;
+
+export const removeOrgUserAccessSchema = z.object({
+  customerOrganizationId: z.string().min(1),
+  userProfileId: z.string().min(1),
+});
+
+export type RemoveOrgUserAccessInput = z.infer<typeof removeOrgUserAccessSchema>;

@@ -5,9 +5,11 @@ import {
   inviteCustomerUserSchema,
   updateOrgUserAccessSchema,
   updatePlatformUserSchema,
+  removeOrgUserAccessSchema,
   type InviteCustomerUserInput,
   type UpdateOrgUserAccessInput,
   type UpdatePlatformUserInput,
+  type RemoveOrgUserAccessInput,
 } from "@/lib/validations/user";
 import { writeAuditLog } from "@/lib/audit";
 import { requirePlatformPermission } from "@/lib/authz";
@@ -186,6 +188,62 @@ export async function updateOrgUserAccess(rawInput: UpdateOrgUserAccessInput) {
   return updated;
 }
 
+export async function removeCustomerUser(rawInput: RemoveOrgUserAccessInput) {
+  const ctx = await requirePlatformPermission(
+    PLATFORM_PERMISSIONS.CUSTOMER_USERS_REMOVE,
+  );
+  const input = removeOrgUserAccessSchema.parse(rawInput);
+
+  const access = await prisma.orgUserAccess.findUnique({
+    where: {
+      customerOrganizationId_userProfileId: {
+        customerOrganizationId: input.customerOrganizationId,
+        userProfileId: input.userProfileId,
+      },
+    },
+    include: { userProfile: true, customerOrganization: true },
+  });
+  if (!access) throw new Error("Org user access not found.");
+
+  // Best-effort: if the access has a Clerk membership and Clerk is configured,
+  // also delete the membership server-side so Clerk and our DB stay aligned.
+  if (access.clerkMembershipId && access.customerOrganization.clerkOrgId) {
+    try {
+      const { clerkClient } = await import("@clerk/nextjs/server");
+      const client = await clerkClient();
+      await client.organizations.deleteOrganizationMembership({
+        organizationId: access.customerOrganization.clerkOrgId,
+        userId: access.userProfile.clerkUserId,
+      });
+    } catch (err) {
+      // Log but don't fail — the audit metadata captures the discrepancy.
+      console.error("[user-service] Clerk membership delete failed:", err);
+    }
+  }
+
+  await prisma.orgUserAccess.delete({ where: { id: access.id } });
+
+  await writeAuditLog({
+    eventType: "customer_user.removed",
+    eventCategory: "user",
+    severity: "warning",
+    action: `Removed ${access.userProfile.email} from ${access.customerOrganization.name}`,
+    actorClerkUserId: ctx.clerkUserId,
+    actorEmail: ctx.userProfile.email,
+    actorUserProfileId: ctx.userProfile.id,
+    customerOrganizationId: access.customerOrganizationId,
+    resourceType: "OrgUserAccess",
+    resourceId: access.id,
+    metadata: {
+      removedEmail: access.userProfile.email,
+      previousRole: access.role,
+      previousStatus: access.status,
+    },
+  });
+
+  return { ok: true };
+}
+
 export async function updatePlatformUser(rawInput: UpdatePlatformUserInput) {
   const ctx = await requirePlatformPermission(
     PLATFORM_PERMISSIONS.MACTECH_USERS_MANAGE,
@@ -194,13 +252,51 @@ export async function updatePlatformUser(rawInput: UpdatePlatformUserInput) {
   const before = await prisma.userProfile.findUnique({ where: { id: input.userProfileId } });
   if (!before) throw new Error("User not found.");
 
+  // Self-lockout protection: a super admin cannot demote themselves to a
+  // lower role or suspend their own account. They can still ask another
+  // super admin to do it (or use SQL in an emergency).
+  const isSelf = before.id === ctx.userProfile.id;
+  if (isSelf && input.platformRole && input.platformRole !== "mactech_super_admin") {
+    throw new Error(
+      "You cannot demote your own platform role. Ask another super admin.",
+    );
+  }
+  if (isSelf && input.status === "suspended") {
+    throw new Error("You cannot suspend your own account.");
+  }
+
+  // If the only super admin is being demoted, refuse — preserves access.
+  if (
+    !isSelf &&
+    before.platformRole === "mactech_super_admin" &&
+    input.platformRole &&
+    input.platformRole !== "mactech_super_admin"
+  ) {
+    const otherSuperAdmins = await prisma.userProfile.count({
+      where: {
+        platformRole: "mactech_super_admin",
+        status: "active",
+        id: { not: before.id },
+      },
+    });
+    if (otherSuperAdmins === 0) {
+      throw new Error(
+        "Cannot demote the last super admin. Promote another user first.",
+      );
+    }
+  }
+
   const after = await prisma.userProfile.update({
     where: { id: input.userProfileId },
     data: {
       platformRole: input.platformRole ?? undefined,
       status: input.status ?? undefined,
       isInternalMacTechUser:
-        input.platformRole && input.platformRole !== "none" ? true : undefined,
+        input.platformRole === "none"
+          ? false
+          : input.platformRole
+            ? true
+            : undefined,
     },
   });
 

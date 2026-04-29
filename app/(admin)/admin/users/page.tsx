@@ -14,9 +14,13 @@ import {
   TableEmpty,
 } from "@/components/ui/table";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { PlatformUserActions } from "@/components/forms/platform-user-actions";
 import { initialsFor, relativeTime } from "@/lib/utils";
 import { prisma } from "@/lib/db/prisma";
-import { requirePlatformPermission } from "@/lib/authz";
+import {
+  requirePlatformPermission,
+  getCurrentAuthContext,
+} from "@/lib/authz";
 import { PLATFORM_PERMISSIONS, platformRoleLabel } from "@/lib/permissions";
 import type { Prisma } from "@prisma/client";
 
@@ -28,6 +32,11 @@ export default async function AllUsersPage({
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
   await requirePlatformPermission(PLATFORM_PERMISSIONS.DASHBOARD_VIEW);
+  const ctx = await getCurrentAuthContext();
+  const selfId = ctx?.userProfile.id;
+  const canManage = Boolean(
+    ctx?.permissions.includes("platform:mactech_users:manage"),
+  );
 
   const q =
     typeof searchParams?.q === "string" && searchParams.q.length > 0
@@ -54,7 +63,7 @@ export default async function AllUsersPage({
     <div className="space-y-6">
       <PageHeader
         title="Users"
-        description="Every UserProfile in the system, both internal MacTech admins and customer users."
+        description="Every UserProfile in the system, both internal MacTech admins and customer users. Use the row menu to grant or revoke platform access."
       />
 
       <Card>
@@ -90,11 +99,12 @@ export default async function AllUsersPage({
                 <TableHead>Affiliation</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Last seen</TableHead>
+                <TableHead className="w-12 text-right" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {users.length === 0 ? (
-                <TableEmpty colSpan={4} message="No users match." />
+                <TableEmpty colSpan={5} message="No users match." />
               ) : (
                 users.map((u) => {
                   const fullName = [u.firstName, u.lastName].filter(Boolean).join(" ");
@@ -108,6 +118,11 @@ export default async function AllUsersPage({
                           <div>
                             <div className="text-sm font-medium">
                               {fullName || u.email}
+                              {u.id === selfId && (
+                                <Badge variant="outline" className="ml-2 text-[10px]">
+                                  you
+                                </Badge>
+                              )}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {u.email}
@@ -147,6 +162,17 @@ export default async function AllUsersPage({
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {relativeTime(u.lastSeenAt)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {canManage && (
+                          <PlatformUserActions
+                            userProfileId={u.id}
+                            email={u.email}
+                            isSelf={u.id === selfId}
+                            currentRole={u.platformRole}
+                            currentStatus={u.status}
+                          />
+                        )}
                       </TableCell>
                     </TableRow>
                   );
