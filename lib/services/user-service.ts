@@ -25,6 +25,7 @@ import {
   tryClerk,
   updateClerkMembershipRole,
 } from "./clerk-org-service";
+import { dispatchWebhookEvent } from "./webhook-service";
 
 async function ensureUserProfileByEmail(input: {
   email: string;
@@ -106,7 +107,7 @@ export async function inviteCustomerUser(rawInput: InviteCustomerUserInput) {
     },
   });
 
-  await writeAuditLog({
+  const auditEntry = await writeAuditLog({
     eventType: "customer_user.invited",
     eventCategory: "user",
     severity: "info",
@@ -121,6 +122,19 @@ export async function inviteCustomerUser(rawInput: InviteCustomerUserInput) {
       invitedEmail: input.email,
       role: role.key,
       productAccess: input.productAccess,
+      clerkInvitationId,
+    },
+  });
+
+  void dispatchWebhookEvent({
+    eventType: "customer_user.invited",
+    eventId: auditEntry.id,
+    customerOrganizationId: org.id,
+    payload: {
+      orgId: org.id,
+      clerkOrgId: org.clerkOrgId,
+      email: input.email,
+      role: role.key,
       clerkInvitationId,
     },
   });
@@ -178,7 +192,7 @@ export async function updateOrgUserAccess(rawInput: UpdateOrgUserAccessInput) {
         }),
       );
     }
-    await writeAuditLog({
+    const auditEntry = await writeAuditLog({
       eventType: "customer_user.role_changed",
       eventCategory: "role",
       severity: "info",
@@ -194,6 +208,19 @@ export async function updateOrgUserAccess(rawInput: UpdateOrgUserAccessInput) {
         to: role.key,
         clerkRoleFrom: oldClerkRole,
         clerkRoleTo: newClerkRole,
+      },
+    });
+    void dispatchWebhookEvent({
+      eventType: "customer_user.role_changed",
+      eventId: auditEntry.id,
+      customerOrganizationId: previous.customerOrganizationId,
+      payload: {
+        orgId: previous.customerOrganizationId,
+        clerkOrgId: previous.customerOrganization.clerkOrgId,
+        email: previous.userProfile.email,
+        clerkUserId: previous.userProfile.clerkUserId,
+        from: previous.role,
+        to: role.key,
       },
     });
   }
@@ -280,7 +307,7 @@ export async function addUserToOrg(rawInput: AddUserToOrgInput) {
     },
   });
 
-  await writeAuditLog({
+  const auditEntry = await writeAuditLog({
     eventType: "customer_user.added",
     eventCategory: "user",
     severity: "info",
@@ -294,6 +321,19 @@ export async function addUserToOrg(rawInput: AddUserToOrgInput) {
     metadata: {
       role: role.key,
       viaClerk: Boolean(clerkMembershipId),
+    },
+  });
+
+  void dispatchWebhookEvent({
+    eventType: "customer_user.added",
+    eventId: auditEntry.id,
+    customerOrganizationId: org.id,
+    payload: {
+      orgId: org.id,
+      clerkOrgId: org.clerkOrgId,
+      email: profile.email,
+      clerkUserId: profile.clerkUserId,
+      role: role.key,
     },
   });
 
@@ -334,7 +374,7 @@ export async function removeCustomerUser(rawInput: RemoveOrgUserAccessInput) {
 
   await prisma.orgUserAccess.delete({ where: { id: access.id } });
 
-  await writeAuditLog({
+  const auditEntry = await writeAuditLog({
     eventType: "customer_user.removed",
     eventCategory: "user",
     severity: "warning",
@@ -349,6 +389,19 @@ export async function removeCustomerUser(rawInput: RemoveOrgUserAccessInput) {
       removedEmail: access.userProfile.email,
       previousRole: access.role,
       previousStatus: access.status,
+    },
+  });
+
+  void dispatchWebhookEvent({
+    eventType: "customer_user.removed",
+    eventId: auditEntry.id,
+    customerOrganizationId: access.customerOrganizationId,
+    payload: {
+      orgId: access.customerOrganizationId,
+      clerkOrgId: access.customerOrganization.clerkOrgId,
+      email: access.userProfile.email,
+      clerkUserId: access.userProfile.clerkUserId,
+      previousRole: access.role,
     },
   });
 

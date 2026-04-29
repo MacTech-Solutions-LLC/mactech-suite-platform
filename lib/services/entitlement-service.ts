@@ -13,6 +13,7 @@ import {
   tryClerk,
   updateClerkOrg,
 } from "./clerk-org-service";
+import { dispatchWebhookEvent } from "./webhook-service";
 
 export async function upsertProductEntitlement(rawInput: UpsertEntitlementInput) {
   const ctx = await requirePlatformPermission(PLATFORM_PERMISSIONS.ENTITLEMENTS_MANAGE);
@@ -91,12 +92,14 @@ export async function upsertProductEntitlement(rawInput: UpsertEntitlementInput)
     clerkSyncOk = result.ok;
   }
 
-  await writeAuditLog({
-    eventType: input.enabled
-      ? previous
-        ? "entitlement.updated"
-        : "entitlement.enabled"
-      : "entitlement.disabled",
+  const eventType = input.enabled
+    ? previous
+      ? "entitlement.updated"
+      : "entitlement.enabled"
+    : "entitlement.disabled";
+
+  const auditEntry = await writeAuditLog({
+    eventType,
     eventCategory: "entitlement",
     severity: input.enabled ? "info" : "warning",
     action: `${verb} ${app.name} entitlement for ${org.name}`,
@@ -114,6 +117,27 @@ export async function upsertProductEntitlement(rawInput: UpsertEntitlementInput)
       previousStatus: previous?.status,
       newStatus: input.status,
       clerkSyncOk,
+    },
+  });
+
+  // Fire-and-forget webhook dispatch — failures don't block the mutation.
+  void dispatchWebhookEvent({
+    eventType,
+    eventId: auditEntry.id,
+    customerOrganizationId: org.id,
+    payload: {
+      appKey: app.appKey,
+      appName: app.name,
+      enabled: input.enabled,
+      plan: input.plan,
+      status: input.status,
+      maxUsers: input.maxUsers ?? null,
+      startsAt: input.startsAt ?? null,
+      expiresAt: input.expiresAt ?? null,
+      previousPlan: previous?.plan ?? null,
+      previousStatus: previous?.status ?? null,
+      customerOrgClerkId: org.clerkOrgId,
+      customerOrgName: org.name,
     },
   });
 

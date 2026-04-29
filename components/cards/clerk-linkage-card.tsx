@@ -1,9 +1,10 @@
 "use client";
 
-import { Building2, Link as LinkIcon, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Link as LinkIcon, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ClerkResyncButton } from "@/components/forms/clerk-resync-button";
+import { UploadOrgLogoButton } from "@/components/forms/upload-org-logo-button";
 
 export function ClerkLinkageCard({
   orgId,
@@ -64,7 +65,10 @@ export function ClerkLinkageCard({
             </div>
           </div>
         </div>
-        <ClerkResyncButton orgId={orgId} />
+        <div className="flex items-center gap-2">
+          <UploadOrgLogoButton orgId={orgId} />
+          <ClerkResyncButton orgId={orgId} />
+        </div>
       </CardContent>
     </Card>
   );

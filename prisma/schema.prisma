@@ -309,10 +309,11 @@ model CustomerOrganization {
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
-  entitlements   ProductEntitlement[]
-  orgUserAccess  OrgUserAccess[]
-  auditLogs      AuditLog[]
-  securityEvents SecurityEvent[]
+  entitlements         ProductEntitlement[]
+  orgUserAccess        OrgUserAccess[]
+  auditLogs            AuditLog[]
+  securityEvents       SecurityEvent[]
+  webhookSubscriptions WebhookSubscription[]
 
   @@index([clerkOrgId])
   @@index([slug])
@@ -462,4 +463,110 @@ model RoleTemplate {
   @@unique([scope, key])
   @@index([scope])
   @@index([isSystemRole])
+}
+
+// ============================================================================
+// PUBLIC API ACCESS (sibling apps + integrations)
+// ============================================================================
+
+enum ApiKeyStatus {
+  active
+  revoked
+}
+
+enum ApiKeyScope {
+  audit_ingest // POST /api/audit/ingest
+  org_read // GET /api/v1/orgs/*
+  user_access_read // GET /api/v1/users/*/access
+  webhook_send // outbound webhook deliveries (server-internal use)
+}
+
+/// API key for sibling apps + integrations to talk to the central hub.
+/// Keys are stored as SHA-256 hashes — the plaintext is shown ONCE at
+/// creation time and never retrievable again. Scopes restrict which
+/// endpoints a key can hit.
+model ApiKey {
+  id          String       @id @default(cuid())
+  name        String
+  keyHash     String       @unique
+  keyPrefix   String // first 12 chars of plaintext, for display ("mts_a1b2c3d4..."")
+  scopes      ApiKeyScope[]
+  appKey      String? // optional: tag this key as belonging to a specific MacTech app
+  description String?
+  createdById String?
+  status      ApiKeyStatus @default(active)
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([keyHash])
+  @@index([status])
+  @@index([appKey])
+}
+
+// ============================================================================
+// OUTGOING WEBHOOKS (central → sibling apps on entitlement / org changes)
+// ============================================================================
+
+enum WebhookSubscriptionStatus {
+  active
+  paused
+  disabled
+}
+
+enum WebhookDeliveryStatus {
+  pending
+  delivered
+  failed
+  abandoned
+}
+
+model WebhookSubscription {
+  id                     String                    @id @default(cuid())
+  customerOrganizationId String? // optional: scope to one org. NULL = subscribe to all orgs.
+  appKey                 String? // optional: subscriber identification (the consuming app)
+  name                   String
+  url                    String
+  /// HMAC signing secret. Stored plaintext (never re-shown after create — but
+  /// admin UI shows the prefix). Sibling apps verify via X-MacTech-Signature.
+  secret                 String
+  events                 String[] // e.g. ["entitlement.enabled", "customer_org.suspended"]
+  status                 WebhookSubscriptionStatus @default(active)
+  lastSuccessAt          DateTime?
+  lastFailureAt          DateTime?
+  failureCount           Int                       @default(0)
+  createdById            String?
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+
+  customerOrganization CustomerOrganization? @relation(fields: [customerOrganizationId], references: [id], onDelete: Cascade)
+  deliveries           WebhookDelivery[]
+
+  @@index([customerOrganizationId])
+  @@index([appKey])
+  @@index([status])
+}
+
+model WebhookDelivery {
+  id                String                @id @default(cuid())
+  subscriptionId    String
+  eventId           String // matches AuditLog.id when the trigger was an audit-worthy event
+  eventType         String
+  status            WebhookDeliveryStatus @default(pending)
+  attemptCount      Int                   @default(0)
+  responseStatus    Int?
+  responseBodyHead  String? // first ~512 chars of the response, for debugging
+  errorMessage      String?
+  payloadJson       Json
+  scheduledAt       DateTime              @default(now())
+  deliveredAt       DateTime?
+  nextAttemptAt     DateTime?
+
+  subscription WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([eventType])
+  @@index([scheduledAt])
 }

@@ -1,29 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditIngestSchema } from "@/lib/validations/audit";
 import { writeAuditLog } from "@/lib/audit";
-import { env, auditIngestionConfigured } from "@/lib/env";
 import { prisma } from "@/lib/db/prisma";
+import { requireApiKey } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
-  if (!auditIngestionConfigured()) {
-    return NextResponse.json(
-      { error: "Audit ingestion is not configured on this server." },
-      { status: 503 },
-    );
-  }
-
-  const providedKey =
-    request.headers.get("x-mactech-audit-key") ??
-    request.headers.get("X-MacTech-Audit-Key");
-  if (!providedKey || providedKey !== env.AUDIT_INGEST_API_KEY) {
-    return NextResponse.json(
-      { error: "Unauthorized: invalid or missing audit ingestion key." },
-      { status: 401 },
-    );
-  }
+  const auth = await requireApiKey(request, "audit_ingest");
+  if (!auth.ok) return auth.response;
 
   let body: unknown;
   try {

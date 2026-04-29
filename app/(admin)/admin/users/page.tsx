@@ -16,6 +16,7 @@ import {
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PlatformUserActions } from "@/components/forms/platform-user-actions";
 import { initialsFor, relativeTime } from "@/lib/utils";
+import { Pagination, buildHrefForPage } from "@/components/ui/pagination";
 import { prisma } from "@/lib/db/prisma";
 import {
   requirePlatformPermission,
@@ -52,13 +53,19 @@ export default async function AllUsersPage({
     ];
   }
 
-  const [users, allOrgs] = await Promise.all([
+  const PAGE_SIZE = 50;
+  const pageRaw = searchParams?.page;
+  const page = Math.max(1, Number(typeof pageRaw === "string" ? pageRaw : "1") || 1);
+
+  const [users, total, allOrgs] = await Promise.all([
     prisma.userProfile.findMany({
       where,
       orderBy: { lastSeenAt: "desc" },
-      take: 200,
+      take: PAGE_SIZE,
+      skip: (page - 1) * PAGE_SIZE,
       include: { orgAccess: { include: { customerOrganization: true } } },
     }),
+    prisma.userProfile.count({ where }),
     prisma.customerOrganization.findMany({
       where: { status: { in: ["active", "onboarding"] } },
       select: { id: true, name: true, slug: true },
@@ -200,6 +207,13 @@ export default async function AllUsersPage({
           </Table>
         </CardContent>
       </Card>
+
+      <Pagination
+        total={total}
+        page={page}
+        pageSize={PAGE_SIZE}
+        hrefForPage={(p) => buildHrefForPage("/admin/users", searchParams, p)}
+      />
     </div>
   );
 }

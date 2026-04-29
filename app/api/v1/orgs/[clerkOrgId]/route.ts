@@ -20,7 +20,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { clerkOrgId: string } },
 ) {
-  const auth = requireApiKey(request);
+  const auth = await requireApiKey(request, "org_read");
   if (!auth.ok) return auth.response;
 
   const org = await prisma.customerOrganization.findUnique({

@@ -199,6 +199,32 @@ async function seedLegacyTenant() {
   });
 }
 
+async function seedLegacyApiKey() {
+  // If AUDIT_INGEST_API_KEY is set in the environment but isn't yet present
+  // in the ApiKey table, register it as a fully-scoped legacy key. Lets the
+  // /admin/api-keys UI show it alongside DB-issued keys + lets us revoke it
+  // with one click once every consumer has rotated.
+  const legacy = process.env.AUDIT_INGEST_API_KEY;
+  if (!legacy) return;
+  const { createHash } = await import("crypto");
+  const hash = createHash("sha256").update(legacy).digest("hex");
+  const existing = await prisma.apiKey.findUnique({ where: { keyHash: hash } });
+  if (existing) return;
+  await prisma.apiKey.create({
+    data: {
+      name: "legacy:AUDIT_INGEST_API_KEY",
+      description:
+        "Pre-migration env-var key. Rotate every consumer onto a DB-issued key, then revoke this row.",
+      keyHash: hash,
+      keyPrefix: legacy.slice(0, 12),
+      scopes: ["audit_ingest", "org_read", "user_access_read"],
+      appKey: null,
+      status: "active",
+    },
+  });
+  console.log("✓ Legacy AUDIT_INGEST_API_KEY registered as ApiKey row");
+}
+
 async function main() {
   console.log("🌱 Seeding Identity Command Center fixtures...");
   await seedApps();
@@ -207,6 +233,7 @@ async function main() {
   console.log("✓ Role templates seeded");
   await seedLegacyTenant();
   console.log("✓ Legacy tenant scaffold seeded");
+  await seedLegacyApiKey();
   await seedSuperAdmin();
   console.log("✅ Seed complete");
 }

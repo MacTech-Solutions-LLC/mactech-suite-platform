@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { CustomerOrgTable } from "@/components/tables/customer-org-table";
 import { CreateCustomerOrgForm } from "@/components/forms/create-customer-org-form";
+import { Pagination, buildHrefForPage } from "@/components/ui/pagination";
 import { prisma } from "@/lib/db/prisma";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
@@ -59,15 +60,21 @@ export default async function CustomerOrgsPage({
     where.customerType = type as (typeof TYPES)[number];
   }
 
-  const [orgs, apps] = await Promise.all([
+  const PAGE_SIZE = 50;
+  const page = Math.max(1, Number(readParam(searchParams, "page") ?? "1") || 1);
+
+  const [orgs, total, apps] = await Promise.all([
     prisma.customerOrganization.findMany({
       where,
       orderBy: { createdAt: "desc" },
+      take: PAGE_SIZE,
+      skip: (page - 1) * PAGE_SIZE,
       include: {
         entitlements: { where: { enabled: true }, select: { id: true } },
         orgUserAccess: { select: { id: true } },
       },
     }),
+    prisma.customerOrganization.count({ where }),
     prisma.appRegistry.findMany({
       where: { status: "active", isInternalOnly: false },
       select: { id: true, appKey: true, name: true },
@@ -150,6 +157,13 @@ export default async function CustomerOrgsPage({
           <CustomerOrgTable rows={rows} />
         </CardContent>
       </Card>
+
+      <Pagination
+        total={total}
+        page={page}
+        pageSize={PAGE_SIZE}
+        hrefForPage={(p) => buildHrefForPage("/admin/customer-orgs", searchParams, p)}
+      />
     </div>
   );
 }

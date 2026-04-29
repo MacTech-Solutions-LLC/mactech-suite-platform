@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { upsertProductEntitlement } from "@/lib/services/entitlement-service";
 import { upsertEntitlementSchema } from "@/lib/validations/entitlement";
+import { toast } from "@/components/ui/use-toast";
 
 const PLANS = ["none", "trial", "starter", "professional", "enterprise", "custom"] as const;
 const STATUSES = ["active", "trialing", "expired", "suspended"] as const;
@@ -102,9 +103,16 @@ export function EntitlementCard({
               try {
                 await upsertProductEntitlement(parsed.data);
                 setSaved(true);
+                toast({
+                  title: `${enabled ? "Enabled" : "Disabled"} ${app.name}`,
+                  description: `Plan: ${raw.plan}. Webhooks dispatched to subscribers.`,
+                  variant: "success",
+                });
                 router.refresh();
               } catch (err) {
-                setError(err instanceof Error ? err.message : "Failed to save");
+                const msg = err instanceof Error ? err.message : "Failed to save";
+                setError(msg);
+                toast({ title: "Save failed", description: msg, variant: "destructive" });
               }
             });
           }}

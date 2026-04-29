@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
 import Link from "next/link";
 import { AuditLogTable } from "@/components/tables/audit-log-table";
+import { Pagination, buildHrefForPage } from "@/components/ui/pagination";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
 import { getAuditLogs } from "@/lib/audit";
@@ -51,7 +52,9 @@ export default async function AuditLogsPage({
   const actorEmail = readParam(searchParams, "actorEmail");
   const startDate = readParam(searchParams, "start");
   const endDate = readParam(searchParams, "end");
-  const skip = Number(readParam(searchParams, "skip") ?? "0") || 0;
+  const PAGE_SIZE = 50;
+  const page = Math.max(1, Number(readParam(searchParams, "page") ?? "1") || 1);
+  const skip = (page - 1) * PAGE_SIZE;
 
   const orgs = await prisma.customerOrganization.findMany({
     select: { id: true, name: true },
@@ -75,7 +78,7 @@ export default async function AuditLogsPage({
     actorEmail: actorEmail ?? null,
     startDate: startDate ? new Date(startDate) : null,
     endDate: endDate ? new Date(endDate) : null,
-    take: 100,
+    take: PAGE_SIZE,
     skip,
   });
 
@@ -186,12 +189,12 @@ export default async function AuditLogsPage({
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>
-          Showing {items.length.toLocaleString()} of {total.toLocaleString()} matching events.
-        </span>
-        <Pagination total={total} skip={skip} take={100} />
-      </div>
+      <Pagination
+        total={total}
+        page={page}
+        pageSize={PAGE_SIZE}
+        hrefForPage={(p) => buildHrefForPage("/admin/audit-logs", searchParams, p)}
+      />
     </div>
   );
 }
@@ -240,12 +243,3 @@ function FilterSelect({
   );
 }
 
-function Pagination({ total, skip, take }: { total: number; skip: number; take: number }) {
-  const page = Math.floor(skip / take) + 1;
-  const totalPages = Math.max(1, Math.ceil(total / take));
-  return (
-    <span>
-      Page {page} of {totalPages}
-    </span>
-  );
-}

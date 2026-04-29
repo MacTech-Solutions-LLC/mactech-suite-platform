@@ -14,6 +14,8 @@ import {
   Siren,
   Settings,
   Hexagon,
+  Webhook,
+  TerminalSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +50,13 @@ const NAV: Array<{
     items: [
       { href: "/admin/audit-logs", label: "Central Audit Logs", icon: ScrollText },
       { href: "/admin/security-events", label: "Security Events", icon: Siren },
+    ],
+  },
+  {
+    group: "Integrations",
+    items: [
+      { href: "/admin/api-keys", label: "API Keys", icon: TerminalSquare },
+      { href: "/admin/webhooks", label: "Webhooks", icon: Webhook },
     ],
   },
   {

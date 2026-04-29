@@ -25,7 +25,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { clerkUserId: string } },
 ) {
-  const auth = requireApiKey(request);
+  const auth = await requireApiKey(request, "user_access_read");
   if (!auth.ok) return auth.response;
 
   const profile = await prisma.userProfile.findUnique({

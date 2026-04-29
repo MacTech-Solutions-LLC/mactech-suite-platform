@@ -1,0 +1,18 @@
+import { z } from "zod";
+
+export const ApiKeyScopeEnum = z.enum([
+  "audit_ingest",
+  "org_read",
+  "user_access_read",
+  "webhook_send",
+]);
+
+export const createApiKeySchema = z.object({
+  name: z.string().min(1).max(120),
+  description: z.string().max(2000).optional().or(z.literal("")),
+  scopes: z.array(ApiKeyScopeEnum).min(1, "Pick at least one scope."),
+  appKey: z.string().max(60).optional().or(z.literal("")),
+  expiresAt: z.coerce.date().optional(),
+});
+
+export type CreateApiKeyInput = z.infer<typeof createApiKeySchema>;

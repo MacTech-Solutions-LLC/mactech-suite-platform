@@ -1,5 +1,6 @@
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
+import { Toaster } from "@/components/ui/use-toast";
 import type { CommandCenterAuthContext } from "@/lib/authz";
 
 export function AdminShell({
@@ -16,6 +17,7 @@ export function AdminShell({
         <Topbar ctx={ctx} />
         <main className="flex-1 overflow-x-hidden p-4 md:p-8">{children}</main>
       </div>
+      <Toaster />
     </div>
   );
 }

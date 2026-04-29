@@ -17,8 +17,10 @@ import {
   fetchClerkOrg,
   tryClerk,
   updateClerkOrg,
+  updateClerkOrgLogo,
   ClerkSyncError,
 } from "./clerk-org-service";
+import { dispatchWebhookEvent } from "./webhook-service";
 
 function deriveSlug(name: string): string {
   const slug = name
@@ -173,7 +175,7 @@ export async function createCustomerOrganization(
     }
   }
 
-  await writeAuditLog({
+  const auditEntry = await writeAuditLog({
     eventType: "customer_org.created",
     eventCategory: "org",
     severity: "info",
@@ -191,6 +193,24 @@ export async function createCustomerOrganization(
       clerkSyncError: clerkSync.error,
       subscriptionTier: org.subscriptionTier,
       maxMembers: org.maxMembers,
+    },
+  });
+
+  void dispatchWebhookEvent({
+    eventType: "customer_org.created",
+    eventId: auditEntry.id,
+    customerOrganizationId: org.id,
+    payload: {
+      orgId: org.id,
+      clerkOrgId,
+      name: org.name,
+      slug: org.slug,
+      customerType: org.customerType,
+      subscriptionTier: org.subscriptionTier,
+      cmmcTargetLevel: org.cmmcTargetLevel,
+      cuiBoundaryType: org.cuiBoundaryType,
+      status: org.status,
+      domain: org.domain,
     },
   });
 
@@ -249,7 +269,7 @@ export async function updateCustomerOrganization(
     if (!result.ok) clerkSync = { ok: false, error: result.error };
   }
 
-  await writeAuditLog({
+  const auditEntry = await writeAuditLog({
     eventType: "customer_org.updated",
     eventCategory: "org",
     severity: "info",
@@ -266,6 +286,23 @@ export async function updateCustomerOrganization(
       newStatus: after.status,
       clerkSyncOk: clerkSync.ok,
       clerkSyncError: clerkSync.error,
+    },
+  });
+
+  void dispatchWebhookEvent({
+    eventType: "customer_org.updated",
+    eventId: auditEntry.id,
+    customerOrganizationId: after.id,
+    payload: {
+      orgId: after.id,
+      clerkOrgId: after.clerkOrgId,
+      changedFields: Object.keys(input),
+      name: after.name,
+      slug: after.slug,
+      status: after.status,
+      subscriptionTier: after.subscriptionTier,
+      cmmcTargetLevel: after.cmmcTargetLevel,
+      cuiBoundaryType: after.cuiBoundaryType,
     },
   });
 
@@ -295,7 +332,7 @@ export async function suspendCustomerOrganization(orgId: string, reason: string)
     );
   }
 
-  await writeAuditLog({
+  const auditEntry = await writeAuditLog({
     eventType: "customer_org.suspended",
     eventCategory: "org",
     severity: "warning",
@@ -308,7 +345,75 @@ export async function suspendCustomerOrganization(orgId: string, reason: string)
     resourceId: org.id,
     metadata: { reason },
   });
+
+  void dispatchWebhookEvent({
+    eventType: "customer_org.suspended",
+    eventId: auditEntry.id,
+    customerOrganizationId: org.id,
+    payload: {
+      orgId: org.id,
+      clerkOrgId: org.clerkOrgId,
+      name: org.name,
+      reason,
+    },
+  });
+
   return org;
+}
+
+/**
+ * Upload a new org logo to Clerk and mirror the resulting `imageUrl`
+ * back into our local row. Surfaced as the "Upload logo" control on
+ * the org detail page. Throws ClerkSyncError if Clerk is unreachable
+ * or the org isn't linked.
+ */
+export async function uploadOrgLogo(orgId: string, formData: FormData) {
+  const ctx = await requirePlatformPermission(PLATFORM_PERMISSIONS.CUSTOMER_ORGS_UPDATE);
+  const file = formData.get("logo");
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("No file provided.");
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    throw new Error("Logo too large (max 2 MB).");
+  }
+  if (!file.type.startsWith("image/")) {
+    throw new Error(`Unsupported file type: ${file.type}. Use PNG or JPEG.`);
+  }
+
+  const org = await prisma.customerOrganization.findUnique({ where: { id: orgId } });
+  if (!org) throw new Error("Customer organization not found.");
+  if (!org.clerkOrgId) {
+    throw new ClerkSyncError(
+      "This organization is not linked to a Clerk org yet. Logos are stored in Clerk.",
+    );
+  }
+
+  const result = await updateClerkOrgLogo({
+    clerkOrgId: org.clerkOrgId,
+    uploaderUserId: ctx.clerkUserId,
+    file,
+  });
+
+  const updated = await prisma.customerOrganization.update({
+    where: { id: org.id },
+    data: { imageUrl: result.imageUrl },
+  });
+
+  await writeAuditLog({
+    eventType: "customer_org.logo_uploaded",
+    eventCategory: "org",
+    severity: "info",
+    action: `Uploaded new logo for ${updated.name}`,
+    actorClerkUserId: ctx.clerkUserId,
+    actorEmail: ctx.userProfile.email,
+    actorUserProfileId: ctx.userProfile.id,
+    customerOrganizationId: updated.id,
+    resourceType: "CustomerOrganization",
+    resourceId: updated.id,
+    metadata: { imageUrl: result.imageUrl, sizeBytes: file.size, contentType: file.type },
+  });
+
+  return updated;
 }
 
 /**

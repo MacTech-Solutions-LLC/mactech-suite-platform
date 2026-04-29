@@ -26,6 +26,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Plus } from "lucide-react";
 import { createCustomerOrgSchema } from "@/lib/validations/customer-org";
 import { createCustomerOrganization } from "@/lib/services/customer-org-service";
+import { toast } from "@/components/ui/use-toast";
 import type { AppRegistry } from "@prisma/client";
 
 const customerTypes = ["dib", "prime", "subcontractor", "internal", "other"] as const;
@@ -89,19 +90,28 @@ export function CreateCustomerOrgForm({ apps }: { apps: Pick<AppRegistry, "id" |
               try {
                 const result = await createCustomerOrganization(parsed.data);
                 if (result.clerkSync && !result.clerkSync.ok) {
-                  // The local row was created, but the Clerk side failed —
-                  // surface that to the admin so they can take action without
-                  // failing the whole operation.
                   setError(
                     `Created locally, but Clerk sync failed: ${result.clerkSync.error}. You can use "Resync from Clerk" on the org detail page once the issue is resolved.`,
                   );
+                  toast({
+                    title: "Created locally, Clerk sync failed",
+                    description: result.clerkSync.error,
+                    variant: "warning",
+                  });
                   router.refresh();
                   return;
                 }
+                toast({
+                  title: "Customer organization created",
+                  description: `${parsed.data.name} is live in both MacTech and Clerk.`,
+                  variant: "success",
+                });
                 setOpen(false);
                 router.refresh();
               } catch (err) {
-                setError(err instanceof Error ? err.message : "Failed to create");
+                const msg = err instanceof Error ? err.message : "Failed to create";
+                setError(msg);
+                toast({ title: "Create failed", description: msg, variant: "destructive" });
               }
             });
           }}

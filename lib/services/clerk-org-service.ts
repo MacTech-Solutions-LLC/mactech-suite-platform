@@ -235,6 +235,26 @@ export async function deleteClerkMembership(input: {
   }
 }
 
+export interface UpdateClerkLogoInput {
+  clerkOrgId: string;
+  uploaderUserId: string;
+  /** Server-side `File` (or any Blob with a name + type). */
+  file: File;
+}
+
+export async function updateClerkOrgLogo(input: UpdateClerkLogoInput): Promise<{ imageUrl: string | null }> {
+  const client = await clerk();
+  try {
+    const org = await client.organizations.updateOrganizationLogo(input.clerkOrgId, {
+      uploaderUserId: input.uploaderUserId,
+      file: input.file,
+    });
+    return { imageUrl: org.imageUrl ?? null };
+  } catch (err) {
+    throw new ClerkSyncError(`Clerk updateOrganizationLogo failed: ${explain(err)}`, err);
+  }
+}
+
 /**
  * Fetch the Clerk-side view of an org for the admin UI's "Clerk linkage"
  * panel. Returns null if the org doesn't exist (e.g. deleted out from
