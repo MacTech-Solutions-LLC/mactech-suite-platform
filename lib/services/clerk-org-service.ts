@@ -100,6 +100,13 @@ export interface CreateClerkOrgInput {
 /**
  * Create a Clerk organization. Throws ClerkSyncError on failure; the caller
  * decides whether that's fatal for the local write.
+ *
+ * We always omit the Clerk-side `slug` field here. Our local DB owns the
+ * canonical slug (`CustomerOrganization.slug`) and uses it for routing;
+ * Clerk's slug only matters for their hosted Account Portal URLs which we
+ * don't expose. Some Clerk instances also have organization slugs disabled
+ * outright, in which case passing one is a hard error. Easier to never
+ * pass it and stay forward-compatible across instance configurations.
  */
 export async function createClerkOrg(
   input: CreateClerkOrgInput,
@@ -108,7 +115,6 @@ export async function createClerkOrg(
   try {
     const org = await client.organizations.createOrganization({
       name: input.name,
-      slug: input.slug,
       createdBy: input.createdBy,
       publicMetadata: input.publicMetadata as unknown as Record<string, unknown>,
       privateMetadata: input.privateMetadata,
@@ -134,7 +140,8 @@ export async function updateClerkOrg(input: UpdateClerkOrgInput): Promise<void> 
   try {
     await client.organizations.updateOrganization(input.clerkOrgId, {
       name: input.name,
-      slug: input.slug,
+      // Slug intentionally omitted — see createClerkOrg comment for why.
+      // Local CustomerOrganization.slug remains the source of truth.
       publicMetadata:
         (input.publicMetadata as unknown as Record<string, unknown>) ?? undefined,
       privateMetadata: input.privateMetadata,
