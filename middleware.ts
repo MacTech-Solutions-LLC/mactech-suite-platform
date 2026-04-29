@@ -8,6 +8,7 @@ const isPublicRoute = createRouteMatcher([
   "/access-restricted",
   "/api/webhooks/clerk",
   "/api/audit/ingest",
+  "/api/v1/(.*)",
 ]);
 
 const isAdminRoute = createRouteMatcher(["/admin(.*)", "/dashboard(.*)"]);

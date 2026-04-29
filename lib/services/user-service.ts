@@ -17,6 +17,14 @@ import { writeAuditLog } from "@/lib/audit";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS, CUSTOMER_ROLE_DEFINITIONS } from "@/lib/permissions";
 import { clerkConfigured, env } from "@/lib/env";
+import { localRoleToClerkRole } from "@/lib/clerk-role-map";
+import {
+  createClerkInvitation,
+  createClerkMembership,
+  deleteClerkMembership,
+  tryClerk,
+  updateClerkMembershipRole,
+} from "./clerk-org-service";
 
 async function ensureUserProfileByEmail(input: {
   email: string;
@@ -65,20 +73,16 @@ export async function inviteCustomerUser(rawInput: InviteCustomerUserInput) {
 
   let clerkInvitationId: string | null = null;
   if (input.sendInvite && clerkConfigured() && org.clerkOrgId) {
-    try {
-      const { clerkClient } = await import("@clerk/nextjs/server");
-      const client = await clerkClient();
-      const invite = await client.organizations.createOrganizationInvitation({
-        organizationId: org.clerkOrgId,
+    const result = await tryClerk("createOrganizationInvitation", () =>
+      createClerkInvitation({
+        clerkOrgId: org.clerkOrgId!,
         emailAddress: input.email,
-        role: "org:member",
-        redirectUrl: `${env.NEXT_PUBLIC_APP_URL}/dashboard`,
         inviterUserId: ctx.clerkUserId,
-      });
-      clerkInvitationId = invite.id;
-    } catch (err) {
-      console.error("[user-service] Clerk invitation failed:", err);
-    }
+        role: localRoleToClerkRole(role.key),
+        redirectUrl: `${env.NEXT_PUBLIC_APP_URL}/dashboard`,
+      }),
+    );
+    if (result.ok) clerkInvitationId = result.value.id;
   }
 
   const access = await prisma.orgUserAccess.upsert({
@@ -156,6 +160,24 @@ export async function updateOrgUserAccess(rawInput: UpdateOrgUserAccessInput) {
   });
 
   if (role && role.key !== previous.role) {
+    // Mirror the role change to Clerk's membership when both sides are linked
+    // and the change crosses the admin/member boundary. Best-effort.
+    const newClerkRole = localRoleToClerkRole(role.key);
+    const oldClerkRole = localRoleToClerkRole(previous.role);
+    if (
+      newClerkRole !== oldClerkRole &&
+      previous.customerOrganization.clerkOrgId &&
+      previous.userProfile.clerkUserId &&
+      !previous.userProfile.clerkUserId.startsWith("pending_")
+    ) {
+      await tryClerk("updateOrganizationMembership (role)", () =>
+        updateClerkMembershipRole({
+          clerkOrgId: previous.customerOrganization.clerkOrgId!,
+          clerkUserId: previous.userProfile.clerkUserId,
+          role: newClerkRole,
+        }),
+      );
+    }
     await writeAuditLog({
       eventType: "customer_user.role_changed",
       eventCategory: "role",
@@ -167,7 +189,12 @@ export async function updateOrgUserAccess(rawInput: UpdateOrgUserAccessInput) {
       customerOrganizationId: previous.customerOrganizationId,
       resourceType: "OrgUserAccess",
       resourceId: previous.id,
-      metadata: { from: previous.role, to: role.key },
+      metadata: {
+        from: previous.role,
+        to: role.key,
+        clerkRoleFrom: oldClerkRole,
+        clerkRoleTo: newClerkRole,
+      },
     });
   }
 
@@ -218,20 +245,16 @@ export async function addUserToOrg(rawInput: AddUserToOrgInput) {
   const hasRealClerkUser =
     Boolean(profile.clerkUserId) && !profile.clerkUserId.startsWith("pending_");
   if (clerkConfigured() && org.clerkOrgId && hasRealClerkUser) {
-    try {
-      const { clerkClient } = await import("@clerk/nextjs/server");
-      const client = await clerkClient();
-      const membership = await client.organizations.createOrganizationMembership({
-        organizationId: org.clerkOrgId,
-        userId: profile.clerkUserId,
-        role: "org:member",
-      });
-      clerkMembershipId = membership.id;
-    } catch (err) {
-      // Membership may already exist in Clerk; the local upsert below still
-      // captures it. Audit metadata flags whether the Clerk side succeeded.
-      console.error("[user-service] Clerk membership create failed:", err);
-    }
+    const result = await tryClerk("createOrganizationMembership", () =>
+      createClerkMembership({
+        clerkOrgId: org.clerkOrgId!,
+        clerkUserId: profile.clerkUserId,
+        role: localRoleToClerkRole(role.key),
+      }),
+    );
+    if (result.ok) clerkMembershipId = result.value.id;
+    // Membership may already exist in Clerk; the local upsert still captures
+    // it via clerkMembershipId being null. Audit metadata reflects Clerk state.
   }
 
   const access = await prisma.orgUserAccess.upsert({
@@ -296,18 +319,17 @@ export async function removeCustomerUser(rawInput: RemoveOrgUserAccessInput) {
 
   // Best-effort: if the access has a Clerk membership and Clerk is configured,
   // also delete the membership server-side so Clerk and our DB stay aligned.
-  if (access.clerkMembershipId && access.customerOrganization.clerkOrgId) {
-    try {
-      const { clerkClient } = await import("@clerk/nextjs/server");
-      const client = await clerkClient();
-      await client.organizations.deleteOrganizationMembership({
-        organizationId: access.customerOrganization.clerkOrgId,
-        userId: access.userProfile.clerkUserId,
-      });
-    } catch (err) {
-      // Log but don't fail — the audit metadata captures the discrepancy.
-      console.error("[user-service] Clerk membership delete failed:", err);
-    }
+  if (
+    access.customerOrganization.clerkOrgId &&
+    access.userProfile.clerkUserId &&
+    !access.userProfile.clerkUserId.startsWith("pending_")
+  ) {
+    await tryClerk("deleteOrganizationMembership", () =>
+      deleteClerkMembership({
+        clerkOrgId: access.customerOrganization.clerkOrgId!,
+        clerkUserId: access.userProfile.clerkUserId,
+      }),
+    );
   }
 
   await prisma.orgUserAccess.delete({ where: { id: access.id } });

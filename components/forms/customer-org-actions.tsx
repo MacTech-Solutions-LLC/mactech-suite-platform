@@ -77,6 +77,7 @@ function EditCustomerOrgDialog({ org }: { org: CustomerOrganization }) {
             event.preventDefault();
             setError(null);
             const fd = new FormData(event.currentTarget);
+            const maxMembersRaw = fd.get("maxMembers");
             const raw: UpdateCustomerOrgInput = {
               name: String(fd.get("name") || ""),
               legalName: String(fd.get("legalName") || ""),
@@ -93,6 +94,7 @@ function EditCustomerOrgDialog({ org }: { org: CustomerOrganization }) {
               primaryContactName: String(fd.get("primaryContactName") || ""),
               primaryContactEmail: String(fd.get("primaryContactEmail") || ""),
               notes: String(fd.get("notes") || ""),
+              maxMembers: maxMembersRaw ? Number(maxMembersRaw) : undefined,
             };
             const parsed = updateCustomerOrgSchema.safeParse(raw);
             if (!parsed.success) {
@@ -101,7 +103,14 @@ function EditCustomerOrgDialog({ org }: { org: CustomerOrganization }) {
             }
             startTransition(async () => {
               try {
-                await updateCustomerOrganization(org.id, parsed.data);
+                const result = await updateCustomerOrganization(org.id, parsed.data);
+                if (result.clerkSync && !result.clerkSync.ok) {
+                  setError(
+                    `Saved locally, but Clerk sync failed: ${result.clerkSync.error}.`,
+                  );
+                  router.refresh();
+                  return;
+                }
                 setOpen(false);
                 router.refresh();
               } catch (err) {
@@ -158,6 +167,13 @@ function EditCustomerOrgDialog({ org }: { org: CustomerOrganization }) {
               name="primaryContactEmail"
               type="email"
               defaultValue={org.primaryContactEmail ?? ""}
+            />
+            <Field
+              label="Max members (Clerk cap)"
+              name="maxMembers"
+              type="number"
+              defaultValue={org.maxMembers != null ? String(org.maxMembers) : ""}
+              placeholder="leave blank for no cap"
             />
           </div>
           <div className="grid gap-1.5">
@@ -270,12 +286,14 @@ function Field({
   type,
   required,
   defaultValue,
+  placeholder,
 }: {
   label: string;
   name: string;
   type?: string;
   required?: boolean;
   defaultValue?: string;
+  placeholder?: string;
 }) {
   return (
     <div className="grid gap-1.5">
@@ -289,6 +307,7 @@ function Field({
         type={type}
         required={required}
         defaultValue={defaultValue}
+        placeholder={placeholder}
       />
     </div>
   );

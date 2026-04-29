@@ -8,6 +8,11 @@ import {
 import { writeAuditLog } from "@/lib/audit";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
+import {
+  buildPublicMetadata,
+  tryClerk,
+  updateClerkOrg,
+} from "./clerk-org-service";
 
 export async function upsertProductEntitlement(rawInput: UpsertEntitlementInput) {
   const ctx = await requirePlatformPermission(PLATFORM_PERMISSIONS.ENTITLEMENTS_MANAGE);
@@ -69,6 +74,23 @@ export async function upsertProductEntitlement(rawInput: UpsertEntitlementInput)
       ? "Enabled"
       : "Disabled";
 
+  // Refresh Clerk publicMetadata so sibling apps see the new enabledApps
+  // list immediately (no need to hit our /api/v1/orgs endpoint). Best-effort.
+  let clerkSyncOk = true;
+  if (org.clerkOrgId) {
+    const enabled = await prisma.productEntitlement.findMany({
+      where: { customerOrganizationId: org.id, enabled: true },
+      include: { app: { select: { appKey: true } } },
+    });
+    const result = await tryClerk("updateOrganization (entitlements)", () =>
+      updateClerkOrg({
+        clerkOrgId: org.clerkOrgId!,
+        publicMetadata: buildPublicMetadata(org, enabled),
+      }),
+    );
+    clerkSyncOk = result.ok;
+  }
+
   await writeAuditLog({
     eventType: input.enabled
       ? previous
@@ -91,6 +113,7 @@ export async function upsertProductEntitlement(rawInput: UpsertEntitlementInput)
       previousPlan: previous?.plan,
       previousStatus: previous?.status,
       newStatus: input.status,
+      clerkSyncOk,
     },
   });
 

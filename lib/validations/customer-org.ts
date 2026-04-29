@@ -48,6 +48,7 @@ export const createCustomerOrgSchema = z.object({
   primaryContactName: z.string().max(200).optional().or(z.literal("")),
   primaryContactEmail: z.string().email().optional().or(z.literal("")),
   notes: z.string().max(4000).optional().or(z.literal("")),
+  maxMembers: z.coerce.number().int().min(1).max(100000).optional(),
   initialAppKeys: z.array(z.string()).max(20).default([]),
 });
 

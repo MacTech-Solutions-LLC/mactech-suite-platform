@@ -61,6 +61,7 @@ export function CreateCustomerOrgForm({ apps }: { apps: Pick<AppRegistry, "id" |
             setError(null);
             const fd = new FormData(event.currentTarget);
             const initialAppKeys = fd.getAll("initialAppKeys").map(String);
+            const maxMembersRaw = fd.get("maxMembers");
             const raw = {
               name: String(fd.get("name") || ""),
               legalName: String(fd.get("legalName") || ""),
@@ -76,6 +77,7 @@ export function CreateCustomerOrgForm({ apps }: { apps: Pick<AppRegistry, "id" |
               primaryContactName: String(fd.get("primaryContactName") || ""),
               primaryContactEmail: String(fd.get("primaryContactEmail") || ""),
               notes: String(fd.get("notes") || ""),
+              maxMembers: maxMembersRaw ? Number(maxMembersRaw) : undefined,
               initialAppKeys,
             };
             const parsed = createCustomerOrgSchema.safeParse(raw);
@@ -85,7 +87,17 @@ export function CreateCustomerOrgForm({ apps }: { apps: Pick<AppRegistry, "id" |
             }
             startTransition(async () => {
               try {
-                await createCustomerOrganization(parsed.data);
+                const result = await createCustomerOrganization(parsed.data);
+                if (result.clerkSync && !result.clerkSync.ok) {
+                  // The local row was created, but the Clerk side failed —
+                  // surface that to the admin so they can take action without
+                  // failing the whole operation.
+                  setError(
+                    `Created locally, but Clerk sync failed: ${result.clerkSync.error}. You can use "Resync from Clerk" on the org detail page once the issue is resolved.`,
+                  );
+                  router.refresh();
+                  return;
+                }
                 setOpen(false);
                 router.refresh();
               } catch (err) {
@@ -134,6 +146,12 @@ export function CreateCustomerOrgForm({ apps }: { apps: Pick<AppRegistry, "id" |
               label="Primary contact email"
               name="primaryContactEmail"
               type="email"
+            />
+            <Field
+              label="Max members (Clerk cap)"
+              name="maxMembers"
+              type="number"
+              placeholder="leave blank for no cap"
             />
           </div>
 

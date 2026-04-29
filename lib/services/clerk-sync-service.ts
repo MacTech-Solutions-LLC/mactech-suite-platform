@@ -75,6 +75,9 @@ interface ClerkOrgPayload {
   id: string;
   name: string;
   slug?: string | null;
+  image_url?: string | null;
+  max_allowed_memberships?: number | null;
+  members_count?: number | null;
 }
 
 export async function upsertOrgFromClerk(org: ClerkOrgPayload) {
@@ -84,7 +87,17 @@ export async function upsertOrgFromClerk(org: ClerkOrgPayload) {
   if (existing) {
     return prisma.customerOrganization.update({
       where: { id: existing.id },
-      data: { name: org.name, slug: org.slug ?? existing.slug },
+      data: {
+        name: org.name,
+        slug: org.slug ?? existing.slug,
+        imageUrl: org.image_url ?? existing.imageUrl,
+        maxMembers:
+          typeof org.max_allowed_memberships === "number"
+            ? org.max_allowed_memberships > 0
+              ? org.max_allowed_memberships
+              : null
+            : existing.maxMembers,
+      },
     });
   }
   // Synthesize a slug if Clerk did not supply one.
@@ -94,6 +107,12 @@ export async function upsertOrgFromClerk(org: ClerkOrgPayload) {
       clerkOrgId: org.id,
       name: org.name,
       slug,
+      imageUrl: org.image_url ?? null,
+      maxMembers:
+        typeof org.max_allowed_memberships === "number" &&
+        org.max_allowed_memberships > 0
+          ? org.max_allowed_memberships
+          : null,
       status: "onboarding",
     },
   });
@@ -113,6 +132,22 @@ interface ClerkMembershipPayload {
   organization: { id: string };
   public_user_data?: { user_id: string };
   role?: string;
+}
+
+/**
+ * Clerk's role taxonomy is coarse (`org:admin` / `org:member`); our local
+ * taxonomy is finer (7 customer roles). When we receive a webhook for a
+ * membership we don't yet have, we need a default local role:
+ *
+ *   org:admin  → customer_admin   (full mgmt of the customer org)
+ *   org:member → read_only_user   (least-privilege baseline)
+ *
+ * For *existing* memberships we never demote based on Clerk's signal —
+ * Clerk only sees admin-vs-not, so a Clerk role-change shouldn't clobber
+ * a richer local role like `compliance_manager`.
+ */
+function defaultLocalRoleFromClerk(clerkRole: string | undefined): string {
+  return clerkRole === "org:admin" ? "customer_admin" : "read_only_user";
 }
 
 export async function upsertMembershipFromClerk(membership: ClerkMembershipPayload) {
@@ -135,14 +170,15 @@ export async function upsertMembershipFromClerk(membership: ClerkMembershipPaylo
       },
     },
     update: {
-      role: membership.role || "read_only_user",
+      // Do NOT update the local role from Clerk — preserve the finer-grained
+      // local role. Only refresh the Clerk membership id + status.
       clerkMembershipId: membership.id,
       status: "active",
     },
     create: {
       customerOrganizationId: org.id,
       userProfileId: profile.id,
-      role: membership.role || "read_only_user",
+      role: defaultLocalRoleFromClerk(membership.role),
       clerkMembershipId: membership.id,
       status: "active",
     },

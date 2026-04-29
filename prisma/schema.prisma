@@ -304,6 +304,8 @@ model CustomerOrganization {
   primaryContactName  String?
   primaryContactEmail String?
   notes               String?
+  maxMembers          Int?
+  imageUrl            String?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 

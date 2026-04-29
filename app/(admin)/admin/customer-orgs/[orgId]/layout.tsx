@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CustomerOrgTabs } from "./tabs";
 import { CustomerOrgActions } from "@/components/forms/customer-org-actions";
+import { ClerkLinkageCard } from "@/components/cards/clerk-linkage-card";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +51,13 @@ export default async function CustomerOrgDetailLayout({
         </div>
         <CustomerOrgActions org={org} />
       </div>
+
+      <ClerkLinkageCard
+        orgId={org.id}
+        clerkOrgId={org.clerkOrgId}
+        imageUrl={org.imageUrl}
+        name={org.name}
+      />
 
       <CustomerOrgTabs orgId={org.id} />
 
