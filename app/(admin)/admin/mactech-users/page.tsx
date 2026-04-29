@@ -33,10 +33,18 @@ export default async function MacTechUsersPage() {
   const ctx = await getCurrentAuthContext();
   const selfId = ctx?.userProfile.id;
 
-  const profiles = await prisma.userProfile.findMany({
-    where: { isInternalMacTechUser: true },
-    orderBy: [{ status: "asc" }, { lastSeenAt: "desc" }],
-  });
+  const [profiles, allOrgs] = await Promise.all([
+    prisma.userProfile.findMany({
+      where: { isInternalMacTechUser: true },
+      orderBy: [{ status: "asc" }, { lastSeenAt: "desc" }],
+      include: { orgAccess: { include: { customerOrganization: true } } },
+    }),
+    prisma.customerOrganization.findMany({
+      where: { status: { in: ["active", "onboarding"] } },
+      select: { id: true, name: true, slug: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -115,6 +123,15 @@ export default async function MacTechUsersPage() {
                           isSelf={p.id === selfId}
                           currentRole={p.platformRole}
                           currentStatus={p.status}
+                          allOrgs={allOrgs}
+                          memberships={p.orgAccess.map((a) => ({
+                            id: a.id,
+                            customerOrganizationId: a.customerOrganization.id,
+                            customerOrganizationName: a.customerOrganization.name,
+                            customerOrganizationSlug: a.customerOrganization.slug,
+                            role: a.role,
+                            status: a.status,
+                          }))}
                         />
                       </TableCell>
                     </TableRow>

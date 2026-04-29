@@ -46,3 +46,11 @@ export const removeOrgUserAccessSchema = z.object({
 });
 
 export type RemoveOrgUserAccessInput = z.infer<typeof removeOrgUserAccessSchema>;
+
+export const addUserToOrgSchema = z.object({
+  userProfileId: z.string().min(1),
+  customerOrganizationId: z.string().min(1),
+  role: z.string().min(1),
+});
+
+export type AddUserToOrgInput = z.infer<typeof addUserToOrgSchema>;

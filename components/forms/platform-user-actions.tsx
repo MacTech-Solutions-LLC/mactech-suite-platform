@@ -3,7 +3,19 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal, ShieldCheck, Pause, Play, ScrollText } from "lucide-react";
+import {
+  MoreHorizontal,
+  ShieldCheck,
+  Pause,
+  Play,
+  ScrollText,
+  Building2,
+} from "lucide-react";
+import {
+  ManageUserOrgsSheet,
+  type OrgOption,
+  type MembershipRow,
+} from "./manage-user-orgs-sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,14 +53,20 @@ export interface PlatformUserActionsProps {
   isSelf: boolean;
   currentRole: PlatformRole;
   currentStatus: UserStatus;
+  /** All customer orgs the manager can pick from when adding a membership. */
+  allOrgs?: OrgOption[];
+  /** Existing memberships for this user, used by the manage-orgs sheet. */
+  memberships?: MembershipRow[];
 }
 
 export function PlatformUserActions(props: PlatformUserActionsProps) {
   const [open, setOpen] = useState<null | Mode>(null);
   const [confirm, setConfirm] = useState<null | "suspend" | "reactivate">(null);
+  const [orgsOpen, setOrgsOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const showOrgs = Array.isArray(props.allOrgs);
 
   const submitRole = (role: PlatformRole) => {
     setError(null);
@@ -101,6 +119,17 @@ export function PlatformUserActions(props: PlatformUserActionsProps) {
             <ShieldCheck className="h-4 w-4" />
             {isInternal ? "Change platform role" : "Grant platform access"}
           </DropdownMenuItem>
+          {showOrgs && (
+            <DropdownMenuItem onSelect={() => setOrgsOpen(true)}>
+              <Building2 className="h-4 w-4" />
+              Manage organizations
+              {props.memberships && props.memberships.length > 0 && (
+                <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+                  {props.memberships.length}
+                </span>
+              )}
+            </DropdownMenuItem>
+          )}
           {isActive ? (
             <DropdownMenuItem
               onSelect={() => setConfirm("suspend")}
@@ -147,6 +176,18 @@ export function PlatformUserActions(props: PlatformUserActionsProps) {
           />
         </DialogContent>
       </Dialog>
+
+      {/* Org memberships sheet */}
+      {showOrgs && (
+        <ManageUserOrgsSheet
+          open={orgsOpen}
+          onOpenChange={setOrgsOpen}
+          userProfileId={props.userProfileId}
+          email={props.email}
+          allOrgs={props.allOrgs ?? []}
+          memberships={props.memberships ?? []}
+        />
+      )}
 
       {/* Suspend / reactivate confirmation */}
       <Dialog open={confirm !== null} onOpenChange={(o) => !pending && !o && setConfirm(null)}>

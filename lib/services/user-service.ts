@@ -6,10 +6,12 @@ import {
   updateOrgUserAccessSchema,
   updatePlatformUserSchema,
   removeOrgUserAccessSchema,
+  addUserToOrgSchema,
   type InviteCustomerUserInput,
   type UpdateOrgUserAccessInput,
   type UpdatePlatformUserInput,
   type RemoveOrgUserAccessInput,
+  type AddUserToOrgInput,
 } from "@/lib/validations/user";
 import { writeAuditLog } from "@/lib/audit";
 import { requirePlatformPermission } from "@/lib/authz";
@@ -186,6 +188,93 @@ export async function updateOrgUserAccess(rawInput: UpdateOrgUserAccessInput) {
   }
 
   return updated;
+}
+
+/**
+ * Add an *existing* UserProfile to a customer org. Distinct from
+ * `inviteCustomerUser` which targets unknown emails (and may issue a Clerk
+ * invitation). This one assumes the profile is already provisioned and the
+ * user can sign in — we just attach an OrgUserAccess (and a Clerk
+ * organization membership when both sides are configured).
+ */
+export async function addUserToOrg(rawInput: AddUserToOrgInput) {
+  const ctx = await requirePlatformPermission(
+    PLATFORM_PERMISSIONS.CUSTOMER_USERS_INVITE,
+  );
+  const input = addUserToOrgSchema.parse(rawInput);
+
+  const role = CUSTOMER_ROLE_DEFINITIONS.find((r) => r.key === input.role);
+  if (!role) throw new Error(`Unknown customer role: ${input.role}`);
+
+  const [profile, org] = await Promise.all([
+    prisma.userProfile.findUnique({ where: { id: input.userProfileId } }),
+    prisma.customerOrganization.findUnique({
+      where: { id: input.customerOrganizationId },
+    }),
+  ]);
+  if (!profile || !org) throw new Error("User or organization not found.");
+
+  let clerkMembershipId: string | null = null;
+  const hasRealClerkUser =
+    Boolean(profile.clerkUserId) && !profile.clerkUserId.startsWith("pending_");
+  if (clerkConfigured() && org.clerkOrgId && hasRealClerkUser) {
+    try {
+      const { clerkClient } = await import("@clerk/nextjs/server");
+      const client = await clerkClient();
+      const membership = await client.organizations.createOrganizationMembership({
+        organizationId: org.clerkOrgId,
+        userId: profile.clerkUserId,
+        role: "org:member",
+      });
+      clerkMembershipId = membership.id;
+    } catch (err) {
+      // Membership may already exist in Clerk; the local upsert below still
+      // captures it. Audit metadata flags whether the Clerk side succeeded.
+      console.error("[user-service] Clerk membership create failed:", err);
+    }
+  }
+
+  const access = await prisma.orgUserAccess.upsert({
+    where: {
+      customerOrganizationId_userProfileId: {
+        customerOrganizationId: org.id,
+        userProfileId: profile.id,
+      },
+    },
+    update: {
+      role: role.key,
+      permissionsJson: role.permissions as unknown as object,
+      status: "active",
+      clerkMembershipId: clerkMembershipId ?? undefined,
+    },
+    create: {
+      customerOrganizationId: org.id,
+      userProfileId: profile.id,
+      role: role.key,
+      permissionsJson: role.permissions as unknown as object,
+      status: "active",
+      clerkMembershipId,
+    },
+  });
+
+  await writeAuditLog({
+    eventType: "customer_user.added",
+    eventCategory: "user",
+    severity: "info",
+    action: `Added ${profile.email} to ${org.name} as ${role.name}`,
+    actorClerkUserId: ctx.clerkUserId,
+    actorEmail: ctx.userProfile.email,
+    actorUserProfileId: ctx.userProfile.id,
+    customerOrganizationId: org.id,
+    resourceType: "OrgUserAccess",
+    resourceId: access.id,
+    metadata: {
+      role: role.key,
+      viaClerk: Boolean(clerkMembershipId),
+    },
+  });
+
+  return access;
 }
 
 export async function removeCustomerUser(rawInput: RemoveOrgUserAccessInput) {

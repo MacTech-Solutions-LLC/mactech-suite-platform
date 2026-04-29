@@ -52,12 +52,19 @@ export default async function AllUsersPage({
     ];
   }
 
-  const users = await prisma.userProfile.findMany({
-    where,
-    orderBy: { lastSeenAt: "desc" },
-    take: 200,
-    include: { orgAccess: { include: { customerOrganization: true } } },
-  });
+  const [users, allOrgs] = await Promise.all([
+    prisma.userProfile.findMany({
+      where,
+      orderBy: { lastSeenAt: "desc" },
+      take: 200,
+      include: { orgAccess: { include: { customerOrganization: true } } },
+    }),
+    prisma.customerOrganization.findMany({
+      where: { status: { in: ["active", "onboarding"] } },
+      select: { id: true, name: true, slug: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -171,6 +178,17 @@ export default async function AllUsersPage({
                             isSelf={u.id === selfId}
                             currentRole={u.platformRole}
                             currentStatus={u.status}
+                            allOrgs={allOrgs}
+                            memberships={u.orgAccess.map((a) => ({
+                              id: a.id,
+                              customerOrganizationId: a.customerOrganization.id,
+                              customerOrganizationName:
+                                a.customerOrganization.name,
+                              customerOrganizationSlug:
+                                a.customerOrganization.slug,
+                              role: a.role,
+                              status: a.status,
+                            }))}
                           />
                         )}
                       </TableCell>
