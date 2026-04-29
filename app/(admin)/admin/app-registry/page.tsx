@@ -12,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AppRegistryForm } from "@/components/forms/app-registry-form";
+import { ExternalLink } from "lucide-react";
 import { prisma } from "@/lib/db/prisma";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
@@ -63,7 +64,19 @@ export default async function AppRegistryPage() {
                       <Badge variant="muted">{app.category}</Badge>
                     </TableCell>
                     <TableCell className="text-xs font-mono break-all">
-                      {app.baseUrl || "—"}
+                      {app.baseUrl ? (
+                        <a
+                          href={app.baseUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-primary hover:underline"
+                        >
+                          {app.baseUrl}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ) : (
+                        "—"
+                      )}
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={app.status} />
