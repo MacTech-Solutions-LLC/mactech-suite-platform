@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   Building2,
   Users,
@@ -109,12 +110,14 @@ export default async function DashboardPage() {
           value={totalOrgs}
           delta={`${activeOrgs} active · ${suspendedOrgs} suspended`}
           icon={Building2}
+          href="/admin/customer-orgs"
         />
         <DashboardMetricCard
           label="Total users"
           value={totalUsers}
           delta="Across MacTech + customer tenants"
           icon={Users}
+          href="/admin/users"
         />
         <DashboardMetricCard
           label="Active product entitlements"
@@ -122,12 +125,14 @@ export default async function DashboardPage() {
           delta="Enabled & active across all customers"
           icon={Boxes}
           intent="success"
+          href="/admin/product-access"
         />
         <DashboardMetricCard
           label="Apps registered"
           value={appsRegistered}
           delta="Active in the App Registry"
           icon={PackageSearch}
+          href="/admin/app-registry"
         />
       </section>
 
@@ -138,6 +143,7 @@ export default async function DashboardPage() {
           delta="Open or under investigation"
           icon={Siren}
           intent={securityOpen > 0 ? "destructive" : "success"}
+          href="/admin/security-events?status=open"
         />
         <DashboardMetricCard
           label="Critical audit events (7d)"
@@ -145,6 +151,9 @@ export default async function DashboardPage() {
           delta="Severity = critical"
           icon={AlertTriangle}
           intent={criticalRecent > 0 ? "warning" : "default"}
+          href={`/admin/audit-logs?severity=critical&start=${sevenDaysAgo
+            .toISOString()
+            .slice(0, 10)}`}
         />
         <DashboardMetricCard
           label="Active customers"
@@ -152,6 +161,7 @@ export default async function DashboardPage() {
           delta="Status = active"
           icon={ShieldCheck}
           intent="success"
+          href="/admin/customer-orgs?status=active"
         />
         <DashboardMetricCard
           label="Suspended customers"
@@ -159,6 +169,7 @@ export default async function DashboardPage() {
           delta="Status = suspended"
           icon={ShieldCheck}
           intent={suspendedOrgs > 0 ? "warning" : "default"}
+          href="/admin/customer-orgs?status=suspended"
         />
       </section>
 
@@ -169,7 +180,15 @@ export default async function DashboardPage() {
               <CardTitle>Recent audit activity</CardTitle>
               <CardDescription>Latest 8 platform-wide events.</CardDescription>
             </div>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center gap-3">
+              <Link
+                href="/admin/audit-logs"
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                View all →
+              </Link>
+              <Activity className="h-4 w-4 text-muted-foreground" />
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -210,27 +229,38 @@ export default async function DashboardPage() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Recent customer organizations</CardTitle>
-            <CardDescription>Newest tenants onboarded.</CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-2">
+            <div>
+              <CardTitle>Recent customer organizations</CardTitle>
+              <CardDescription>Newest tenants onboarded.</CardDescription>
+            </div>
+            <Link
+              href="/admin/customer-orgs"
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              View all →
+            </Link>
           </CardHeader>
           <CardContent className="space-y-3">
             {recentOrgs.length === 0 && (
               <p className="text-sm text-muted-foreground">No customer organizations yet.</p>
             )}
             {recentOrgs.map((org) => (
-              <div
+              <Link
                 key={org.id}
-                className="flex items-center justify-between gap-2 rounded-md border border-border p-3"
+                href={`/admin/customer-orgs/${org.id}`}
+                className="group flex items-center justify-between gap-2 rounded-md border border-border p-3 transition-colors hover:border-primary/50 hover:bg-card/80"
               >
                 <div className="min-w-0">
-                  <div className="text-sm font-medium truncate">{org.name}</div>
+                  <div className="text-sm font-medium truncate group-hover:text-primary">
+                    {org.name}
+                  </div>
                   <div className="text-xs text-muted-foreground">
                     {org.subscriptionTier} · CMMC {org.cmmcTargetLevel}
                   </div>
                 </div>
                 <StatusBadge status={org.status} />
-              </div>
+              </Link>
             ))}
           </CardContent>
         </Card>
