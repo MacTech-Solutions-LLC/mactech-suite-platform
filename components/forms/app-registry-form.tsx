@@ -33,6 +33,7 @@ const CATEGORIES = [
   "evidence",
   "capture",
   "reporting",
+  "training",
   "admin",
   "other",
 ] as const;

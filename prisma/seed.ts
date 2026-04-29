@@ -42,7 +42,7 @@ const APP_FIXTURES = [
     appKey: "training",
     name: "MacTech Training",
     description: "Training courses for MacTech customers.",
-    category: "other" as const,
+    category: "training" as const,
     baseUrl: "https://training.mactechsolutionsllc.com",
     requiresOrgContext: true,
     isInternalOnly: false,

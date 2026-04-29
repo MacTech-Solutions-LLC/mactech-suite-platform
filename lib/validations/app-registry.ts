@@ -8,6 +8,7 @@ export const AppCategoryEnum = z.enum([
   "evidence",
   "capture",
   "reporting",
+  "training",
   "admin",
   "other",
 ]);

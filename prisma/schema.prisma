@@ -201,6 +201,7 @@ enum AppCategory {
   evidence
   capture
   reporting
+  training
   admin
   other
 }
