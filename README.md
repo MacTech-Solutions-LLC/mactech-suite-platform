@@ -1,9 +1,15 @@
 # MacTech Identity Command Center
 
 Central SSO, organization, RBAC, entitlement, and audit hub for the MacTech
-Suite (CUI Vault, Compliance Control Plane, Evidence Engine, Boundary Engine,
-SAM Capture Intelligence, Contract / Opportunity Intelligence, and future
-MacTech apps).
+Suite. The live apps registered today are:
+
+- **MacTech Capture** (`capture.mactechsolutionsllc.com`) — contract capture intelligence
+- **MacTech Codex** (`codex.mactechsolutionsllc.com`) — CMMC compliance plane
+- **MacTech Training** (`training.mactechsolutionsllc.com`) — training courses
+- **MacTech Quality** (`quality.mactechsolutionsllc.com`) — document control / QMS
+
+Future apps register themselves in `AppRegistry` and start showing up in the
+entitlement matrix automatically.
 
 This repository is the platform foundation. It is **not** customer-facing:
 sign-in is restricted to MacTech internal admins and Clerk-provisioned
