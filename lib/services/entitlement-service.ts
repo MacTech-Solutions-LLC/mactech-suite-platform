@@ -3,7 +3,11 @@
 import { prisma } from "@/lib/db/prisma";
 import {
   upsertEntitlementSchema,
+  quickToggleEntitlementSchema,
+  bulkSetEntitlementsSchema,
   type UpsertEntitlementInput,
+  type QuickToggleEntitlementInput,
+  type BulkSetEntitlementsInput,
 } from "@/lib/validations/entitlement";
 import { writeAuditLog } from "@/lib/audit";
 import { requirePlatformPermission } from "@/lib/authz";
@@ -142,4 +146,72 @@ export async function upsertProductEntitlement(rawInput: UpsertEntitlementInput)
   });
 
   return updated;
+}
+
+/**
+ * One-click toggle of an entitlement from the matrix view. When enabling
+ * an entitlement that has never existed, default to plan="starter" and
+ * status="active". When disabling, preserve the plan but mark the row
+ * disabled+suspended so the historical configuration is recoverable.
+ *
+ * Routes through the same upsertProductEntitlement path so audit + Clerk
+ * publicMetadata refresh + webhook dispatch all happen automatically.
+ */
+export async function quickToggleEntitlement(rawInput: QuickToggleEntitlementInput) {
+  const input = quickToggleEntitlementSchema.parse(rawInput);
+  const previous = await prisma.productEntitlement.findUnique({
+    where: {
+      customerOrganizationId_appRegistryId: {
+        customerOrganizationId: input.customerOrganizationId,
+        appRegistryId: input.appRegistryId,
+      },
+    },
+    select: {
+      plan: true,
+      maxUsers: true,
+      startsAt: true,
+      expiresAt: true,
+      configurationJson: true,
+    },
+  });
+
+  return upsertProductEntitlement({
+    customerOrganizationId: input.customerOrganizationId,
+    appRegistryId: input.appRegistryId,
+    enabled: input.enabled,
+    plan: previous?.plan ?? (input.enabled ? "starter" : "none"),
+    status: input.enabled ? "active" : "suspended",
+    maxUsers: previous?.maxUsers ?? undefined,
+    startsAt: previous?.startsAt ?? undefined,
+    expiresAt: previous?.expiresAt ?? undefined,
+    configurationJson: previous?.configurationJson ?? undefined,
+  });
+}
+
+/**
+ * Bulk-flip every (org × app) cell in one shot. Used by the
+ * "Enable all apps" / "Disable all apps" controls on the per-org
+ * entitlements page. Each underlying upsert audits + dispatches
+ * separately so the central log + sibling apps see fine-grained events.
+ */
+export async function bulkSetEntitlements(rawInput: BulkSetEntitlementsInput) {
+  const input = bulkSetEntitlementsSchema.parse(rawInput);
+  const results: Array<{ appRegistryId: string; ok: boolean; error?: string }> = [];
+  for (const appRegistryId of input.appRegistryIds) {
+    try {
+      await quickToggleEntitlement({
+        customerOrganizationId: input.customerOrganizationId,
+        appRegistryId,
+        enabled: input.enabled,
+      });
+      results.push({ appRegistryId, ok: true });
+    } catch (err) {
+      results.push({
+        appRegistryId,
+        ok: false,
+        error: err instanceof Error ? err.message : "unknown",
+      });
+    }
+  }
+  return { results };
 }

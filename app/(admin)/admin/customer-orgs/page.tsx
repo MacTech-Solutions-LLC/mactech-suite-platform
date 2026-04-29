@@ -70,7 +70,10 @@ export default async function CustomerOrgsPage({
       take: PAGE_SIZE,
       skip: (page - 1) * PAGE_SIZE,
       include: {
-        entitlements: { where: { enabled: true }, select: { id: true } },
+        entitlements: {
+          where: { enabled: true },
+          select: { id: true, app: { select: { appKey: true } } },
+        },
         orgUserAccess: { select: { id: true } },
       },
     }),
@@ -92,7 +95,7 @@ export default async function CustomerOrgsPage({
     customerType: org.customerType,
     domain: org.domain,
     cageCode: org.cageCode,
-    enabledApps: org.entitlements.length,
+    enabledAppKeys: org.entitlements.map((e) => e.app.appKey),
     totalUsers: org.orgUserAccess.length,
   }));
 

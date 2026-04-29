@@ -22,7 +22,7 @@ export interface CustomerOrgRow {
   customerType: string;
   domain: string | null;
   cageCode: string | null;
-  enabledApps: number;
+  enabledAppKeys: string[];
   totalUsers: number;
 }
 
@@ -36,7 +36,7 @@ export function CustomerOrgTable({ rows }: { rows: CustomerOrgRow[] }) {
           <TableHead>Tier</TableHead>
           <TableHead>CMMC</TableHead>
           <TableHead>Type</TableHead>
-          <TableHead>Apps</TableHead>
+          <TableHead className="min-w-[14rem]">Apps enabled</TableHead>
           <TableHead>Users</TableHead>
           <TableHead className="w-12" />
         </TableRow>
@@ -69,7 +69,36 @@ export function CustomerOrgTable({ rows }: { rows: CustomerOrgRow[] }) {
                 <Badge variant="muted">{row.cmmcTargetLevel}</Badge>
               </TableCell>
               <TableCell className="text-xs capitalize">{row.customerType}</TableCell>
-              <TableCell>{row.enabledApps}</TableCell>
+              <TableCell>
+                {row.enabledAppKeys.length === 0 ? (
+                  <Link
+                    href={`/admin/customer-orgs/${row.id}/entitlements`}
+                    className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                  >
+                    none — click to enable
+                  </Link>
+                ) : (
+                  <Link
+                    href={`/admin/customer-orgs/${row.id}/entitlements`}
+                    className="flex flex-wrap gap-1 hover:opacity-80"
+                  >
+                    {row.enabledAppKeys.slice(0, 4).map((key) => (
+                      <Badge
+                        key={key}
+                        variant="success"
+                        className="font-mono text-[10px]"
+                      >
+                        {key}
+                      </Badge>
+                    ))}
+                    {row.enabledAppKeys.length > 4 && (
+                      <Badge variant="muted" className="text-[10px]">
+                        +{row.enabledAppKeys.length - 4}
+                      </Badge>
+                    )}
+                  </Link>
+                )}
+              </TableCell>
               <TableCell>{row.totalUsers}</TableCell>
               <TableCell>
                 <Link
