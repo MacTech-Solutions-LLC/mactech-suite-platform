@@ -11,7 +11,11 @@ const isPublicRoute = createRouteMatcher([
   "/api/v1/(.*)",
 ]);
 
-const isAdminRoute = createRouteMatcher(["/admin(.*)", "/dashboard(.*)"]);
+const isAdminRoute = createRouteMatcher([
+  "/admin(.*)",
+  "/dashboard(.*)",
+  "/governance(.*)",
+]);
 
 export default clerkMiddleware(async (auth, req) => {
   if (isPublicRoute(req)) {
@@ -30,7 +34,11 @@ export default clerkMiddleware(async (auth, req) => {
     }
   }
 
-  return NextResponse.next();
+  const res = NextResponse.next();
+  if (req.nextUrl.pathname.startsWith("/governance")) {
+    res.headers.set("x-mactech-pathname", req.nextUrl.pathname);
+  }
+  return res;
 });
 
 export const config = {

@@ -68,6 +68,17 @@ const APP_FIXTURES = [
     isInternalOnly: true,
     status: "active" as const,
   },
+  {
+    appKey: "governance",
+    name: "MacTech GovernanceOS",
+    description:
+      "Corporate governance, compliance readiness, contracting posture, and delivery assurance.",
+    category: "compliance" as const,
+    baseUrl: "https://www.suite.mactechsolutionsllc.com/governance",
+    requiresOrgContext: true,
+    isInternalOnly: false,
+    status: "active" as const,
+  },
 ];
 
 async function seedApps() {
