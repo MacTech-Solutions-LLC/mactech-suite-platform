@@ -3,13 +3,28 @@ import { auditIngestSchema } from "@/lib/validations/audit";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/db/prisma";
 import { requireApiKey } from "@/lib/api-auth";
+import { consumeRateLimit, rate429Response } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+// Audit ingest is the most-trafficked public endpoint (every sibling-app
+// session opens fires one). 600/min per key = 10 events/sec sustained,
+// generous enough for normal load + bursts but tight enough that a
+// runaway loop in a sibling app can't flood the central audit table.
+const INGEST_LIMIT = 600;
+const INGEST_WINDOW_MS = 60_000;
+
 export async function POST(request: NextRequest) {
   const auth = await requireApiKey(request, "audit_ingest");
   if (!auth.ok) return auth.response;
+
+  const rl = consumeRateLimit({
+    key: `ingest:${auth.apiKeyId ?? auth.apiKeyName}`,
+    limit: INGEST_LIMIT,
+    windowMs: INGEST_WINDOW_MS,
+  });
+  if (!rl.allowed) return rate429Response(rl);
 
   let body: unknown;
   try {

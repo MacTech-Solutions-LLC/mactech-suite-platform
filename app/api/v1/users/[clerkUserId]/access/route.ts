@@ -17,6 +17,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { requireApiKey } from "@/lib/api-auth";
+import { consumeRateLimit, rate429Response } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,6 +28,16 @@ export async function GET(
 ) {
   const auth = await requireApiKey(request, "user_access_read");
   if (!auth.ok) return auth.response;
+
+  // 600/min per key — JIT auth in sibling apps may call this on every
+  // request before the local user row is cached. Tight enough to bound
+  // one buggy app, generous enough for normal traffic.
+  const rl = consumeRateLimit({
+    key: `access:${auth.apiKeyId ?? auth.apiKeyName}`,
+    limit: 600,
+    windowMs: 60_000,
+  });
+  if (!rl.allowed) return rate429Response(rl);
 
   const profile = await prisma.userProfile.findUnique({
     where: { clerkUserId: params.clerkUserId },

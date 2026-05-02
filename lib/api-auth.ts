@@ -1,16 +1,16 @@
 /**
  * Bearer/key auth for the public surface (`/api/v1/*` and `/api/audit/ingest`).
  *
- * The system supports two key sources, in this priority order:
+ * Keys live in the `ApiKey` table — SHA-256 hashed at rest, with an explicit
+ * scope set, revocable, and tracking `lastUsedAt`. Issued + managed via
+ * `/admin/api-keys`. Each scope (`audit_ingest`, `org_read`,
+ * `user_access_read`, `webhook_send`) is enforced per-route.
  *
- * 1. **Database-issued keys** (`ApiKey` table) — preferred. Each key is
- *    SHA-256 hashed at rest, has an explicit scope set, can be revoked,
- *    and tracks `lastUsedAt`. Issued via `/admin/api-keys`.
- *
- * 2. **Legacy env-var key** (`AUDIT_INGEST_API_KEY`) — backward-compat path
- *    for the original "single shared secret" model used while sibling apps
- *    were being onboarded. Treated as having ALL scopes. Mark as deprecated
- *    via the dashboard once every consumer has rotated to a DB-issued key.
+ * The original deployment also accepted `AUDIT_INGEST_API_KEY` from env as
+ * a "legacy all-scopes" fallback so sibling apps could onboard without
+ * waiting for the per-app key rollout. That fallback was removed once all
+ * sibling apps rotated to DB-issued keys; revocation in the DB now
+ * actually takes effect.
  *
  * Sibling apps send the key in `X-MacTech-Audit-Key` (preferred) or as a
  * `Bearer` token in `Authorization`. We accept either for ergonomic reasons.
@@ -18,7 +18,6 @@
 
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { env, auditIngestionConfigured } from "./env";
 import { verifyApiKey } from "./services/api-key-service";
 import type { ApiKeyScope } from "@prisma/client";
 
@@ -55,7 +54,6 @@ export async function requireApiKey(
 ): Promise<ApiAuthFailure | ApiAuthSuccess> {
   const provided = extractKey(request);
 
-  // Database lookup first.
   if (provided) {
     const key = await verifyApiKey(provided, scope);
     if (key) {
@@ -66,20 +64,6 @@ export async function requireApiKey(
         apiKeyApp: key.appKey,
       };
     }
-  }
-
-  // Legacy env-var key — full scope, but only when configured.
-  if (
-    auditIngestionConfigured() &&
-    provided &&
-    provided === env.AUDIT_INGEST_API_KEY
-  ) {
-    return {
-      ok: true,
-      apiKeyId: null,
-      apiKeyName: "legacy:AUDIT_INGEST_API_KEY",
-      apiKeyApp: null,
-    };
   }
 
   return {

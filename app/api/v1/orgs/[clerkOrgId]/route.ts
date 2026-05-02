@@ -12,6 +12,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { requireApiKey } from "@/lib/api-auth";
+import { consumeRateLimit, rate429Response } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,6 +23,15 @@ export async function GET(
 ) {
   const auth = await requireApiKey(request, "org_read");
   if (!auth.ok) return auth.response;
+
+  // 300/min per key — read-heavy enough for normal sibling-app polling
+  // but blocks a runaway scrape from a leaked key.
+  const rl = consumeRateLimit({
+    key: `orgs:${auth.apiKeyId ?? auth.apiKeyName}`,
+    limit: 300,
+    windowMs: 60_000,
+  });
+  if (!rl.allowed) return rate429Response(rl);
 
   const org = await prisma.customerOrganization.findUnique({
     where: { clerkOrgId: params.clerkOrgId },
