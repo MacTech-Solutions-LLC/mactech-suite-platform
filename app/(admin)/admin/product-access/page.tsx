@@ -66,7 +66,11 @@ export default async function ProductAccessPage({
 
   const [orgs, allApps] = await Promise.all([
     prisma.customerOrganization.findMany({
-      where,
+      // Internal MacTech orgs (e.g. MacTech Solutions) are not gated by
+      // entitlements — operators are granted access to every app via
+      // their UserProfile.isInternalMacTechUser flag. Excluding them
+      // here keeps the matrix focused on real customer entitlements.
+      where: { ...where, isInternalMacTech: false },
       orderBy: { name: "asc" },
       include: { entitlements: true },
     }),

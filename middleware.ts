@@ -15,6 +15,13 @@ const isAdminRoute = createRouteMatcher([
   "/admin(.*)",
   "/dashboard(.*)",
   "/governance(.*)",
+  // /welcome is the post-sign-in router for customer users — needs an
+  // active Clerk session but NOT a platform role (the page itself
+  // routes internal MacTech vs customer users).
+  "/welcome(.*)",
+  // /app-launch resolves an entitlement before redirecting to the
+  // sibling app — also needs auth.
+  "/app-launch(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

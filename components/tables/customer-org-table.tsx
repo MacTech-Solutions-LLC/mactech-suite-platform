@@ -24,6 +24,7 @@ export interface CustomerOrgRow {
   cageCode: string | null;
   enabledAppKeys: string[];
   totalUsers: number;
+  isInternalMacTech: boolean;
 }
 
 export function CustomerOrgTable({ rows }: { rows: CustomerOrgRow[] }) {
@@ -50,9 +51,14 @@ export function CustomerOrgTable({ rows }: { rows: CustomerOrgRow[] }) {
               <TableCell>
                 <Link
                   href={`/admin/customer-orgs/${row.id}`}
-                  className="font-medium hover:underline"
+                  className="font-medium hover:underline inline-flex items-center gap-2"
                 >
                   {row.name}
+                  {row.isInternalMacTech && (
+                    <Badge variant="default" className="text-[9px]">
+                      Internal
+                    </Badge>
+                  )}
                 </Link>
                 <div className="text-xs text-muted-foreground">
                   {row.domain || `/${row.slug}`}
@@ -70,7 +76,11 @@ export function CustomerOrgTable({ rows }: { rows: CustomerOrgRow[] }) {
               </TableCell>
               <TableCell className="text-xs capitalize">{row.customerType}</TableCell>
               <TableCell>
-                {row.enabledAppKeys.length === 0 ? (
+                {row.isInternalMacTech ? (
+                  <Badge variant="success" className="text-[10px]">
+                    Full access (internal)
+                  </Badge>
+                ) : row.enabledAppKeys.length === 0 ? (
                   <Link
                     href={`/admin/customer-orgs/${row.id}/entitlements`}
                     className="text-xs text-muted-foreground hover:text-foreground hover:underline"

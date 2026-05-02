@@ -80,7 +80,10 @@ export async function inviteCustomerUser(rawInput: InviteCustomerUserInput) {
         emailAddress: input.email,
         inviterUserId: ctx.clerkUserId,
         role: localRoleToClerkRole(role.key),
-        redirectUrl: `${env.NEXT_PUBLIC_APP_URL}/dashboard`,
+        // Land them on /welcome so the smart-router decides where to
+        // send them based on their entitlements (1 app → auto-launch,
+        // multiple → picker, 0 → "ask your admin" empty state).
+        redirectUrl: `${env.NEXT_PUBLIC_APP_URL}/welcome`,
       }),
     );
     if (result.ok) clerkInvitationId = result.value.id;

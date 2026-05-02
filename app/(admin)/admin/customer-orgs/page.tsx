@@ -97,6 +97,7 @@ export default async function CustomerOrgsPage({
     cageCode: org.cageCode,
     enabledAppKeys: org.entitlements.map((e) => e.app.appKey),
     totalUsers: org.orgUserAccess.length,
+    isInternalMacTech: org.isInternalMacTech,
   }));
 
   return (

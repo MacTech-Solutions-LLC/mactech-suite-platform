@@ -306,6 +306,12 @@ model CustomerOrganization {
   notes               String?
   maxMembers          Int?
   imageUrl            String?
+  /// True when this is an internal MacTech operator org (e.g. "MacTech
+  /// Solutions"). Internal orgs don't appear in customer-facing matrices
+  /// and don't get gated by ProductEntitlement — internal users are
+  /// granted access to every app via the isInternalMacTechUser flag on
+  /// their UserProfile, regardless of org-level entitlements.
+  isInternalMacTech   Boolean          @default(false)
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
