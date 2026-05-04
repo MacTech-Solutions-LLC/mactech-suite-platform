@@ -23,6 +23,10 @@ const isAdminRoute = createRouteMatcher([
   // /app-launch resolves an entitlement before redirecting to the
   // sibling app — also needs auth.
   "/app-launch(.*)",
+  // /auditor-access is the focused vault-IP-allowlist portal for
+  // external CUI auditors (cui_auditor role). Auth required at the
+  // edge; the page itself enforces the role.
+  "/auditor-access(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

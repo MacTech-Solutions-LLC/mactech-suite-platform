@@ -27,6 +27,10 @@ export const PLATFORM_PERMISSIONS = {
   SECURITY_EVENTS_VIEW: "platform:security_events:view",
   APP_REGISTRY_MANAGE: "platform:app_registry:manage",
   SETTINGS_MANAGE: "platform:settings:manage",
+  /** Submit a time-boxed IP-allowlist grant request to a vault edge.
+   *  Held by the cui_auditor role and (transitively, via Object.values)
+   *  by mactech_super_admin. */
+  VAULT_ALLOWLIST_REQUEST: "platform:vault_allowlist:request",
 } as const;
 
 export type PlatformPermission =
@@ -96,6 +100,12 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, PlatformPermission[
   mactech_read_only: [
     PLATFORM_PERMISSIONS.DASHBOARD_VIEW,
     PLATFORM_PERMISSIONS.ROLES_VIEW,
+  ],
+  // External C3PAO assessor. Sees the auditor-access portal and their
+  // own grant audit history — nothing else of the admin surface.
+  cui_auditor: [
+    PLATFORM_PERMISSIONS.VAULT_ALLOWLIST_REQUEST,
+    PLATFORM_PERMISSIONS.AUDIT_LOGS_VIEW,
   ],
   none: [],
 };
@@ -265,6 +275,8 @@ export function platformRoleLabel(role: PlatformRole): string {
       return "MacTech Auditor";
     case "mactech_read_only":
       return "MacTech Read Only";
+    case "cui_auditor":
+      return "CUI Auditor (C3PAO)";
     case "none":
     default:
       return "No Platform Access";

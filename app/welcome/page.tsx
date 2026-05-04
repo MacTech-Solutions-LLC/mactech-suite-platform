@@ -50,6 +50,13 @@ export default async function WelcomePage() {
     redirect("/access-restricted?reason=permission_denied");
   }
 
+  // External CUI auditor (C3PAO assessor) gets the focused vault-access
+  // portal — they have no admin surface, no app entitlements, just one
+  // task: request an IP allowlist grant for a vault.
+  if (ctx.platformRole === "cui_auditor") {
+    redirect("/auditor-access");
+  }
+
   // Internal MacTech operators go straight to the admin dashboard.
   if (ctx.isInternalMacTech && ctx.platformRole !== "none") {
     redirect("/dashboard");

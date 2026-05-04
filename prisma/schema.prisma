@@ -145,6 +145,10 @@ enum PlatformRole {
   mactech_support
   mactech_auditor
   mactech_read_only
+  // External C3PAO assessor invited for a short vault-access window. Has
+  // permission to request a time-boxed IP allowlist grant for vault-001
+  // via /auditor-access; sees nothing else of the admin surface.
+  cui_auditor
   none
 }
 

@@ -8,6 +8,7 @@ export const PlatformRoleEnum = z.enum([
   "mactech_support",
   "mactech_auditor",
   "mactech_read_only",
+  "cui_auditor",
   "none",
 ]);
 
