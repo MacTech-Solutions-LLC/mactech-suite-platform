@@ -43,19 +43,32 @@ export interface CommandCenterAuthContext {
 
 /**
  * Resolve the current request's auth context. Returns null when there is
- * no Clerk session at all. Throws nothing for "logged in but unauthorized"
- * — let callers decide whether that's an error or a redirect.
+ * no Clerk session at all.
+ *
+ * If the Clerk session is valid but no local UserProfile exists, this
+ * function auto-provisions a baseline row (`isInternalMacTechUser=false`,
+ * `platformRole=none`, `status=active`) by fetching the user's email
+ * from Clerk. This eliminates the dead-end "ask a Super Admin" page that
+ * appeared whenever the Clerk → /api/webhooks/clerk delivery failed
+ * (which has been flaky on our instance). The newly created user still
+ * hits /access-restricted (correct — they don't have a platform role
+ * yet), but now the row exists so an admin can promote them via
+ * /admin/users without manual SQL.
+ *
+ * Throws nothing for "logged in but unauthorized" — callers decide
+ * whether that's an error or a redirect.
  */
 export async function getCurrentAuthContext(): Promise<CommandCenterAuthContext | null> {
   const session = await auth();
   if (!session.userId) return null;
 
-  const profile = await prisma.userProfile.findUnique({
+  let profile = await prisma.userProfile.findUnique({
     where: { clerkUserId: session.userId },
   });
 
   if (!profile) {
-    return null;
+    profile = await autoProvisionFromClerk(session.userId);
+    if (!profile) return null;
   }
 
   // Best-effort lastSeenAt update; failures should not block auth.
@@ -76,6 +89,61 @@ export async function getCurrentAuthContext(): Promise<CommandCenterAuthContext 
     platformRole: profile.platformRole,
     permissions: PLATFORM_ROLE_PERMISSIONS[profile.platformRole] ?? [],
   };
+}
+
+/**
+ * Lazy webhook fallback. Pulls the user's email + name from Clerk's API
+ * and upserts a baseline UserProfile so the rest of the request can
+ * resolve. Idempotent on email — if a stale row exists for this email
+ * (e.g. invited but never signed in), claim it instead of inserting a
+ * duplicate which would violate the unique-email constraint.
+ */
+async function autoProvisionFromClerk(clerkUserId: string): Promise<UserProfile | null> {
+  try {
+    const { clerkClient } = await import("@clerk/nextjs/server");
+    const client = await clerkClient();
+    const cu = await client.users.getUser(clerkUserId);
+    const primary =
+      cu.emailAddresses.find((e) => e.id === cu.primaryEmailAddressId) ??
+      cu.emailAddresses[0];
+    const email = primary?.emailAddress;
+    if (!email) {
+      console.warn(
+        `[authz] auto-provision skipped for ${clerkUserId}: no email on Clerk profile`,
+      );
+      return null;
+    }
+
+    const existing = await prisma.userProfile.findUnique({ where: { email } });
+    if (existing) {
+      return prisma.userProfile.update({
+        where: { id: existing.id },
+        data: {
+          clerkUserId,
+          firstName: existing.firstName ?? cu.firstName ?? null,
+          lastName: existing.lastName ?? cu.lastName ?? null,
+          imageUrl: existing.imageUrl ?? cu.imageUrl ?? null,
+          status: existing.status === "invited" ? "active" : existing.status,
+        },
+      });
+    }
+
+    return prisma.userProfile.create({
+      data: {
+        clerkUserId,
+        email,
+        firstName: cu.firstName ?? null,
+        lastName: cu.lastName ?? null,
+        imageUrl: cu.imageUrl ?? null,
+        isInternalMacTechUser: false,
+        platformRole: "none",
+        status: "active",
+      },
+    });
+  } catch (err) {
+    console.error(`[authz] auto-provision failed for ${clerkUserId}:`, err);
+    return null;
+  }
 }
 
 /**
