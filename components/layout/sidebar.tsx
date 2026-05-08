@@ -69,17 +69,17 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
       { href: "/admin/product-access", label: "Product Access", icon: Boxes },
       { href: "/admin/roles", label: "Roles & Permissions", icon: KeyRound },
       { href: "/admin/app-registry", label: "App Registry", icon: PackageSearch },
-      { href: "#subdomains", label: "Subdomains", icon: Globe2, disabled: true },
+      { href: "/admin/subdomains", label: "Subdomains", icon: Globe2 },
     ],
   },
   {
     group: "Operations",
     items: [
-      { href: "#ecosystem", label: "Ecosystem", icon: Network, disabled: true },
+      { href: "/admin/ops/ecosystem", label: "Ecosystem", icon: Network },
       { href: "#deployments", label: "Railway Deployments", icon: Rocket, disabled: true },
       { href: "#health", label: "Health Checks", icon: Activity, disabled: true },
       { href: "#incidents", label: "Incidents", icon: AlertOctagon, disabled: true },
-      { href: "#runtime-risk", label: "Runtime Risk", icon: Siren, disabled: true },
+      { href: "/admin/ops/risk", label: "Runtime Risk", icon: Siren },
     ],
   },
   {
@@ -88,7 +88,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
       { href: "/admin/repositories", label: "GitHub Repositories", icon: Code2 },
       { href: "/admin/repositories/commits", label: "Commit Intelligence", icon: GitBranch },
       { href: "/admin/repositories/workflow-runs", label: "Workflow Runs", icon: PlugZap },
-      { href: "#release-notes", label: "Release Notes", icon: ScrollText, disabled: true },
+      { href: "/admin/repositories/release-notes", label: "Release Notes", icon: ScrollText },
     ],
   },
   {
@@ -103,9 +103,9 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     items: [
       { href: "/admin/api-keys", label: "API Keys", icon: TerminalSquare },
       { href: "/admin/webhooks", label: "Webhooks", icon: Webhook },
-      { href: "#integrations-railway", label: "Railway", icon: Rocket, disabled: true },
-      { href: "#integrations-github", label: "GitHub", icon: Code2, disabled: true },
-      { href: "#integrations-cloudflare", label: "Cloudflare", icon: Cloud, disabled: true },
+      { href: "/admin/integrations/railway", label: "Railway", icon: Rocket },
+      { href: "/admin/integrations/github", label: "GitHub", icon: Code2 },
+      { href: "/admin/integrations/cloudflare", label: "Cloudflare", icon: Cloud },
     ],
   },
   {
