@@ -18,6 +18,11 @@ import { prisma } from "@/lib/db/prisma";
 import { writeAuditLog } from "@/lib/audit";
 import { evaluateRisks, type DerivedRisk } from "@/lib/integrations/risk/evaluator";
 import { evaluateRepoRisks, type DerivedRepoRisk, type RepoSnapshot } from "@/lib/integrations/risk/repo-evaluator";
+import {
+  evaluateDeploymentRisks,
+  type DerivedDeploymentRisk,
+  type DeploymentSnapshotInput,
+} from "@/lib/integrations/risk/deployment-evaluator";
 import type { HealthProbeResult } from "@/lib/integrations/health/checker";
 import type { AppRegistry, OperationalRiskFlag, Prisma, RiskCategory } from "@prisma/client";
 
@@ -239,6 +244,113 @@ export async function reconcileRepoRisksForApp(input: {
         eventCategory: "system",
         severity: "info",
         action: `Repo risk auto-resolved: ${e.title}`,
+        appRegistryId: app.id,
+        resourceType: "operational_risk_flag",
+        resourceId: e.id,
+        metadata: {
+          app_key: app.appKey,
+          category: e.category,
+          duration_ms: Date.now() - e.detectedAt.getTime(),
+        },
+      });
+    }
+  }
+
+  return { opened, refreshed, resolved };
+}
+
+// ─── Slice 3: deployment-derived risks ───────────────────────────────────
+
+const SLICE_3_OWNED_CATEGORIES: RiskCategory[] = [
+  "failed_deployment",
+  "crashed_deployment",
+  "stale_deployment",
+  "missing_railway_mapping",
+];
+
+export async function reconcileDeploymentRisksForApp(input: {
+  app: AppRegistry;
+  snapshot: DeploymentSnapshotInput;
+}): Promise<ReconcileRisksOutcome> {
+  const { app, snapshot } = input;
+  const derived: DerivedDeploymentRisk[] = evaluateDeploymentRisks(app, snapshot);
+  const desiredByCat = new Map<RiskCategory, DerivedDeploymentRisk>(
+    derived.map((d) => [d.category, d]),
+  );
+
+  const existingOpen = await prisma.operationalRiskFlag.findMany({
+    where: {
+      appRegistryId: app.id,
+      status: "open",
+      category: { in: SLICE_3_OWNED_CATEGORIES },
+    },
+  });
+
+  const opened: OperationalRiskFlag[] = [];
+  const refreshed: OperationalRiskFlag[] = [];
+  const resolved: OperationalRiskFlag[] = [];
+
+  for (const d of Array.from(desiredByCat.values())) {
+    const match = existingOpen.find((e) => e.category === d.category);
+    if (match) {
+      const updated = await prisma.operationalRiskFlag.update({
+        where: { id: match.id },
+        data: {
+          severity: d.severity,
+          title: d.title,
+          description: d.description,
+          metadataJson: d.metadata as Prisma.InputJsonValue,
+        },
+      });
+      refreshed.push(updated);
+    } else {
+      const created = await prisma.operationalRiskFlag.create({
+        data: {
+          appRegistryId: app.id,
+          severity: d.severity,
+          status: "open",
+          category: d.category,
+          title: d.title,
+          description: d.description,
+          metadataJson: d.metadata as Prisma.InputJsonValue,
+        },
+      });
+      opened.push(created);
+      await writeAuditLog({
+        eventType: "command_center.risk.opened",
+        eventCategory: "system",
+        severity:
+          d.severity === "critical"
+            ? "critical"
+            : d.severity === "high" || d.severity === "medium"
+              ? "warning"
+              : "info",
+        action: `Deployment risk opened: ${d.title}`,
+        appRegistryId: app.id,
+        resourceType: "operational_risk_flag",
+        resourceId: created.id,
+        metadata: {
+          app_key: app.appKey,
+          category: d.category,
+          severity: d.severity,
+          ...d.metadata,
+        } as Prisma.InputJsonValue,
+      });
+    }
+  }
+
+  for (const e of existingOpen) {
+    if (!desiredByCat.has(e.category)) {
+      const updated = await prisma.operationalRiskFlag.update({
+        where: { id: e.id },
+        data: { status: "resolved", resolvedAt: new Date() },
+      });
+      resolved.push(updated);
+      await writeAuditLog({
+        eventType: "command_center.risk.resolved",
+        eventCategory: "system",
+        severity: "info",
+        action: `Deployment risk auto-resolved: ${e.title}`,
         appRegistryId: app.id,
         resourceType: "operational_risk_flag",
         resourceId: e.id,

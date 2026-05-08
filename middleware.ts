@@ -13,6 +13,9 @@ const isPublicRoute = createRouteMatcher([
   // GITHUB_WEBHOOK_SECRET, verified inside the route. Skipping the
   // Clerk middleware here so the route runs at all.
   "/api/webhooks/github",
+  // Railway webhook deliveries — verified via HMAC OR query secret
+  // against RAILWAY_WEBHOOK_SECRET inside the route.
+  "/api/webhooks/railway",
   "/api/audit/ingest",
   "/api/v1/(.*)",
 ]);
