@@ -57,6 +57,11 @@ const RawEnvSchema = z.object({
     .string()
     .default("false")
     .transform((v) => v.toLowerCase() === "true"),
+  /** Slice 5.8: shared secret used by the cron tick endpoint
+   *  (POST /api/cron/agent-triggers). Set on Railway + on whatever
+   *  scheduler hits the endpoint (Railway cron, GitHub Actions, etc.).
+   *  Without this, the cron endpoint refuses every call. */
+  CRON_SECRET: z.string().optional(),
   GITHUB_TOKEN: z.string().optional(),
   GITHUB_WEBHOOK_SECRET: z.string().optional(),
   RAILWAY_API_TOKEN: z.string().optional(),
