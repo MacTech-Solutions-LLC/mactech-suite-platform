@@ -27,6 +27,7 @@ import {
   PlugZap,
   Cloud,
   Bot,
+  Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +56,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/command-center", label: "Command Center", icon: Compass },
       { href: "/admin/agents", label: "Agents", icon: Bot },
+      { href: "/admin/agents/triggers", label: "Scheduled Triggers", icon: Clock },
     ],
   },
   {
@@ -118,6 +120,27 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  // Pick the single nav item whose href is the longest prefix of the
+  // current pathname — avoids "/admin/agents" being highlighted when
+  // we're actually on "/admin/agents/triggers".
+  const activeHref = (() => {
+    let best: string | null = null;
+    for (const group of NAV) {
+      for (const item of group.items) {
+        if (item.disabled) continue;
+        if (item.href === "#" || item.href.startsWith("#")) continue;
+        if (pathname === item.href) {
+          if (!best || item.href.length > best.length) best = item.href;
+          continue;
+        }
+        if (item.href === "/dashboard") continue;
+        if (pathname.startsWith(item.href + "/") || pathname.startsWith(item.href)) {
+          if (!best || item.href.length > best.length) best = item.href;
+        }
+      }
+    }
+    return best;
+  })();
   return (
     <aside className="hidden md:flex h-screen w-64 shrink-0 flex-col border-r border-border bg-card">
       <Link
@@ -143,13 +166,7 @@ export function Sidebar() {
             </div>
             <ul className="space-y-0.5">
               {group.items.map((item) => {
-                const active =
-                  !item.disabled &&
-                  (pathname === item.href ||
-                    (item.href !== "/dashboard" &&
-                      item.href !== "#" &&
-                      !item.href.startsWith("#") &&
-                      pathname.startsWith(item.href)));
+                const active = !item.disabled && activeHref === item.href;
                 const Icon = item.icon;
                 if (item.disabled) {
                   return (

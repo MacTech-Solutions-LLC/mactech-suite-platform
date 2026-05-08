@@ -1468,6 +1468,52 @@ model AgentArtifact {
   @@index([kind])
 }
 
+// ─── Slice 5.8: scheduled triggers ────────────────────────────────────────
+// A saved Intent + cron expression that fires on schedule. The cron tick
+// endpoint resolves due triggers and drives the same external-trigger
+// service the M2M endpoint uses (slice 5.7), so the safety story is
+// unchanged: IBE goal/scope/invariant validation, refusal-by-default,
+// approval gate for write capabilities, synthetic requester identity
+// (`cron:<triggerId>`) that cannot collide with a Clerk admin id.
+model AgentTrigger {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?  @db.Text
+  enabled        Boolean  @default(true)
+  // Standard 5- or 6-field cron expression (parsed by cron-parser).
+  // Validated at create/update time; stored verbatim so an operator
+  // can edit it without round-tripping through a parser.
+  cronExpression String
+  // IANA timezone name; defaults to UTC so cron evaluates deterministically.
+  timezone       String   @default("UTC")
+  // The Intent + free-text request that fires on each tick. Identical
+  // shape to the M2M /api/v1/agents/runs body so a trigger is just a
+  // saved M2M call.
+  request        String   @db.Text
+  intentJson     Json
+  autoExecute    Boolean  @default(true)
+
+  // Scheduling state, advanced by the cron tick handler.
+  lastFiredAt    DateTime?
+  nextFireAt     DateTime?
+  // Most-recent fire outcome, kept to surface in the management UI
+  // without joining AgentRun.
+  lastRunId      String?
+  lastRunStatus  AgentRunStatus?
+  // Sequential failure count surfaced in the UI to flag stuck triggers.
+  consecutiveFailures Int @default(0)
+
+  createdByClerkUserId String
+  createdByEmail       String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([enabled])
+  @@index([nextFireAt])
+  @@index([createdByClerkUserId])
+}
+
 model AgentApproval {
   id           String                @id @default(cuid())
   agentRunId   String

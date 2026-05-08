@@ -138,6 +138,80 @@ separation of duties is structurally guaranteed).
 
 The `/admin/agents` page surfaces a copy-paste tool spec (curl + Anthropic Python SDK shapes) that registers `mactech_agent_run` as a Claude tool. The tool's input schema mirrors the API body verbatim, so a Claude conversation can call it directly when given an `agents_trigger`-scoped key via env var.
 
+## Slice 5.8 — Scheduled triggers
+
+Slice 5.8 adds a third fire surface: **cron-scheduled IBE Intents**.
+A trigger is just a saved Intent + cron expression; on every tick the
+scheduler looks up due triggers and fires each through the same
+external-trigger service M2M uses (slice 5.7). The IBE story is
+unchanged — every fire goes through goal/scope/invariant validation
+and writes still queue at the human approval gate.
+
+### What's exposed
+
+| Surface                                     | Purpose                                          |
+|---------------------------------------------|--------------------------------------------------|
+| `/admin/agents/triggers`                    | List + manage saved triggers (fire-now, toggle, edit, delete). |
+| `/admin/agents/triggers/new`                | Create form with cron presets + IntentBuilder UX.|
+| `/admin/agents/triggers/[id]/edit`          | Edit a saved trigger.                            |
+| `POST /api/agents/triggers`                 | Create. AGENTS_CREATE.                           |
+| `GET /api/agents/triggers`                  | List. AGENTS_VIEW.                               |
+| `GET /api/agents/triggers/[id]`             | Read one.                                        |
+| `PATCH /api/agents/triggers/[id]`           | Update.                                          |
+| `DELETE /api/agents/triggers/[id]`          | Delete.                                          |
+| `POST /api/agents/triggers/[id]?action=…`   | Enable / disable.                                |
+| `POST /api/agents/triggers/[id]/fire`       | Manual fire (synthetic requester, audit row marks the actor). |
+| `POST /api/cron/agent-triggers`             | The tick. Auth: `Authorization: Bearer $CRON_SECRET`. |
+| `lib/agents/scheduler.ts`                   | Cron parsing + tick handler + per-trigger fire.  |
+| `lib/agents/triggers-service.ts`            | CRUD + validation + audit envelopes.             |
+| `AgentTrigger` model                        | New table; one row per saved trigger.            |
+
+### Cron tick wiring
+
+The Suite does not run its own scheduler — it exposes
+`POST /api/cron/agent-triggers` and expects an external scheduler
+(Railway Cron, GitHub Actions, Vercel Cron, …) to hit it on a 1-minute
+cadence with `Authorization: Bearer $CRON_SECRET`. Any tick without
+the secret refuses with 401; any tick without `CRON_SECRET` configured
+in env refuses with 503.
+
+Recommended Railway cron config:
+```
+schedule:  *  *  *  *  *
+command:   curl -X POST -H "Authorization: Bearer $CRON_SECRET" \
+              https://www.suite.mactechsolutionsllc.com/api/cron/agent-triggers
+```
+
+The tick handler:
+1. Selects all `enabled` triggers where `nextFireAt <= now`.
+2. For each, advances `nextFireAt` BEFORE firing (so a fire that throws cannot wedge the trigger in a perpetually-due state).
+3. Drives `triggerExternalRun` with the saved Intent.
+4. Records `lastRunId` + `lastRunStatus`.
+5. On exception, increments `consecutiveFailures` so the management UI can flag stuck triggers (≥3 failures shows a warning chip).
+
+### Synthetic requester identity
+
+A cron-fired run's `requesterClerkUserId` is `cron:<triggerId>`. This
+is structurally guaranteed not to collide with any Clerk admin id, so
+separation-of-duties holds for any approval-required step the saved
+Intent emits — a cron trigger CANNOT auto-approve its own writes. A
+human admin must approve via `/admin/agents/[id]` like any other
+awaiting_approval run.
+
+### What scheduled triggers cannot do
+
+- Skip the IBE gate. `intent.goal` is required; the validator runs at fire time, and a failed validation marks the fire as a refusal (not a crash).
+- Skip the approval gate. Same as M2M.
+- Self-approve. Same separation-of-duties guarantee.
+- Run ahead of schedule by accident. `nextFireAt` is advanced before each fire; the tick handler caps per-tick work at 100 triggers so a backlog can't pile into one tick.
+- Fire forever after operator deletion. `DELETE /api/agents/triggers/[id]` removes the row; subsequent ticks find nothing.
+
+### Recommended starter triggers
+
+- **Nightly ecosystem sweep (06:00 UTC)** — read-only summarize_open_risks + summarize_app_status + summarize_deployment_drift + summarize_repo_activity. Daily morning briefing artifact.
+- **Hourly drift check** — summarize_deployment_drift with strict tolerance + `zero_drift` invariant. Refused = page someone.
+- **Weekly release notes (Sunday 22:00 UTC)** — generate_release_notes per active app. approval-required, queues to be batch-approved Monday morning.
+
 ## Goal
 
 An authorized MacTech admin types a natural-language request from
