@@ -314,6 +314,42 @@ enum WorkflowConclusion {
   startup_failure
 }
 
+// Railway deployment lifecycle. Mirrors Railway's status values
+// verbatim — the `unknown` bucket covers any future status they add
+// before we update the enum, so a Railway API change can't crash the
+// Suite. `crashed` is a distinct outcome from `failed` in Railway's
+// model: failed = build/deploy never came up; crashed = process came
+// up and then exited.
+enum DeploymentStatus {
+  queued
+  initializing
+  building
+  deploying
+  success
+  failed
+  crashed
+  removed
+  restarting
+  sleeping
+  skipped
+  unknown
+}
+
+// Production-vs-default-branch comparison outcome the Railway sync
+// computes per service. Drives the production_behind_main rule when
+// combined with the GitHub HEAD from Slice 2. Distinct from the
+// Slice-2 `RepoSnapshot.commitsBehind` because Slice 3 looks at the
+// deployment-level commit (what's actually live on Railway) vs the
+// repo-level latest commit (what's in GitHub). Same comparison, two
+// different perspectives — kept separate for audit clarity.
+enum DeploymentDriftStatus {
+  in_sync
+  behind
+  ahead
+  diverged
+  unknown
+}
+
 enum EntitlementPlan {
   none
   trial
@@ -499,12 +535,14 @@ model AppRegistry {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  entitlements      ProductEntitlement[]
-  auditLogs         AuditLog[]
-  healthSnapshots   HealthCheckSnapshot[]
-  riskFlags         OperationalRiskFlag[]
-  integrationEvents IntegrationEvent[]
-  repoLinks         AppRepositoryLink[]
+  entitlements        ProductEntitlement[]
+  auditLogs           AuditLog[]
+  healthSnapshots     HealthCheckSnapshot[]
+  riskFlags           OperationalRiskFlag[]
+  integrationEvents   IntegrationEvent[]
+  repoLinks           AppRepositoryLink[]
+  railwayResources    RailwayResource[]
+  deploymentSnapshots DeploymentSnapshot[]
 
   @@index([appKey])
   @@index([slug])
@@ -979,4 +1017,104 @@ model GitWorkflowRun {
   @@index([branch])
   @@index([status])
   @@index([conclusion])
+}
+
+// ============================================================================
+// COMMAND CENTER — Deployment Intelligence (Slice 3)
+// ============================================================================
+
+// Mirrors a Railway (project, service, environment) tuple in the Suite's
+// DB. Slice 3 syncs each tuple from the Railway GraphQL API every
+// reconciliation cycle and on inbound webhook deliveries. The Railway
+// API token never lives here — only resolved IDs + display metadata.
+//
+// Idempotency: unique on `(serviceId, environmentId)` — re-running the
+// sync or re-receiving a webhook can't dupe the row.
+//
+// AgentOps: future capability `trigger_railway_redeploy` reads this row
+// to know which serviceId to redeploy; it does not see the API token.
+model RailwayResource {
+  id                  String    @id @default(cuid())
+  appRegistryId       String?
+  projectId           String
+  projectName         String?
+  serviceId           String
+  serviceName         String?
+  environmentId       String
+  environmentName     String?
+  publicDomain        String?
+  railwayDashboardUrl String?
+  // True when the project / service / environment is reachable in
+  // Railway right now. Set to false on a 404/410/access-denied response;
+  // the row stays so the audit trail and historical DeploymentSnapshots
+  // keep their FK target.
+  active              Boolean   @default(true)
+  lastSyncedAt        DateTime?
+  lastSyncError       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  app                 AppRegistry?         @relation(fields: [appRegistryId], references: [id], onDelete: SetNull)
+  deploymentSnapshots DeploymentSnapshot[]
+
+  @@unique([serviceId, environmentId])
+  @@index([appRegistryId])
+  @@index([projectId])
+  @@index([active])
+}
+
+// One row per observed Railway deployment. Inserted by the periodic
+// sync (listDeployments) and the deployment_status webhook —
+// idempotency on `railwayDeploymentId` means doubled-up writes are
+// no-ops.
+//
+// `liveCommitSha` lets the deployment evaluator answer "what commit is
+// actually running in production" without making a separate Railway
+// API call per app on every reconciliation pass.
+model DeploymentSnapshot {
+  id                    String                @id @default(cuid())
+  appRegistryId         String?
+  railwayResourceId     String
+  railwayDeploymentId   String                @unique
+  railwayStatus         DeploymentStatus      @default(unknown)
+  // Raw status string from Railway for forensics (the enum collapses
+  // unknown values to `unknown`). Persist the original alongside.
+  railwayStatusRaw      String?
+  // Health probe outcome at the time of this snapshot. Slice 1's
+  // HealthCheckSnapshot is the per-probe time series; this column is
+  // the denormalised "what was health when this deploy went out".
+  healthStatus          HealthStatus?
+  healthStatusRaw       String?
+  healthStatusCode      Int?
+  healthLatencyMs       Int?
+  // Commit info for the deployment. liveCommitSha is the source of
+  // truth for production_behind_main detection in slice 3 — we no
+  // longer have to read /api/build-info for apps that have been
+  // synced from Railway.
+  liveCommitSha         String?
+  liveCommitShortSha    String?
+  liveBranch            String?
+  liveRepo              String?
+  // GitHub HEAD at the time of the comparison + the diff.
+  githubHeadSha         String?
+  githubHeadShortSha    String?
+  commitsBehind         Int?
+  commitsAhead          Int?
+  productionDriftStatus DeploymentDriftStatus @default(unknown)
+  // Most recent successful deploy — used by the stale_deployment rule.
+  lastSuccessfulCheckAt DateTime?
+  checkedAt             DateTime              @default(now())
+  metadataJson          Json?
+
+  createdAt DateTime @default(now())
+
+  app             AppRegistry?    @relation(fields: [appRegistryId], references: [id], onDelete: SetNull)
+  railwayResource RailwayResource @relation(fields: [railwayResourceId], references: [id], onDelete: Cascade)
+
+  @@index([railwayResourceId, checkedAt(sort: Desc)])
+  @@index([appRegistryId, checkedAt(sort: Desc)])
+  @@index([railwayStatus])
+  @@index([productionDriftStatus])
+  @@index([checkedAt(sort: Desc)])
 }

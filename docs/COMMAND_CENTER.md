@@ -171,6 +171,38 @@ catches push / workflow_run deliveries via webhook in between cycles.
 Both paths write the same `GitCommitEvent` / `GitWorkflowRun` rows
 idempotently — duplicates are a no-op.
 
+## Wiring Railway sync (Slice 3)
+
+The Railway leg of `runReconciliation()` is gated by
+`ENABLE_RAILWAY_SYNC=true` + a working `RAILWAY_API_TOKEN`. The
+deployment-risk evaluator runs even without these — `missing_railway_mapping`
+is a meaningful signal before the API token is set.
+
+1. **Create a Railway personal API token** at https://railway.app/account/tokens
+   (account-scoped — the Suite needs to see every MacTech project).
+2. Set on the Suite Railway service:
+   ```
+   ENABLE_RAILWAY_SYNC=true
+   RAILWAY_API_TOKEN=<railway-pat>
+   RAILWAY_WEBHOOK_SECRET=$(openssl rand -hex 32)
+   ```
+3. Make sure each AppRegistry row carries `railwayProjectId`,
+   `railwayServiceId`, `railwayEnvironmentId`. The Slice 1 seed
+   populated these; new apps need them added in `/admin/app-registry`.
+4. **Set up a Railway webhook on each project**:
+   - URL (query-secret form, default — works on every Railway project version):
+     `https://www.suite.mactechsolutionsllc.com/api/webhooks/railway?secret=$RAILWAY_WEBHOOK_SECRET`
+   - URL (HMAC form, when your Railway version supports per-webhook signing):
+     `https://www.suite.mactechsolutionsllc.com/api/webhooks/railway` and set the project's signing secret to `$RAILWAY_WEBHOOK_SECRET`.
+   - Events: deployment status changes.
+5. Trigger the first sync from `/command-center` → "Sync now" or
+   `curl -X POST .../api/command-center/sync -H "Authorization: Bearer $COMMAND_CENTER_CRON_SECRET"`.
+
+Once seeded, the Suite re-syncs each (project, service, environment)
+tuple every reconciliation, AND catches deployment status updates via
+webhook in between cycles. Both paths write the same
+`DeploymentSnapshot` rows idempotently — duplicates are a no-op.
+
 ## Wiring cron on Railway
 
 Slice 1 ships the endpoint; the user runs the sync manually until cron
@@ -198,10 +230,10 @@ Slices 1 + 2 implement six:
 | `production_behind_main`  | `/api/build-info` commit ≠ GitHub default-branch HEAD, and the compare reports the live SHA is behind. Suppressed when the app has no `liveCommitSha` (covered separately by `missing_build_info` in Slice 3). | `low` for 1-2 commits behind; `medium` for 3+; `high` for 24h+ behind on a high / mission-critical app. |
 | `failed_workflow`         | Most recent GitHub workflow run on the default branch concluded `failure`. | `medium` |
 | `security_sensitive_change` | Most recent commit on the default branch changed a path matching the security-sensitive pattern set (auth, middleware, permissions, prisma/schema, migrations, secrets, env, package, Dockerfile, …). | `low`–`medium` depending on `criticality` |
-
-Slice 3 will add:
-- `failed_deployment`, `crashed_deployment`, `stale_deployment`,
-  `missing_repo_mapping`, `missing_railway_mapping`.
+| `failed_deployment`       | Latest Railway deployment status is `failed`.            | `high` (→ critical on mission_critical) |
+| `crashed_deployment`      | Latest Railway deployment status is `crashed`.           | `high` (→ critical on mission_critical) |
+| `stale_deployment`        | No successful deployment in 7+ days for an active production app. | `low` (→ `medium` after 30d) |
+| `missing_railway_mapping` | Active production app has no `RailwayResource` row.      | `low` |
 
 ## Permissions
 

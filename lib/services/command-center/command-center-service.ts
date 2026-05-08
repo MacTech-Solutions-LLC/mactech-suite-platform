@@ -15,11 +15,17 @@
 
 import { prisma } from "@/lib/db/prisma";
 import { writeAuditLog } from "@/lib/audit";
-import { env, githubSyncConfigured } from "@/lib/env";
+import { env, githubSyncConfigured, railwaySyncConfigured } from "@/lib/env";
 import { probeAndPersist } from "./health-check-service";
-import { reconcileRepoRisksForApp, reconcileRisksForApp } from "./risk-service";
+import {
+  reconcileDeploymentRisksForApp,
+  reconcileRepoRisksForApp,
+  reconcileRisksForApp,
+} from "./risk-service";
 import { syncAllRepositoriesForApps } from "./github-sync-service";
 import { getRepoSnapshotForApp } from "./repo-intelligence-service";
+import { syncAllRailwayResources } from "./railway-sync-service";
+import { getDeploymentSnapshotForApp } from "./deployment-intelligence-service";
 import type { HealthProbeResult } from "@/lib/integrations/health/checker";
 import type {
   AppRegistry,
@@ -50,6 +56,11 @@ export interface ReconciliationOutcome {
   commitsInserted: number;
   workflowRunsUpserted: number;
   perRepoErrors: Array<{ fullName: string; error: string }>;
+  // Slice 3: Railway sync leg. Zeros when ENABLE_RAILWAY_SYNC is off.
+  railwayAppsAttempted: number;
+  railwayAppsSucceeded: number;
+  railwaySnapshotsWritten: number;
+  perRailwayErrors: Array<{ appKey: string; error: string }>;
 }
 
 export type ReconciliationTrigger = "manual" | "cron" | "boot";
@@ -152,6 +163,60 @@ export async function runReconciliation(
     }
   }
 
+  // ── Railway sync leg (Slice 3) ──────────────────────────────────────
+  // Skipped entirely when ENABLE_RAILWAY_SYNC is off. Always runs the
+  // deployment-risk reconciliation pass after — that one reads from
+  // existing DeploymentSnapshot rows and emits missing_railway_mapping
+  // for productionish apps that haven't been mapped yet, so it has
+  // value even when Railway sync is off.
+  let railwayAppsAttempted = 0,
+    railwayAppsSucceeded = 0,
+    railwaySnapshotsWritten = 0;
+  let perRailwayErrors: Array<{ appKey: string; error: string }> = [];
+  if (railwaySyncConfigured()) {
+    try {
+      const railwayOutcome = await syncAllRailwayResources(triggeredByEmail ?? null);
+      railwayAppsAttempted = railwayOutcome.appsAttempted;
+      railwayAppsSucceeded = railwayOutcome.appsSucceeded;
+      railwaySnapshotsWritten = railwayOutcome.snapshotsWritten;
+      perRailwayErrors = railwayOutcome.perAppErrors;
+    } catch (err) {
+      perRailwayErrors.push({
+        appKey: "*",
+        error: err instanceof Error ? err.message : "unknown_error",
+      });
+    }
+  }
+
+  // Deployment-risk reconciliation runs whether or not Railway sync is
+  // configured — missing_railway_mapping is a meaningful signal even
+  // before the API token is set.
+  for (const app of apps) {
+    try {
+      const ds = await getDeploymentSnapshotForApp(app);
+      if (!ds) continue;
+      const out = await reconcileDeploymentRisksForApp({
+        app,
+        snapshot: {
+          hasRailwayMapping: ds.hasRailwayMapping,
+          latestStatus: ds.latest?.railwayStatus ?? null,
+          latestStatusRaw: ds.latest?.railwayStatusRaw ?? null,
+          latestCheckedAt: ds.latest?.checkedAt ?? null,
+          lastSuccessfulAt: ds.lastSuccessfulAt,
+          dashboardUrl: ds.resource?.railwayDashboardUrl ?? null,
+          serviceName: ds.resource?.serviceName ?? null,
+        },
+      });
+      risksOpened += out.opened.length;
+      risksResolved += out.resolved.length;
+    } catch (err) {
+      perAppErrors.push({
+        appKey: app.appKey,
+        error: `deployment_risk_${err instanceof Error ? err.message : "unknown_error"}`,
+      });
+    }
+  }
+
   const finishedAt = new Date();
   const durationMs = finishedAt.getTime() - startedAt.getTime();
 
@@ -161,7 +226,10 @@ export async function runReconciliation(
       provider: "internal",
       eventType: "command_center.reconciliation.completed",
       eventAction: trigger,
-      severity: perAppErrors.length > 0 || perRepoErrors.length > 0 ? "medium" : "info",
+      severity:
+        perAppErrors.length > 0 || perRepoErrors.length > 0 || perRailwayErrors.length > 0
+          ? "medium"
+          : "info",
       processedAt: finishedAt,
       payloadJson: {
         trigger,
@@ -179,6 +247,10 @@ export async function runReconciliation(
         commits_inserted: commitsInserted,
         workflow_runs_upserted: workflowRunsUpserted,
         per_repo_errors: perRepoErrors,
+        railway_apps_attempted: railwayAppsAttempted,
+        railway_apps_succeeded: railwayAppsSucceeded,
+        railway_snapshots_written: railwaySnapshotsWritten,
+        per_railway_errors: perRailwayErrors,
         duration_ms: durationMs,
       },
     },
@@ -188,7 +260,7 @@ export async function runReconciliation(
     eventType: "command_center.reconciliation.completed",
     eventCategory: "system",
     severity: appsDown > 0 ? "warning" : "info",
-    action: `Reconciliation (${trigger}): ${appsHealthy} up, ${appsDegraded} degraded, ${appsDown} down, ${appsUnknown} unknown · ${reposSucceeded}/${reposAttempted} repos · +${risksOpened} risks, -${risksResolved} resolved · ${durationMs}ms`,
+    action: `Reconciliation (${trigger}): ${appsHealthy} up, ${appsDegraded} degraded, ${appsDown} down, ${appsUnknown} unknown · ${reposSucceeded}/${reposAttempted} repos · ${railwayAppsSucceeded}/${railwayAppsAttempted} railway · +${risksOpened} risks, -${risksResolved} resolved · ${durationMs}ms`,
     actorEmail: triggeredByEmail ?? null,
     metadata: {
       trigger,
@@ -205,6 +277,10 @@ export async function runReconciliation(
       commits_inserted: commitsInserted,
       workflow_runs_upserted: workflowRunsUpserted,
       per_repo_errors: perRepoErrors,
+      railway_apps_attempted: railwayAppsAttempted,
+      railway_apps_succeeded: railwayAppsSucceeded,
+      railway_snapshots_written: railwaySnapshotsWritten,
+      per_railway_errors: perRailwayErrors,
       duration_ms: durationMs,
     },
   });
@@ -227,6 +303,10 @@ export async function runReconciliation(
     commitsInserted,
     workflowRunsUpserted,
     perRepoErrors,
+    railwayAppsAttempted,
+    railwayAppsSucceeded,
+    railwaySnapshotsWritten,
+    perRailwayErrors,
   };
 }
 
