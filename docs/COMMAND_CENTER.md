@@ -217,5 +217,6 @@ If you maintain a MacTech app and want it to show up on `/command-center`:
 | 2     | Repository intelligence | GitRepository + AppRepositoryLink + GitCommitEvent + GitWorkflowRun, GitHub client, `/api/webhooks/github`, `/admin/repositories`, drift detection. |
 | 3     | Deployment intelligence | RailwayResource + DeploymentSnapshot, Railway GraphQL client, `/api/webhooks/railway`, `/admin/ops/deployments`, deployment risk rules. |
 | 4     | Polish + intelligence   | CommitSummary + AppDependency, ecosystem graph, release notes, optional AI summaries. |
+| 5     | **AgentOps**            | Natural-language Command Center: a planner that maps a typed request onto approved agent capabilities, a plan/approve/execute lifecycle, and an audit chain. **Architecture is reserved in [`AGENT_OPS.md`](AGENT_OPS.md); not implemented yet.** Slices 2–4 deliberately keep their primitives reusable so Slice 5 can call into them without rewriting anything. |
 
 Each slice is independent and PR-able.
