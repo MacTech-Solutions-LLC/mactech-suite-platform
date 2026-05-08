@@ -134,6 +134,16 @@ export interface GitHubClient {
     branch?: string,
     perPage?: number,
   ): Promise<GitHubResult<{ data: GitHubWorkflowRunSummary[] }>>;
+  /**
+   * AgentOps write capability — opens a GitHub issue. Token-isolated:
+   * the only callsite is lib/agents/capabilities/github.ts and the
+   * approval gate has already passed by the time this is invoked.
+   */
+  createIssue(
+    owner: string,
+    repo: string,
+    input: { title: string; body: string; labels?: string[] },
+  ): Promise<GitHubResult<{ data: { number: number; htmlUrl: string } }>>;
 }
 
 export function getGitHubClient(): GitHubClient {
@@ -159,6 +169,7 @@ function makeUnconfiguredClient(): GitHubClient {
     listRecentCommits: fail as GitHubClient["listRecentCommits"],
     getCommit: fail as GitHubClient["getCommit"],
     listWorkflowRuns: fail as GitHubClient["listWorkflowRuns"],
+    createIssue: fail as GitHubClient["createIssue"],
   };
 }
 
@@ -351,6 +362,44 @@ function makeRealClient(token: string): GitHubClient {
           completedAt: w.updated_at ?? null,
         })),
       };
+    },
+
+    async createIssue(owner, repo, input) {
+      // POST against /repos/:owner/:repo/issues. Token-isolated; the
+      // calling capability has already been through plan + approval.
+      const url = `${API_BASE}/repos/${owner}/${repo}/issues`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12_000);
+      try {
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            Accept: "application/vnd.github+json",
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+            "User-Agent": "MacTechCommandCenter/1.0",
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
+          body: JSON.stringify({
+            title: input.title,
+            body: input.body,
+            labels: input.labels ?? undefined,
+          }),
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        if (resp.status === 401) return { ok: false, reason: "unauthorized", status: 401 };
+        if (resp.status === 404) return { ok: false, reason: "not_found", status: 404 };
+        if (resp.status === 403) return { ok: false, reason: "abuse_detected", status: 403 };
+        if (resp.status === 422) return { ok: false, reason: "validation_failed", status: 422 };
+        if (!resp.ok) return { ok: false, reason: "transient", status: resp.status };
+        const body = (await resp.json()) as { number: number; html_url: string };
+        return { ok: true, data: { number: body.number, htmlUrl: body.html_url } };
+      } catch {
+        return { ok: false, reason: "transient", status: 0 };
+      } finally {
+        clearTimeout(timeout);
+      }
     },
   };
 }

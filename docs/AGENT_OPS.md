@@ -1,8 +1,30 @@
-# MacTech Command Center — AgentOps (future, Slice 5)
+# MacTech Command Center — AgentOps (Slice 5)
 
-> **Status: architecture reserved. Not implemented.** Slices 2–4 keep
-> their service-layer primitives clean and permissioned so this layer
-> can sit on top of them without rewriting anything.
+> **Status: shipped in Slice 5.** The runtime, capability registry,
+> planner, orchestrator, and approval UI are live under `/admin/agents`.
+> The contract below is the implemented behavior, not a forward-looking
+> design — diverge here and it's a regression.
+
+## Implemented surface
+
+| Surface                       | Purpose                                           |
+|-------------------------------|---------------------------------------------------|
+| `/admin/agents`               | List of every AgentRun + plan-creation form.      |
+| `/admin/agents/[id]`          | One run + plan + steps + artifacts + approval log.|
+| `POST /api/agents/plan`       | Natural-language → AgentRun (planned/awaiting).   |
+| `POST /api/agents/[id]/approve` | Approve/reject an awaiting_approval run.        |
+| `POST /api/agents/[id]/execute` | Run a planned/approved run end-to-end.          |
+| `lib/agents/types.ts`         | Shared types — Capability / PlannedStep / etc.    |
+| `lib/agents/llm.ts`           | The only file the agent runtime calls OpenAI from.|
+| `lib/agents/planner.ts`       | LLM path + deterministic keyword fallback.        |
+| `lib/agents/orchestrator.ts`  | Lifecycle FSM + audit envelope.                   |
+| `lib/agents/capabilities/registry.ts` | Code-defined capability allowlist (16 caps in v1). |
+
+The capability registry is intentionally **code-defined, not DB-backed**
+— a deviation from the original architecture sketch. An unauthorized DB
+write cannot widen the agent's authority because the planner consults
+the in-process registry, and the orchestrator validates against it again
+at execute time.
 
 ## Goal
 

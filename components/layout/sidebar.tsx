@@ -26,6 +26,7 @@ import {
   AlertOctagon,
   PlugZap,
   Cloud,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -53,6 +54,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/command-center", label: "Command Center", icon: Compass },
+      { href: "/admin/agents", label: "Agents", icon: Bot },
     ],
   },
   {
