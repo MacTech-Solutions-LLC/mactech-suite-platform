@@ -47,6 +47,14 @@ export interface CreatePlanInput {
    * optional so the existing /api/agents/plan callers do not break.
    */
   intent?: Intent;
+  /**
+   * Slice 5.7: M2M trigger source. Browser-initiated runs leave these
+   * undefined; runs initiated via /api/v1/agents/runs carry the
+   * authenticating ApiKey id + display name so the UI can label them
+   * distinctly from human-initiated runs.
+   */
+  triggeredByApiKeyId?: string | null;
+  triggeredByApiKeyName?: string | null;
 }
 
 export class IntentValidationFailedError extends Error {
@@ -96,6 +104,8 @@ export async function createPlan(input: CreatePlanInput): Promise<{
       intentValidationJson: validation
         ? (validation as unknown as Prisma.InputJsonValue)
         : Prisma.JsonNull,
+      triggeredByApiKeyId: input.triggeredByApiKeyId ?? null,
+      triggeredByApiKeyName: input.triggeredByApiKeyName ?? null,
       steps: {
         create: planned.steps.map((s, i) => ({
           stepIndex: i + 1,

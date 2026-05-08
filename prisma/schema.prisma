@@ -724,6 +724,15 @@ enum ApiKeyScope {
   org_read // GET /api/v1/orgs/*
   user_access_read // GET /api/v1/users/*/access
   webhook_send // outbound webhook deliveries (server-internal use)
+  /// Slice 5.7: external Claude / automation trigger for AgentOps runs.
+  /// Holders may POST /api/v1/agents/runs with an Intent payload. The
+  /// IBE gates do the heavy safety work — read-only-only plans
+  /// auto-execute; plans containing any approval_required step land in
+  /// awaiting_approval and can only be approved via the browser by a
+  /// human admin (separation of duties is preserved because the M2M
+  /// "requester" is a synthetic api-key:<id> identity, never matching a
+  /// Clerk admin id).
+  agents_trigger
 }
 
 /// API key for sibling apps + integrations to talk to the central hub.
@@ -1365,6 +1374,13 @@ model AgentRun {
   // Refusal explanation when status=refused. Lists which invariants
   // failed on which steps so the operator can act.
   refusalReason        String?              @db.Text
+
+  // ── Slice 5.7: External (Claude / automation) trigger source ──────
+  // When the run was created via the M2M /api/v1/agents/runs endpoint
+  // instead of a browser session, this carries the ApiKey id that
+  // authenticated the call. Browser-initiated runs leave it null.
+  triggeredByApiKeyId  String?
+  triggeredByApiKeyName String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
