@@ -5,7 +5,16 @@
 
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, Lock, Unlock, Bot } from "lucide-react";
+import {
+  ChevronLeft,
+  Lock,
+  Unlock,
+  Bot,
+  Target,
+  ShieldCheck,
+  AlertTriangle,
+  XOctagon,
+} from "lucide-react";
 import { PageHeader } from "@/components/layout/admin-shell";
 import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/db/prisma";
@@ -88,6 +97,65 @@ export default async function AgentRunPage({
         />
       </div>
 
+      {run.status === "refused" && run.refusalReason ? (
+        <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-xs">
+          <XOctagon className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+          <div>
+            <div className="font-semibold text-warning">
+              Refused — IBE invariant violation
+            </div>
+            <div className="mt-1 text-muted-foreground whitespace-pre-wrap break-words">
+              {run.refusalReason}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {run.intentGoal ? (
+        <section className="rounded-md border border-primary/30 bg-primary/5 p-3">
+          <div className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase tracking-widest text-primary">
+            <Target className="h-3 w-3" />
+            Declared intent
+          </div>
+          <div className="space-y-2 text-xs">
+            <div>
+              <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                goal:
+              </span>{" "}
+              {run.intentGoal}
+            </div>
+            <div>
+              <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                risk_tolerance:
+              </span>{" "}
+              {run.intentRiskTolerance}
+            </div>
+            <div>
+              <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                scope:
+              </span>{" "}
+              {run.intentScopeAppIds.length === 0 && run.intentScopeRepoIds.length === 0 ? (
+                <span className="text-muted-foreground">unbounded</span>
+              ) : (
+                <span>
+                  {run.intentScopeAppIds.length} app(s), {run.intentScopeRepoIds.length} repo(s)
+                </span>
+              )}
+            </div>
+            {run.intentInvariantsJson ? (
+              <details>
+                <summary className="cursor-pointer text-[11px] text-muted-foreground hover:text-foreground">
+                  declared invariants
+                </summary>
+                <pre className="mt-1 overflow-x-auto rounded border border-border bg-background p-2 font-mono text-[10px]">
+                  {JSON.stringify(run.intentInvariantsJson, null, 2)}
+                </pre>
+              </details>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
       <RunActions
         runId={run.id}
         status={run.status}
@@ -160,6 +228,39 @@ export default async function AgentRunPage({
                   <div className="mt-2 rounded border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
                     {s.errorMessage}
                   </div>
+                ) : null}
+                {Array.isArray(s.invariantResultsJson) &&
+                (s.invariantResultsJson as unknown[]).length > 0 ? (
+                  <ul className="mt-2 space-y-1">
+                    {(
+                      s.invariantResultsJson as Array<{
+                        invariantKey: string;
+                        ok: boolean;
+                        message: string;
+                      }>
+                    ).map((r) => (
+                      <li
+                        key={r.invariantKey}
+                        className={`flex items-start gap-1 rounded border px-2 py-1 text-[11px] ${
+                          r.ok
+                            ? "border-success/30 bg-success/5 text-foreground"
+                            : "border-warning/40 bg-warning/10 text-foreground"
+                        }`}
+                      >
+                        {r.ok ? (
+                          <ShieldCheck className="mt-0.5 h-3 w-3 shrink-0 text-success" />
+                        ) : (
+                          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-warning" />
+                        )}
+                        <div>
+                          <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                            {r.invariantKey}
+                          </span>{" "}
+                          — {r.message}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 ) : null}
               </li>
             ))}
@@ -241,6 +342,8 @@ function StatusBadge({ status }: { status: string }) {
       case "rejected":
       case "cancelled":
         return "destructive";
+      case "refused":
+        return "warning";
       case "awaiting_approval":
         return "warning";
       case "running":
