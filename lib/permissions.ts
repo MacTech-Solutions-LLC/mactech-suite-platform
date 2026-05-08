@@ -51,6 +51,22 @@ export const PLATFORM_PERMISSIONS = {
   RISK_MANAGE: "platform:risk:manage",
   SUBDOMAINS_VIEW: "platform:subdomains:view",
   SUBDOMAINS_MANAGE: "platform:subdomains:manage",
+
+  // ── AgentOps (Slice 5) ──────────────────────────────────────────────────
+  // Natural-language agent runtime. The plan-first / approval-gated /
+  // separation-of-duties model is enforced at the service layer, not just
+  // the route — see docs/AGENT_OPS.md for the full contract.
+  //
+  // VIEW: see runs + plans + artifacts (read-only).
+  // CREATE: type a request, get a plan back, execute read-only steps.
+  // APPROVE: turn an awaiting_approval run into approved + executable.
+  //          Cannot self-approve a run you requested (separation of
+  //          duties enforced inside the service).
+  // MANAGE: cancel a run, force-fail a stuck run, super-admin only.
+  AGENTS_VIEW: "platform:agents:view",
+  AGENTS_CREATE: "platform:agents:create",
+  AGENTS_APPROVE: "platform:agents:approve",
+  AGENTS_MANAGE: "platform:agents:manage",
 } as const;
 
 export type PlatformPermission =
@@ -117,6 +133,12 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, PlatformPermission[
     PLATFORM_PERMISSIONS.RISK_MANAGE,
     PLATFORM_PERMISSIONS.SUBDOMAINS_VIEW,
     PLATFORM_PERMISSIONS.SUBDOMAINS_MANAGE,
+    // AgentOps: admins can view, create, and approve. Manage (cancel /
+    // force-fail) is super-admin only — admins should not be able to
+    // unilaterally hide a run they already approved.
+    PLATFORM_PERMISSIONS.AGENTS_VIEW,
+    PLATFORM_PERMISSIONS.AGENTS_CREATE,
+    PLATFORM_PERMISSIONS.AGENTS_APPROVE,
   ],
   mactech_support: [
     PLATFORM_PERMISSIONS.DASHBOARD_VIEW,
@@ -132,6 +154,9 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, PlatformPermission[
     PLATFORM_PERMISSIONS.DEPLOYMENTS_VIEW,
     PLATFORM_PERMISSIONS.RISK_VIEW,
     PLATFORM_PERMISSIONS.SUBDOMAINS_VIEW,
+    // Read-only visibility into the agent run history; support owns
+    // triage and needs to see what an admin asked the agent to do.
+    PLATFORM_PERMISSIONS.AGENTS_VIEW,
   ],
   mactech_auditor: [
     PLATFORM_PERMISSIONS.DASHBOARD_VIEW,
@@ -142,6 +167,9 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, PlatformPermission[
     // narratives, but never touch a mutation.
     PLATFORM_PERMISSIONS.COMMAND_CENTER_VIEW,
     PLATFORM_PERMISSIONS.RISK_VIEW,
+    // Auditors must be able to read every agent run history for
+    // assessor replay — but never approve or create.
+    PLATFORM_PERMISSIONS.AGENTS_VIEW,
   ],
   mactech_read_only: [
     PLATFORM_PERMISSIONS.DASHBOARD_VIEW,

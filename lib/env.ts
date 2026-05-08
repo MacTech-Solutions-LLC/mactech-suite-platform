@@ -53,6 +53,10 @@ const RawEnvSchema = z.object({
     .string()
     .default("false")
     .transform((v) => v.toLowerCase() === "true"),
+  ENABLE_AI_PLANNER: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
   GITHUB_TOKEN: z.string().optional(),
   GITHUB_WEBHOOK_SECRET: z.string().optional(),
   RAILWAY_API_TOKEN: z.string().optional(),

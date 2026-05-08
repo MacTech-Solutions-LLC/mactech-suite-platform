@@ -1240,3 +1240,184 @@ model AppDependency {
   @@index([targetAppRegistryId])
   @@index([dependencyType])
 }
+
+// ============================================================================
+// AgentOps (Slice 5) — natural-language → plan → human approval → execute.
+// The capability registry itself is code-defined (lib/agents/capabilities)
+// and not stored in the DB; that prevents "approved" capabilities from
+// being widened by an unauthorized row insert. The DB only persists runs,
+// the steps the planner produced, the artifacts they emitted, and the
+// approval/rejection events.
+// ============================================================================
+
+enum AgentRunStatus {
+  planned
+  awaiting_approval
+  approved
+  rejected
+  running
+  completed
+  failed
+  cancelled
+}
+
+enum AgentStepStatus {
+  planned
+  skipped
+  running
+  succeeded
+  failed
+}
+
+enum AgentStepKind {
+  read_only
+  approval_required
+}
+
+enum AgentApprovalDecision {
+  approved
+  rejected
+}
+
+enum AgentArtifactKind {
+  release_notes
+  draft_pr_description
+  github_issue_body
+  audit_summary
+  risk_summary
+  deployment_drift_summary
+  app_status_summary
+  health_summary
+  raw_json
+  markdown
+}
+
+model AgentRun {
+  id                String         @id @default(cuid())
+  status            AgentRunStatus @default(planned)
+  // Free-text request the user typed. Kept for audit; never re-fed to
+  // the LLM after planning.
+  requestText       String         @db.Text
+  // Verbatim plan-summary the planner produced — explains, in plain
+  // English, what the plan does. Helps the approver understand intent.
+  planSummary       String?        @db.Text
+  // Whether the planner ran in deterministic mode (no LLM) because
+  // OPENAI_API_KEY/ENABLE_AI_PLANNER weren't configured.
+  deterministicPlan Boolean        @default(false)
+  // Total step count at plan-time (before execution). Used by the UI
+  // without joining steps.
+  plannedStepCount  Int            @default(0)
+  // True if the plan contains at least one approval_required step.
+  requiresApproval  Boolean        @default(false)
+
+  requestedByClerkUserId  String
+  requestedByEmail        String
+  // Approver identity — populated when an approval row lands. Enforced
+  // at the service layer to be different from requestedByClerkUserId
+  // (separation of duties).
+  approvedByClerkUserId   String?
+  approvedByEmail         String?
+  approvedAt              DateTime?
+  rejectedAt              DateTime?
+  rejectionReason         String?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  failureReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  steps      AgentStep[]
+  artifacts  AgentArtifact[]
+  approvals  AgentApproval[]
+
+  @@index([status])
+  @@index([requestedByClerkUserId])
+  @@index([createdAt])
+  @@index([status, createdAt])
+}
+
+model AgentStep {
+  id              String          @id @default(cuid())
+  agentRunId      String
+  // Order in the plan (1-indexed). Plans execute sequentially in this
+  // order; a failure aborts the run.
+  stepIndex       Int
+  capabilityKey   String          // e.g. "summarize_open_risks"
+  capabilityVersion Int           @default(1)
+  kind            AgentStepKind
+  status          AgentStepStatus @default(planned)
+  // The planner's natural-language description of why this step is in
+  // the plan. Surfaced in the approval UI.
+  rationale       String?         @db.Text
+  // Inputs the planner bound to this step (resource IDs, filters, etc.).
+  // Validated against the capability's input schema at execution time.
+  inputJson       Json
+  // Output of the capability invocation. Truncated to a small JSON
+  // summary; large blobs go to AgentArtifact.
+  outputJson      Json?
+  // AuditLog id for the capability invocation (kept here to make the
+  // step row independently usable for assessor replay).
+  auditLogId      String?
+  // Raw error message on failure, redacted. Stored for assessor replay.
+  errorMessage    String?         @db.Text
+  durationMs      Int?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  agentRun AgentRun @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+
+  // Idempotency: a single (run, stepIndex) tuple cannot dupe — re-running
+  // execute on the same run never doubles up steps, even on transient
+  // failure. Replay is "find existing row, advance its status".
+  @@unique([agentRunId, stepIndex])
+  @@index([agentRunId])
+  @@index([capabilityKey])
+  @@index([status])
+}
+
+model AgentArtifact {
+  id            String            @id @default(cuid())
+  agentRunId    String
+  agentStepId   String?
+  kind          AgentArtifactKind
+  title         String
+  // Stored as Text — release-notes / draft PR descriptions can be long.
+  // Never contains secrets — the redactor is applied before write.
+  bodyMarkdown  String            @db.Text
+  // Optional structured payload (JSON). Used when the artifact is a
+  // structured summary the UI renders directly.
+  payloadJson   Json?
+
+  createdAt DateTime @default(now())
+
+  agentRun AgentRun @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+
+  @@index([agentRunId])
+  @@index([kind])
+}
+
+model AgentApproval {
+  id           String                @id @default(cuid())
+  agentRunId   String
+  decision     AgentApprovalDecision
+  approverClerkUserId String
+  approverEmail       String
+  // Optional scope reduction — JSON describing which step indexes were
+  // dropped from the plan before approval. Empty {} = full plan approved.
+  scopeReductionJson  Json?
+  notes        String?              @db.Text
+
+  createdAt DateTime @default(now())
+
+  agentRun AgentRun @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+
+  @@index([agentRunId])
+  @@index([approverClerkUserId])
+  @@index([decision])
+}
