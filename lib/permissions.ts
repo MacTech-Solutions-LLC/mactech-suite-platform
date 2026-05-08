@@ -31,6 +31,26 @@ export const PLATFORM_PERMISSIONS = {
    *  Held by the cui_auditor role and (transitively, via Object.values)
    *  by mactech_super_admin. */
   VAULT_ALLOWLIST_REQUEST: "platform:vault_allowlist:request",
+
+  // ── Command Center ──────────────────────────────────────────────────────
+  // Suite IS the product; Command Center IS the flagship capability. These
+  // permissions gate the operational surface that lets internal admins see
+  // ecosystem health, deployment drift, repository intelligence, and
+  // operational risk across every MacTech app.
+  COMMAND_CENTER_VIEW: "platform:command_center:view",
+  COMMAND_CENTER_MANAGE: "platform:command_center:manage",
+  OPS_VIEW: "platform:ops:view",
+  OPS_MANAGE: "platform:ops:manage",
+  REPOSITORIES_VIEW: "platform:repositories:view",
+  REPOSITORIES_MANAGE: "platform:repositories:manage",
+  DEPLOYMENTS_VIEW: "platform:deployments:view",
+  DEPLOYMENTS_MANAGE: "platform:deployments:manage",
+  INTEGRATIONS_VIEW: "platform:integrations:view",
+  INTEGRATIONS_MANAGE: "platform:integrations:manage",
+  RISK_VIEW: "platform:risk:view",
+  RISK_MANAGE: "platform:risk:manage",
+  SUBDOMAINS_VIEW: "platform:subdomains:view",
+  SUBDOMAINS_MANAGE: "platform:subdomains:manage",
 } as const;
 
 export type PlatformPermission =
@@ -83,6 +103,20 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, PlatformPermission[
     PLATFORM_PERMISSIONS.AUDIT_LOGS_VIEW,
     PLATFORM_PERMISSIONS.SECURITY_EVENTS_VIEW,
     PLATFORM_PERMISSIONS.APP_REGISTRY_MANAGE,
+    PLATFORM_PERMISSIONS.COMMAND_CENTER_VIEW,
+    PLATFORM_PERMISSIONS.COMMAND_CENTER_MANAGE,
+    PLATFORM_PERMISSIONS.OPS_VIEW,
+    PLATFORM_PERMISSIONS.OPS_MANAGE,
+    PLATFORM_PERMISSIONS.REPOSITORIES_VIEW,
+    PLATFORM_PERMISSIONS.REPOSITORIES_MANAGE,
+    PLATFORM_PERMISSIONS.DEPLOYMENTS_VIEW,
+    PLATFORM_PERMISSIONS.DEPLOYMENTS_MANAGE,
+    PLATFORM_PERMISSIONS.INTEGRATIONS_VIEW,
+    PLATFORM_PERMISSIONS.INTEGRATIONS_MANAGE,
+    PLATFORM_PERMISSIONS.RISK_VIEW,
+    PLATFORM_PERMISSIONS.RISK_MANAGE,
+    PLATFORM_PERMISSIONS.SUBDOMAINS_VIEW,
+    PLATFORM_PERMISSIONS.SUBDOMAINS_MANAGE,
   ],
   mactech_support: [
     PLATFORM_PERMISSIONS.DASHBOARD_VIEW,
@@ -90,16 +124,29 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, PlatformPermission[
     PLATFORM_PERMISSIONS.AUDIT_LOGS_VIEW,
     PLATFORM_PERMISSIONS.SECURITY_EVENTS_VIEW,
     PLATFORM_PERMISSIONS.ROLES_VIEW,
+    // Read-only ecosystem visibility — support owns triage but does not
+    // mutate registry / repo / deployment / integration state.
+    PLATFORM_PERMISSIONS.COMMAND_CENTER_VIEW,
+    PLATFORM_PERMISSIONS.OPS_VIEW,
+    PLATFORM_PERMISSIONS.REPOSITORIES_VIEW,
+    PLATFORM_PERMISSIONS.DEPLOYMENTS_VIEW,
+    PLATFORM_PERMISSIONS.RISK_VIEW,
+    PLATFORM_PERMISSIONS.SUBDOMAINS_VIEW,
   ],
   mactech_auditor: [
     PLATFORM_PERMISSIONS.DASHBOARD_VIEW,
     PLATFORM_PERMISSIONS.AUDIT_LOGS_VIEW,
     PLATFORM_PERMISSIONS.SECURITY_EVENTS_VIEW,
     PLATFORM_PERMISSIONS.ROLES_VIEW,
+    // Auditors see Command Center + open risks for assessor-facing
+    // narratives, but never touch a mutation.
+    PLATFORM_PERMISSIONS.COMMAND_CENTER_VIEW,
+    PLATFORM_PERMISSIONS.RISK_VIEW,
   ],
   mactech_read_only: [
     PLATFORM_PERMISSIONS.DASHBOARD_VIEW,
     PLATFORM_PERMISSIONS.ROLES_VIEW,
+    PLATFORM_PERMISSIONS.COMMAND_CENTER_VIEW,
   ],
   // External C3PAO assessor. Sees the auditor-access portal and their
   // own grant audit history — nothing else of the admin surface.

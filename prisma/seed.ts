@@ -14,9 +14,18 @@ import {
 
 const prisma = new PrismaClient();
 
-// Live apps in the MacTech Suite. Keys are stable identifiers used by the
-// audit ingestion API and product entitlement matrix — do not rename them
-// without coordinating with the corresponding sibling app's audit client.
+// Live apps in the MacTech Suite ecosystem. Keys are stable identifiers
+// used by the audit ingestion API and product entitlement matrix — do
+// not rename them without coordinating with the corresponding sibling
+// app's audit client.
+//
+// Operational fields drive the Command Center: publicUrl + healthUrl
+// for the probe loop, repoFullName for repo intelligence (slice 2),
+// railwayServiceId for deployment intelligence (slice 3). Health URLs
+// follow the convention documented in docs/COMMAND_CENTER.md
+// (`/api/health` returning JSON with `status: "ok"`). Apps that
+// don't have one yet leave healthUrl null and the Command Center
+// flags them as `missing_health_endpoint`.
 const APP_FIXTURES = [
   {
     appKey: "capture",
@@ -27,84 +36,282 @@ const APP_FIXTURES = [
     requiresOrgContext: true,
     isInternalOnly: false,
     status: "active" as const,
+    publicUrl: "https://capture.mactechsolutionsllc.com",
+    healthUrl: "https://capture.mactechsolutionsllc.com/api/health",
+    buildInfoUrl: "https://capture.mactechsolutionsllc.com/api/build-info",
+    subdomain: "capture",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "high" as const,
+    lifecycle: "production" as const,
+    visibility: "customer" as const,
+    repoFullName: "WELCOMETOTHETRIBE/mactech-captureos",
+    repoDefaultBranch: "main",
   },
   {
     appKey: "codex",
     name: "MacTech Codex",
-    description: "CMMC compliance plane.",
+    description: "CMMC compliance plane (controls, evidence, posture).",
     category: "compliance" as const,
     baseUrl: "https://codex.mactechsolutionsllc.com",
     requiresOrgContext: true,
     isInternalOnly: false,
     status: "active" as const,
+    publicUrl: "https://codex.mactechsolutionsllc.com",
+    healthUrl: "https://codex.mactechsolutionsllc.com/api/health",
+    buildInfoUrl: "https://codex.mactechsolutionsllc.com/api/build-info",
+    subdomain: "codex",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "mission_critical" as const,
+    lifecycle: "production" as const,
+    visibility: "customer" as const,
+    repoFullName: "WELCOMETOTHETRIBE/CMMC",
+    repoDefaultBranch: "main",
   },
   {
     appKey: "training",
     name: "MacTech Training",
-    description: "Training courses for MacTech customers.",
+    description: "Training courses, certifications, and audit-ready evidence-of-training.",
     category: "training" as const,
     baseUrl: "https://training.mactechsolutionsllc.com",
     requiresOrgContext: true,
     isInternalOnly: false,
     status: "active" as const,
+    publicUrl: "https://training.mactechsolutionsllc.com",
+    healthUrl: "https://training.mactechsolutionsllc.com/api/health",
+    buildInfoUrl: "https://training.mactechsolutionsllc.com/api/build-info",
+    subdomain: "training",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "high" as const,
+    lifecycle: "production" as const,
+    visibility: "customer" as const,
+    repoFullName: "WELCOMETOTHETRIBE/cmmc-training-hub",
+    repoDefaultBranch: "main",
   },
   {
     appKey: "quality",
-    name: "MacTech Quality",
-    description: "Document control / QMS.",
+    name: "MacTech Quality (QMS)",
+    description: "Document control, change management, and audit trail for the QMS.",
     category: "compliance" as const,
     baseUrl: "https://quality.mactechsolutionsllc.com",
     requiresOrgContext: true,
     isInternalOnly: false,
     status: "active" as const,
+    publicUrl: "https://quality.mactechsolutionsllc.com",
+    healthUrl: "https://quality.mactechsolutionsllc.com/api/health",
+    buildInfoUrl: "https://quality.mactechsolutionsllc.com/api/build-info",
+    subdomain: "quality",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "high" as const,
+    lifecycle: "production" as const,
+    visibility: "customer" as const,
+    repoFullName: "MacTech-Solutions-LLC/QMS",
+    repoDefaultBranch: "main",
   },
   {
     appKey: "cleard",
-    name: "clearD by MacTech Solutions",
+    name: "clearD by MacTech",
     description: "Cleared talent network and sourcing platform for mission-ready defense work.",
     category: "other" as const,
     baseUrl: "https://cleard.mactechsolutionsllc.com",
     requiresOrgContext: true,
     isInternalOnly: false,
     status: "active" as const,
+    publicUrl: "https://cleard.mactechsolutionsllc.com",
+    subdomain: "cleard",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "medium" as const,
+    lifecycle: "production" as const,
+    visibility: "customer" as const,
   },
   {
     appKey: "identity-command-center",
-    name: "Identity Command Center",
-    description: "Central SSO, RBAC, entitlement, and audit hub for the suite.",
+    name: "MacTech Suite (Command Center)",
+    description:
+      "Suite IS the product; Command Center IS the flagship capability. Identity, AppRegistry, " +
+      "entitlements, ecosystem health, deployment drift, repository intelligence, audit trail.",
     category: "admin" as const,
     baseUrl: "https://www.suite.mactechsolutionsllc.com",
     requiresOrgContext: false,
     isInternalOnly: true,
     status: "active" as const,
+    publicUrl: "https://www.suite.mactechsolutionsllc.com",
+    adminUrl: "https://www.suite.mactechsolutionsllc.com/command-center",
+    healthUrl: "https://www.suite.mactechsolutionsllc.com/api/health",
+    buildInfoUrl: "https://www.suite.mactechsolutionsllc.com/api/build-info",
+    subdomain: "www.suite",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "mission_critical" as const,
+    lifecycle: "production" as const,
+    visibility: "internal" as const,
+    repoFullName: "MacTech-Solutions-LLC/mactech-suite-platform",
+    repoDefaultBranch: "main",
   },
   {
     appKey: "governance",
-    name: "MacTech GovernanceOS",
+    name: "MacTech Governance",
     description:
-      "Corporate governance, compliance readiness, contracting posture, and delivery assurance.",
+      "GovCon governance workspace: clauses, reps & certs, delegation, flowdowns, evidence, post-award.",
     category: "compliance" as const,
-    baseUrl: "https://www.suite.mactechsolutionsllc.com/governance",
+    baseUrl: "https://governance.mactechsolutionsllc.com",
     requiresOrgContext: true,
     isInternalOnly: false,
     status: "active" as const,
+    publicUrl: "https://governance.mactechsolutionsllc.com",
+    healthUrl: "https://governance.mactechsolutionsllc.com/api/health",
+    buildInfoUrl: "https://governance.mactechsolutionsllc.com/api/build-info",
+    subdomain: "governance",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "high" as const,
+    lifecycle: "production" as const,
+    visibility: "customer" as const,
+    repoFullName: "MacTech-Solutions-LLC/Governance",
+    repoDefaultBranch: "main",
+  },
+  {
+    appKey: "enclavewatch",
+    name: "MacTech EnclaveWatch",
+    description:
+      "Vault-resident audit, drift validation, ISSO weekly review, and signed evidence export.",
+    category: "evidence" as const,
+    baseUrl: "https://vault-001.mactechsolutionsllc.com",
+    requiresOrgContext: true,
+    isInternalOnly: false,
+    status: "active" as const,
+    publicUrl: "https://vault-001.mactechsolutionsllc.com",
+    // EnclaveWatch's /api/health is anonymous per the existing route in
+    // src/EnclaveWatch.Service/Program.cs.
+    healthUrl: "https://vault-001.mactechsolutionsllc.com/api/health",
+    subdomain: "vault-001",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "mission_critical" as const,
+    lifecycle: "production" as const,
+    visibility: "customer" as const,
+    repoFullName: "MacTech-Solutions-LLC/enclavewatch",
+    repoDefaultBranch: "main",
+  },
+  {
+    appKey: "opportunities",
+    name: "MacTech Opportunities",
+    description: "Federal opportunity intake, qualification, and pursuit ranking.",
+    category: "capture" as const,
+    requiresOrgContext: true,
+    isInternalOnly: false,
+    status: "development" as const,
+    publicUrl: "https://opportunities.mactechsolutionsllc.com",
+    subdomain: "opportunities",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "medium" as const,
+    lifecycle: "development" as const,
+    visibility: "customer" as const,
+    repoFullName: "MacTech-Solutions-LLC/Opportunities",
+    repoDefaultBranch: "main",
+  },
+  {
+    appKey: "proposal",
+    name: "MacTech Proposal (ProposalOS)",
+    description: "Proposal workspace covering Section K reps & certs through cost-volume submission.",
+    category: "reporting" as const,
+    requiresOrgContext: true,
+    isInternalOnly: false,
+    status: "development" as const,
+    publicUrl: "https://proposal.mactechsolutionsllc.com",
+    subdomain: "proposal",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "high" as const,
+    lifecycle: "development" as const,
+    visibility: "customer" as const,
+    repoFullName: "MacTech-Solutions-LLC/Proposal",
+    repoDefaultBranch: "main",
+  },
+  {
+    appKey: "vetted",
+    name: "Vetted",
+    description: "Partner vetting and supply-chain risk surfacing.",
+    category: "other" as const,
+    requiresOrgContext: true,
+    isInternalOnly: false,
+    status: "development" as const,
+    subdomain: "vetted",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "low" as const,
+    lifecycle: "development" as const,
+    visibility: "customer" as const,
+    repoFullName: "WELCOMETOTHETRIBE/vetted",
+    repoDefaultBranch: "main",
+  },
+  {
+    appKey: "mactech-core",
+    name: "MacTech (legacy core)",
+    description: "Legacy MacTech site / origin codebase. Tracked for audit + retirement planning.",
+    category: "other" as const,
+    requiresOrgContext: false,
+    isInternalOnly: true,
+    status: "development" as const,
+    publicUrl: "https://www.mactechsolutionsllc.com",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "low" as const,
+    lifecycle: "deprecated" as const,
+    visibility: "internal" as const,
+    repoFullName: "MacTechSolutionsLLC/mactech",
+    repoDefaultBranch: "main",
   },
 ];
 
 async function seedApps() {
   for (const app of APP_FIXTURES) {
+    // Build a partial that only sets the operational fields the fixture
+    // actually has — leaves other AppRegistry rows alone if a future seed
+    // pass adds new fields without rebackfilling every row.
+    const opsFields = {
+      publicUrl: app.publicUrl ?? null,
+      adminUrl: ("adminUrl" in app ? app.adminUrl : null) ?? null,
+      healthUrl: ("healthUrl" in app ? app.healthUrl : null) ?? null,
+      buildInfoUrl: ("buildInfoUrl" in app ? app.buildInfoUrl : null) ?? null,
+      subdomain: app.subdomain ?? null,
+      apexDomain: app.apexDomain ?? null,
+      criticality: ("criticality" in app ? app.criticality : "medium") as
+        | "low"
+        | "medium"
+        | "high"
+        | "mission_critical",
+      lifecycle: ("lifecycle" in app ? app.lifecycle : "production") as
+        | "planned"
+        | "development"
+        | "staging"
+        | "production"
+        | "deprecated"
+        | "retired",
+      visibility: ("visibility" in app ? app.visibility : "customer") as
+        | "internal"
+        | "customer"
+        | "hybrid",
+      repoFullName: ("repoFullName" in app ? app.repoFullName : null) ?? null,
+      repoDefaultBranch:
+        ("repoDefaultBranch" in app ? app.repoDefaultBranch : null) ?? "main",
+    };
     await prisma.appRegistry.upsert({
       where: { appKey: app.appKey },
       update: {
         name: app.name,
         description: app.description,
         category: app.category,
-        baseUrl: app.baseUrl,
+        baseUrl: ("baseUrl" in app ? app.baseUrl : null) ?? null,
         requiresOrgContext: app.requiresOrgContext,
         isInternalOnly: app.isInternalOnly,
         status: app.status,
+        ...opsFields,
       },
-      create: app,
+      create: {
+        appKey: app.appKey,
+        name: app.name,
+        description: app.description,
+        category: app.category,
+        baseUrl: ("baseUrl" in app ? app.baseUrl : null) ?? null,
+        requiresOrgContext: app.requiresOrgContext,
+        isInternalOnly: app.isInternalOnly,
+        status: app.status,
+        ...opsFields,
+      },
     });
   }
 }

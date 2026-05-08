@@ -7,6 +7,7 @@ const isPublicRoute = createRouteMatcher([
   "/sign-up(.*)",
   "/access-restricted",
   "/api/health",
+  "/api/build-info",
   "/api/webhooks/clerk",
   "/api/audit/ingest",
   "/api/v1/(.*)",
@@ -15,6 +16,10 @@ const isPublicRoute = createRouteMatcher([
 const isAdminRoute = createRouteMatcher([
   "/admin(.*)",
   "/dashboard(.*)",
+  // Command Center is the flagship operational surface — same auth
+  // gate as /admin and /dashboard, lives under app/(admin)/command-center
+  // so it inherits AdminShell automatically.
+  "/command-center(.*)",
   "/governance(.*)",
   // /welcome is the post-sign-in router for customer users — needs an
   // active Clerk session but NOT a platform role (the page itself

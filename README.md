@@ -1,21 +1,35 @@
-# MacTech Identity Command Center
+# MacTech Suite — Command Center
 
-Central SSO, organization, RBAC, entitlement, and audit hub for the MacTech
-Suite. The live apps registered today are:
+**MacTech Suite IS the product. Command Center IS the flagship capability.**
+
+This repository is the central nervous system of the MacTech secure software
+ecosystem: identity, organizations, RBAC, app registry, subdomains, GitHub
+repositories, Railway deployments, ecosystem health, operational risk,
+integration events, and audit trail — all in one place, behind one sign-in,
+in front of one admin team.
+
+Live apps tracked in `AppRegistry`:
 
 - **MacTech Capture** (`capture.mactechsolutionsllc.com`) — contract capture intelligence
 - **MacTech Codex** (`codex.mactechsolutionsllc.com`) — CMMC compliance plane
 - **MacTech Training** (`training.mactechsolutionsllc.com`) — training courses
-- **MacTech Quality** (`quality.mactechsolutionsllc.com`) — document control / QMS
-- **clearD by MacTech Solutions** (`cleard.mactechsolutionsllc.com`) — cleared talent network and sourcing
+- **MacTech Quality (QMS)** (`quality.mactechsolutionsllc.com`) — document control
+- **MacTech Governance** (`governance.mactechsolutionsllc.com`) — GovCon governance
+- **MacTech EnclaveWatch** (`vault-001.mactechsolutionsllc.com`) — vault audit / drift / evidence
+- **clearD by MacTech** (`cleard.mactechsolutionsllc.com`) — cleared talent
+- **MacTech Opportunities**, **MacTech Proposal**, **Vetted**, **legacy core** — in development
 
-Future apps register themselves in `AppRegistry` and start showing up in the
-entitlement matrix automatically.
+Each app gets a row in `AppRegistry` with operational metadata (publicUrl,
+healthUrl, repoFullName, railwayServiceId, criticality, lifecycle…) and shows
+up on `/command-center` with live health, drift, and risk signals.
 
-This repository is the platform foundation. It is **not** customer-facing:
-sign-in is restricted to MacTech internal admins and Clerk-provisioned
-customer users. Every admin action is captured in an immutable central audit
-log.
+This repository is **not** customer-facing: sign-in is restricted to MacTech
+internal admins and Clerk-provisioned customer users. Every material action
+is captured in an immutable central audit log.
+
+📖 **See [docs/COMMAND_CENTER.md](docs/COMMAND_CENTER.md)** for the architecture,
+data model, build-info standard, health endpoint standard, slice roadmap, and
+sibling-app implementation guide.
 
 ## Stack
 
