@@ -9,6 +9,10 @@ const isPublicRoute = createRouteMatcher([
   "/api/health",
   "/api/build-info",
   "/api/webhooks/clerk",
+  // GitHub webhook deliveries — auth is HMAC-SHA256 against
+  // GITHUB_WEBHOOK_SECRET, verified inside the route. Skipping the
+  // Clerk middleware here so the route runs at all.
+  "/api/webhooks/github",
   "/api/audit/ingest",
   "/api/v1/(.*)",
 ]);

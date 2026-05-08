@@ -85,9 +85,9 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
   {
     group: "Repositories",
     items: [
-      { href: "#repos", label: "GitHub Repositories", icon: Code2, disabled: true },
-      { href: "#commits", label: "Commit Intelligence", icon: GitBranch, disabled: true },
-      { href: "#workflows", label: "Workflow Runs", icon: PlugZap, disabled: true },
+      { href: "/admin/repositories", label: "GitHub Repositories", icon: Code2 },
+      { href: "/admin/repositories/commits", label: "Commit Intelligence", icon: GitBranch },
+      { href: "/admin/repositories/workflow-runs", label: "Workflow Runs", icon: PlugZap },
       { href: "#release-notes", label: "Release Notes", icon: ScrollText, disabled: true },
     ],
   },

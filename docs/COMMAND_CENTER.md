@@ -143,6 +143,34 @@ It is fault-tolerant: a single app's probe failure cannot crash the run.
 Per-app errors come back in the response payload and end up in the
 `per_app_errors` audit metadata.
 
+## Wiring GitHub sync (Slice 2)
+
+The repository-intelligence leg of `runReconciliation()` is gated by
+`ENABLE_GITHUB_SYNC=true` + a working `GITHUB_TOKEN`. To turn it on:
+
+1. **Create a GitHub PAT** with scopes `repo` (read code metadata + commits + workflow runs) + `read:org` (resolve membership when needed). Fine-grained tokens scoped to the MacTech-Solutions-LLC + WELCOMETOTHETRIBE orgs are preferred.
+2. Set on the Suite Railway service:
+   ```
+   ENABLE_GITHUB_SYNC=true
+   GITHUB_TOKEN=ghp_…
+   GITHUB_WEBHOOK_SECRET=$(openssl rand -hex 32)
+   ```
+3. **Set up a webhook on each tracked repo** (one per repo, or org-wide if you have admin):
+   - URL: `https://www.suite.mactechsolutionsllc.com/api/webhooks/github`
+   - Content-Type: `application/json`
+   - Secret: same as `GITHUB_WEBHOOK_SECRET`
+   - Events: `push`, `pull_request`, `workflow_run`, `check_run`, `release`, `deployment`, `deployment_status`
+4. Trigger the first sync from `/command-center` → "Sync now" or:
+   ```
+   curl -X POST https://www.suite.mactechsolutionsllc.com/api/command-center/sync \
+     -H "Authorization: Bearer $COMMAND_CENTER_CRON_SECRET"
+   ```
+
+Once seeded, the Suite re-syncs each repo every reconciliation, AND
+catches push / workflow_run deliveries via webhook in between cycles.
+Both paths write the same `GitCommitEvent` / `GitWorkflowRun` rows
+idempotently — duplicates are a no-op.
+
 ## Wiring cron on Railway
 
 Slice 1 ships the endpoint; the user runs the sync manually until cron
@@ -160,19 +188,16 @@ is wired. To set it up:
 
 ## Risk rules
 
-Slice 1 implements three:
+Slices 1 + 2 implement six:
 
 | Category                  | Trigger                                                  | Severity (default; bumps with `criticality`) |
 |---------------------------|----------------------------------------------------------|----------------------------------------------|
 | `health_down`             | Probe returns `down`.                                    | `high` (→ critical on mission_critical)      |
 | `degraded`                | Probe returns `degraded`.                                | `medium`                                     |
 | `missing_health_endpoint` | Active production app has no healthUrl OR returns 404.    | `low`                                        |
-
-Slice 2 will add:
-- `production_behind_main` — deployed commit ≠ default-branch HEAD.
-- `failed_workflow` — latest GitHub workflow on default branch failed.
-- `security_sensitive_change` — commit changed a sensitive path
-  (auth, middleware, permissions, prisma/schema, migrations, etc.).
+| `production_behind_main`  | `/api/build-info` commit ≠ GitHub default-branch HEAD, and the compare reports the live SHA is behind. Suppressed when the app has no `liveCommitSha` (covered separately by `missing_build_info` in Slice 3). | `low` for 1-2 commits behind; `medium` for 3+; `high` for 24h+ behind on a high / mission-critical app. |
+| `failed_workflow`         | Most recent GitHub workflow run on the default branch concluded `failure`. | `medium` |
+| `security_sensitive_change` | Most recent commit on the default branch changed a path matching the security-sensitive pattern set (auth, middleware, permissions, prisma/schema, migrations, secrets, env, package, Dockerfile, …). | `low`–`medium` depending on `criticality` |
 
 Slice 3 will add:
 - `failed_deployment`, `crashed_deployment`, `stale_deployment`,
@@ -213,8 +238,8 @@ If you maintain a MacTech app and want it to show up on `/command-center`:
 
 | Slice | Theme                   | Adds                                                     |
 |-------|-------------------------|----------------------------------------------------------|
-| 1     | **Foundation + Health** *(this PR)* | AppRegistry extension, health probing, risk evaluator (3 categories), `/command-center` page, sidebar reshuffle, seed for 12 apps. |
-| 2     | Repository intelligence | GitRepository + AppRepositoryLink + GitCommitEvent + GitWorkflowRun, GitHub client, `/api/webhooks/github`, `/admin/repositories`, drift detection. |
+| 1     | Foundation + Health | AppRegistry extension, health probing, risk evaluator (3 categories), `/command-center` page, sidebar reshuffle, seed for 12 apps. |
+| 2     | **Repository intelligence** *(this PR)* | GitRepository + AppRepositoryLink + GitCommitEvent + GitWorkflowRun, GitHub PAT client, `/api/webhooks/github` (HMAC verified), `/admin/repositories`, `/admin/repositories/commits`, `/admin/repositories/workflow-runs`, three new risk rules (production_behind_main, failed_workflow, security_sensitive_change). Sync runs as part of `runReconciliation()` when `ENABLE_GITHUB_SYNC=true`. |
 | 3     | Deployment intelligence | RailwayResource + DeploymentSnapshot, Railway GraphQL client, `/api/webhooks/railway`, `/admin/ops/deployments`, deployment risk rules. |
 | 4     | Polish + intelligence   | CommitSummary + AppDependency, ecosystem graph, release notes, optional AI summaries. |
 | 5     | **AgentOps**            | Natural-language Command Center: a planner that maps a typed request onto approved agent capabilities, a plan/approve/execute lifecycle, and an audit chain. **Architecture is reserved in [`AGENT_OPS.md`](AGENT_OPS.md); not implemented yet.** Slices 2–4 deliberately keep their primitives reusable so Slice 5 can call into them without rewriting anything. |
