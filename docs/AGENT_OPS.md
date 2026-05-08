@@ -97,6 +97,47 @@ next.
 | `lib/agents/intent/invariants.ts`  | Code-defined invariant registry (19 invariants). |
 | `lib/agents/intent/scope.ts`       | Pre-flight scope checker.                        |
 
+## Slice 5.7 — External trigger (Claude API / M2M)
+
+The original AgentOps doc reserved a "no machine-to-machine endpoint
+until we have a clear threat model" line. **Slice 5.5's IBE gates are
+that threat model.** With goal validation, scope enforcement, and
+invariant checks all running before any side effect lands, M2M
+triggering is safe — every M2M call must declare a complete Intent,
+the orchestrator validates and refuses on contract violation, and the
+human approval gate is preserved for write capabilities (the M2M
+"requester" identity is `api-key:<id>`, never a Clerk admin id, so
+separation of duties is structurally guaranteed).
+
+### What's exposed
+
+| Surface                                | Purpose                                          |
+|----------------------------------------|--------------------------------------------------|
+| `POST /api/v1/agents/runs`             | M2M trigger endpoint. Auth: ApiKey with `agents_trigger` scope. |
+| `lib/agents/external-trigger.ts`       | Service: validates Intent, drives orchestrator, optionally executes read-only plans. |
+| `ApiKeyScope.agents_trigger` (new)     | Per-key scope. Issue + revoke at `/admin/api-keys`. |
+| `AgentRun.triggeredByApiKey*`          | Audit columns: which API key triggered this run. UI shows "M2M-triggered" pill on the detail page. |
+
+### Behavior
+
+1. M2M caller POSTs `{ request, intent: { goal, scopeAppIds, scopeRepoIds, invariants, riskTolerance }, autoExecute? }`.
+2. Auth: `lib/api-auth.ts` verifies the bearer token has `agents_trigger` scope. Failure = 401.
+3. Service synthesizes a non-Clerk requester identity (`api-key:<id>` + `<keyName>@api.mactech`).
+4. `createPlan` runs goal/scope/invariant validation. Failure = 422 + structured error details.
+5. If the plan is fully read-only AND `autoExecute !== false`, the service calls `executeRun` immediately and returns the final status (`completed` / `refused`).
+6. If the plan contains any approval-required step, the run lands in `awaiting_approval` and the response carries `requiresApproval: true` + a `reviewUrl` (`/admin/agents/<id>`) where a human admin must approve via the browser.
+
+### What M2M cannot do
+
+- Skip the IBE gate. `intent.goal` is REQUIRED for M2M (browser callers can opt in; M2M cannot opt out).
+- Skip approval. Even with the trigger scope, the moment a plan emits an approval-required step, execution stops.
+- Self-approve. The synthetic `api-key:<id>` identity guarantees no Clerk admin id collision; any browser-driven admin can approve.
+- Read or mutate secrets. Tokens stay in their integration clients (`OPENAI_API_KEY`, `GITHUB_TOKEN`, `RAILWAY_API_TOKEN`); capabilities operate on resource IDs.
+
+### Claude tool-use registration
+
+The `/admin/agents` page surfaces a copy-paste tool spec (curl + Anthropic Python SDK shapes) that registers `mactech_agent_run` as a Claude tool. The tool's input schema mirrors the API body verbatim, so a Claude conversation can call it directly when given an `agents_trigger`-scoped key via env var.
+
 ## Goal
 
 An authorized MacTech admin types a natural-language request from

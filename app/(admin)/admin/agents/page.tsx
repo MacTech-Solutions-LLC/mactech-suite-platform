@@ -21,6 +21,7 @@ import { plannerLlmConfigured } from "@/lib/agents/llm";
 import { listCapabilities } from "@/lib/agents/capabilities/registry";
 import { listAllInvariants } from "@/lib/agents/intent/invariants";
 import { IntentBuilder } from "@/components/agents/intent-builder";
+import { ClaudeToolSpec } from "@/components/agents/claude-tool-spec";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +57,8 @@ export default async function AgentsPage() {
       />
 
       {canCreate ? <IntentBuilder /> : null}
+
+      {canCreate ? <ClaudeToolSpec /> : null}
 
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-3">

@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   XOctagon,
+  KeyRound,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/admin-shell";
 import { Badge } from "@/components/ui/badge";
@@ -66,13 +67,27 @@ export default async function AgentRunPage({
       <PageHeader
         title="Agent run"
         description={run.planSummary ?? run.requestText}
-        actions={<StatusBadge status={run.status} />}
+        actions={
+          <div className="flex items-center gap-2">
+            {run.triggeredByApiKeyId ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-widest text-primary">
+                <KeyRound className="h-3 w-3" />
+                M2M-triggered
+              </span>
+            ) : null}
+            <StatusBadge status={run.status} />
+          </div>
+        }
       />
 
       <div className="grid gap-4 md:grid-cols-3">
         <Tile
-          label="Requested by"
-          value={run.requestedByEmail}
+          label={run.triggeredByApiKeyId ? "Triggered via API key" : "Requested by"}
+          value={
+            run.triggeredByApiKeyId
+              ? (run.triggeredByApiKeyName ?? run.triggeredByApiKeyId)
+              : run.requestedByEmail
+          }
           subtle={new Date(run.createdAt).toLocaleString()}
         />
         <Tile
