@@ -453,10 +453,114 @@ async function seedLegacyApiKey() {
   console.log("✓ Legacy AUDIT_INGEST_API_KEY registered as ApiKey row");
 }
 
+// MacTech ecosystem dependency edges. Seeded last (after AppRegistry)
+// so all sourceAppKey / targetAppKey lookups resolve. Idempotent on
+// the (source, target, type) tuple — re-running is a no-op for
+// unchanged rows.
+//
+// Sources for the relationship inventory: per the Slice 4 brief, plus
+// what's actually visible in the codebase (capture/codex/governance/
+// quality/training/enclavewatch all forward audit events into the
+// Suite via the audit-ingest API; suite owns identity for all apps).
+const APP_DEPENDENCIES: Array<{
+  sourceAppKey: string;
+  targetAppKey: string;
+  dependencyType:
+    | "api_calls"
+    | "auth_provider"
+    | "shared_database"
+    | "shared_domain"
+    | "shared_component"
+    | "content_source"
+    | "evidence_source"
+    | "training_source"
+    | "capture_source"
+    | "governance_source"
+    | "qms_source"
+    | "vault_source"
+    | "webhook_source"
+    | "other";
+  description: string;
+  criticality: "low" | "medium" | "high" | "mission_critical";
+}> = [
+  // Suite is the auth provider for every customer-facing app.
+  { sourceAppKey: "capture", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "mission_critical" },
+  { sourceAppKey: "codex", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "mission_critical" },
+  { sourceAppKey: "training", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "mission_critical" },
+  { sourceAppKey: "quality", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "mission_critical" },
+  { sourceAppKey: "governance", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "mission_critical" },
+  { sourceAppKey: "enclavewatch", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Auditor allowlist gated through Suite", criticality: "mission_critical" },
+  { sourceAppKey: "cleard", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "high" },
+  { sourceAppKey: "opportunities", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "medium" },
+  { sourceAppKey: "proposal", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "medium" },
+
+  // Suite ingests audit events from every sibling app.
+  { sourceAppKey: "capture", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "high" },
+  { sourceAppKey: "codex", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "high" },
+  { sourceAppKey: "training", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "high" },
+  { sourceAppKey: "quality", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "high" },
+  { sourceAppKey: "governance", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "high" },
+  { sourceAppKey: "enclavewatch", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest + /api/v1/users/{id}/access", criticality: "high" },
+
+  // Cross-app evidence + content flows.
+  { sourceAppKey: "training", targetAppKey: "governance", dependencyType: "evidence_source", description: "Course completions feed audit posture", criticality: "high" },
+  { sourceAppKey: "training", targetAppKey: "codex", dependencyType: "training_source", description: "Evidence-of-training for control 3.2.x", criticality: "high" },
+  { sourceAppKey: "enclavewatch", targetAppKey: "governance", dependencyType: "evidence_source", description: "Vault audit + drift evidence for governance posture", criticality: "mission_critical" },
+  { sourceAppKey: "enclavewatch", targetAppKey: "codex", dependencyType: "vault_source", description: "Signed weekly review acknowledgements + control evidence", criticality: "mission_critical" },
+  { sourceAppKey: "capture", targetAppKey: "proposal", dependencyType: "capture_source", description: "Pursuit + capture data feeds proposal authoring", criticality: "high" },
+  { sourceAppKey: "quality", targetAppKey: "governance", dependencyType: "qms_source", description: "Document control / change records inform governance", criticality: "high" },
+  { sourceAppKey: "codex", targetAppKey: "governance", dependencyType: "governance_source", description: "Control + clause knowledge powers governance workflows", criticality: "high" },
+
+  // Suite is the registry/control shell for all apps.
+  { sourceAppKey: "identity-command-center", targetAppKey: "capture", dependencyType: "shared_component", description: "Suite tracks capture in AppRegistry + entitlements", criticality: "medium" },
+  { sourceAppKey: "identity-command-center", targetAppKey: "codex", dependencyType: "shared_component", description: "Suite tracks codex in AppRegistry + entitlements", criticality: "medium" },
+  { sourceAppKey: "identity-command-center", targetAppKey: "training", dependencyType: "shared_component", description: "Suite tracks training in AppRegistry + entitlements", criticality: "medium" },
+  { sourceAppKey: "identity-command-center", targetAppKey: "quality", dependencyType: "shared_component", description: "Suite tracks quality in AppRegistry + entitlements", criticality: "medium" },
+  { sourceAppKey: "identity-command-center", targetAppKey: "governance", dependencyType: "shared_component", description: "Suite tracks governance in AppRegistry + entitlements", criticality: "medium" },
+  { sourceAppKey: "identity-command-center", targetAppKey: "enclavewatch", dependencyType: "shared_component", description: "Suite tracks enclavewatch in AppRegistry + entitlements", criticality: "medium" },
+];
+
+async function seedAppDependencies() {
+  for (const d of APP_DEPENDENCIES) {
+    const [src, tgt] = await Promise.all([
+      prisma.appRegistry.findUnique({ where: { appKey: d.sourceAppKey }, select: { id: true } }),
+      prisma.appRegistry.findUnique({ where: { appKey: d.targetAppKey }, select: { id: true } }),
+    ]);
+    if (!src || !tgt) {
+      console.warn(
+        `  skip dependency ${d.sourceAppKey} → ${d.targetAppKey} (${d.dependencyType}): missing app`,
+      );
+      continue;
+    }
+    await prisma.appDependency.upsert({
+      where: {
+        sourceAppRegistryId_targetAppRegistryId_dependencyType: {
+          sourceAppRegistryId: src.id,
+          targetAppRegistryId: tgt.id,
+          dependencyType: d.dependencyType,
+        },
+      },
+      create: {
+        sourceAppRegistryId: src.id,
+        targetAppRegistryId: tgt.id,
+        dependencyType: d.dependencyType,
+        description: d.description,
+        criticality: d.criticality,
+      },
+      update: {
+        description: d.description,
+        criticality: d.criticality,
+      },
+    });
+  }
+}
+
 async function main() {
-  console.log("🌱 Seeding Identity Command Center fixtures...");
+  console.log("🌱 Seeding MacTech Suite Command Center fixtures...");
   await seedApps();
   console.log("✓ App registry seeded");
+  await seedAppDependencies();
+  console.log("✓ App dependencies seeded");
   await seedRoleTemplates();
   console.log("✓ Role templates seeded");
   await seedLegacyTenant();
