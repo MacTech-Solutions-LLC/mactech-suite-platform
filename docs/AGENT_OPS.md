@@ -26,6 +26,77 @@ write cannot widen the agent's authority because the planner consults
 the in-process registry, and the orchestrator validates against it again
 at execute time.
 
+## Slice 5.5 — IBE Gates
+
+Slice 5.5 layers Intent-Bound Execution doctrine (see
+`/Users/patrick/IBE/README.md`) on top of the AgentOps runtime. Every
+plan now carries a user-declared **Intent** that the system validates
+up front and enforces during execution. AI output remains a proposal;
+the Intent is the contract.
+
+### What an Intent declares
+
+| Field            | Purpose                                                              |
+|------------------|----------------------------------------------------------------------|
+| `goal`           | Single-sentence machine-checkable goal — verb + measurable outcome.  |
+| `scopeAppIds`    | Apps the run may touch. Empty = unbounded (legitimate fan-out).      |
+| `scopeRepoIds`   | Repos the run may touch. Empty = unbounded.                          |
+| `invariants`     | Per-capability checkbox map: `{ <capabilityKey>: [<invariantKey>] }`. |
+| `riskTolerance`  | `strict` (default) / `moderate` / `permissive`.                      |
+
+### Goal validation rules (ported from IBE)
+
+- 10–240 characters, single sentence ending in a period.
+- Must begin with one of: `ensure`, `prevent`, `maintain`, `enforce`, `guarantee`, `preserve`, `summarize`, `list`, `inspect`, `acknowledge`, `trigger`, `generate`, `create`, `read`.
+- Must contain at least one measurable-outcome keyword (e.g. `risk`, `deployment`, `drift`, `commit`, `count`, `limit`, `threshold`).
+- Must not contain forbidden vague words (`improve`, `better`, `optimize`, `enhance`, `fix`, `refactor`, `clean`, `modernize`, `simplify`, `good`, `bad`, `nice`, `elegant`, `readable`, `maintainable`).
+- Must not contain ambiguous words (`performance`, `efficiency`, `quality`).
+
+### Scope enforcement
+
+Before any step runs, the orchestrator checks every step's `inputJson`
+against `intentScopeAppIds` / `intentScopeRepoIds`. A step naming an
+out-of-scope `appId` or `repoFullName` refuses the run **before any
+side effect lands** — the run transitions directly from `running` (or
+`approved`) to `refused` with `refusalReason` populated.
+
+### Invariant enforcement
+
+Each capability declares 1–3 invariants in
+`lib/agents/intent/invariants.ts`. The user opts in to each via the
+IntentBuilder UI; default-on invariants are pre-checked. After a step
+succeeds, the orchestrator evaluates the user-selected invariants
+against the capability's `summary` output. Pure-logic evaluators (no
+DB calls) keep the gate fast.
+
+When an invariant fails:
+- The step row records the outcome (`invariantResultsJson`,
+  `invariantViolations: true`).
+- An `agent.invariant.violated` audit row lands.
+- Under `strict` or `moderate` tolerance, the run transitions to
+  `refused` with a refusal reason naming the failing invariant on the
+  failing step. Subsequent steps are not executed.
+- Under `permissive`, outcomes are recorded but the run continues.
+
+### New terminal state: `refused`
+
+Distinct from `failed` (which means a step *threw*). `refused` means
+every step ran cleanly but the IBE contract did not hold — either a
+scope check up front or an invariant evaluator after. Surface them
+differently in the UI; they tell different stories about what to do
+next.
+
+### Surfaces shipped
+
+| Surface                            | Purpose                                          |
+|------------------------------------|--------------------------------------------------|
+| `IntentBuilder` component          | Goal + scope + invariants + tolerance picker.    |
+| `POST /api/agents/intent/validate` | Live goal validation for the IntentBuilder.      |
+| `GET /api/agents/registry`         | Catalog: apps / repos / capabilities / invariants. |
+| `lib/agents/intent/validator.ts`   | Goal + scope + invariant validators.             |
+| `lib/agents/intent/invariants.ts`  | Code-defined invariant registry (19 invariants). |
+| `lib/agents/intent/scope.ts`       | Pre-flight scope checker.                        |
+
 ## Goal
 
 An authorized MacTech admin types a natural-language request from

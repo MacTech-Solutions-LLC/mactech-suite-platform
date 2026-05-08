@@ -24,8 +24,12 @@ import { prisma } from "@/lib/db/prisma";
 import { writeAuditLog, redactMetadata } from "@/lib/audit";
 import { getCapability } from "./capabilities/registry";
 import { planFromRequest } from "./planner";
+import { validateIntent } from "./intent/validator";
+import { getInvariant } from "./intent/invariants";
+import { checkScope } from "./intent/scope";
+import type { Intent } from "./intent/types";
 import type { CapabilityContext, CapabilityResult } from "./types";
-import { Prisma } from "@prisma/client";
+import { Prisma, type AgentRiskTolerance } from "@prisma/client";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Plan
@@ -35,14 +39,40 @@ export interface CreatePlanInput {
   request: string;
   requesterClerkUserId: string;
   requesterEmail: string;
+  /**
+   * Optional Intent declaration (Slice 5.5 IBE gates). When present,
+   * the orchestrator validates goal/scope/invariants up front and
+   * persists them on the AgentRun. When absent, the run lands as a
+   * legacy "trust the planner" run with no IBE gate. We keep this
+   * optional so the existing /api/agents/plan callers do not break.
+   */
+  intent?: Intent;
+}
+
+export class IntentValidationFailedError extends Error {
+  constructor(public readonly errors: ReadonlyArray<{ type: string; details: string }>) {
+    super(`Intent validation failed: ${errors.map((e) => e.details).join("; ")}`);
+    this.name = "IntentValidationFailedError";
+  }
 }
 
 export async function createPlan(input: CreatePlanInput): Promise<{
   runId: string;
 }> {
+  // ── IBE goal/scope/invariant validation (when an Intent was declared)
+  let validation: { valid: boolean; errors: { type: string; details: string }[] } | null = null;
+  if (input.intent) {
+    const v = await validateIntent(input.intent);
+    validation = { valid: v.valid, errors: [...v.errors] };
+    if (!v.valid) {
+      throw new IntentValidationFailedError(v.errors);
+    }
+  }
+
   const planned = await planFromRequest(input.request);
   const requiresApproval = planned.steps.some((s) => s.kind === "approval_required");
   const initialStatus = requiresApproval ? "awaiting_approval" : "planned";
+  const intent = input.intent;
 
   const run = await prisma.agentRun.create({
     data: {
@@ -54,6 +84,18 @@ export async function createPlan(input: CreatePlanInput): Promise<{
       requiresApproval,
       requestedByClerkUserId: input.requesterClerkUserId,
       requestedByEmail: input.requesterEmail,
+      // ── IBE intent persistence
+      intentGoal: intent?.goal ?? null,
+      intentRiskTolerance:
+        (intent?.riskTolerance ?? "strict") as AgentRiskTolerance,
+      intentScopeAppIds: intent?.scopeAppIds ?? [],
+      intentScopeRepoIds: intent?.scopeRepoIds ?? [],
+      intentInvariantsJson: intent
+        ? (intent.invariants as Prisma.InputJsonValue)
+        : Prisma.JsonNull,
+      intentValidationJson: validation
+        ? (validation as unknown as Prisma.InputJsonValue)
+        : Prisma.JsonNull,
       steps: {
         create: planned.steps.map((s, i) => ({
           stepIndex: i + 1,
@@ -69,7 +111,7 @@ export async function createPlan(input: CreatePlanInput): Promise<{
   await writeAuditLog({
     eventType: "agent.run.planned",
     eventCategory: "system",
-    action: `agent: planned (${planned.steps.length} step${planned.steps.length === 1 ? "" : "s"}, ${requiresApproval ? "needs approval" : "read-only"})`,
+    action: `agent: planned (${planned.steps.length} step${planned.steps.length === 1 ? "" : "s"}, ${requiresApproval ? "needs approval" : "read-only"})${intent ? " — IBE-gated" : ""}`,
     actorClerkUserId: input.requesterClerkUserId,
     actorEmail: input.requesterEmail,
     resourceType: "agent_run",
@@ -79,6 +121,10 @@ export async function createPlan(input: CreatePlanInput): Promise<{
       stepCount: planned.steps.length,
       requiresApproval,
       capabilities: planned.steps.map((s) => s.capabilityKey),
+      ibeGated: Boolean(intent),
+      riskTolerance: intent?.riskTolerance ?? null,
+      scopeApps: intent?.scopeAppIds.length ?? 0,
+      scopeRepos: intent?.scopeRepoIds.length ?? 0,
     },
   });
 
@@ -207,9 +253,18 @@ export interface ExecuteInput {
  * already be in `approved` status.
  *
  * Steps execute serially; the first failure aborts the run.
+ *
+ * IBE gates (Slice 5.5):
+ *   - Before any step runs, scope is enforced against intentScopeAppIds /
+ *     intentScopeRepoIds. A step naming an out-of-scope resource refuses
+ *     the run (terminal state) before any side effect lands.
+ *   - After each step succeeds, declared invariants are evaluated against
+ *     the capability's CapabilityResult.summary. Any `ok: false` outcome
+ *     under risk_tolerance=strict refuses the run; under permissive,
+ *     outcomes are recorded but never refuse.
  */
 export async function executeRun(input: ExecuteInput): Promise<{
-  status: "completed" | "failed";
+  status: "completed" | "failed" | "refused";
 }> {
   const run = await prisma.agentRun.findUnique({
     where: { id: input.runId },
@@ -225,6 +280,42 @@ export async function executeRun(input: ExecuteInput): Promise<{
       `Run is in status ${run.status}; can only execute when planned or approved.`,
       "wrong_state",
     );
+  }
+
+  // ── IBE pre-flight: scope check on every step's input ──────────────
+  const scopeViolations = await checkScope({
+    scopeAppIds: run.intentScopeAppIds,
+    scopeRepoIds: run.intentScopeRepoIds,
+    steps: run.steps.map((s) => ({
+      stepIndex: s.stepIndex,
+      capabilityKey: s.capabilityKey,
+      inputJson: s.inputJson,
+    })),
+  });
+  if (scopeViolations.length > 0) {
+    const reason = `IBE scope violation: ${scopeViolations
+      .map((v) => `step ${v.stepIndex} (${v.capabilityKey}) ${v.reason}`)
+      .join("; ")}`;
+    await prisma.agentRun.update({
+      where: { id: run.id },
+      data: {
+        status: "refused",
+        completedAt: new Date(),
+        refusalReason: reason,
+      },
+    });
+    await writeAuditLog({
+      eventType: "agent.run.refused",
+      eventCategory: "system",
+      severity: "warning",
+      action: `agent: run refused (scope) — ${reason}`,
+      actorClerkUserId: input.executorClerkUserId,
+      actorEmail: input.executorEmail,
+      resourceType: "agent_run",
+      resourceId: run.id,
+      metadata: { reason: "scope_violation", violations: scopeViolations.length },
+    });
+    return { status: "refused" };
   }
 
   await prisma.agentRun.update({
@@ -243,11 +334,18 @@ export async function executeRun(input: ExecuteInput): Promise<{
     metadata: {
       requesterEmail: run.requestedByEmail,
       stepCount: run.steps.length,
+      ibeGated: Boolean(run.intentGoal),
     },
   });
 
+  // Parse the user-declared invariants (per-capability key map) so each
+  // step's evaluator phase only walks its own subset.
+  const invariantsByCap = parseInvariantsJson(run.intentInvariantsJson);
+
   let failed = false;
+  let refused = false;
   let failureReason: string | null = null;
+  const refusalDetails: string[] = [];
 
   for (const step of run.steps) {
     const cap = getCapability(step.capabilityKey);
@@ -287,6 +385,33 @@ export async function executeRun(input: ExecuteInput): Promise<{
         ctx,
       );
       const completedAt = new Date();
+
+      // ── IBE invariant evaluation on this step ────────────────────────
+      // Walks only the invariants the user explicitly attached to this
+      // step's capabilityKey. Pure-logic evaluators (no DB calls) keep
+      // this fast.
+      const requested = invariantsByCap.get(step.capabilityKey) ?? [];
+      const outcomes = requested
+        .map((invKey) => {
+          const def = getInvariant(step.capabilityKey, invKey);
+          if (!def) return null;
+          try {
+            return def.evaluate(
+              step.inputJson as Record<string, unknown>,
+              result.summary,
+            );
+          } catch (e) {
+            return {
+              invariantKey: invKey,
+              ok: false,
+              actual: null as null,
+              message: `invariant evaluator threw: ${e instanceof Error ? e.message : "unknown"}`,
+            };
+          }
+        })
+        .filter((o): o is NonNullable<typeof o> => o !== null);
+      const stepHasViolations = outcomes.some((o) => !o.ok);
+
       await prisma.$transaction([
         prisma.agentStep.update({
           where: { id: step.id },
@@ -295,6 +420,11 @@ export async function executeRun(input: ExecuteInput): Promise<{
             completedAt,
             durationMs: completedAt.getTime() - startedAt.getTime(),
             outputJson: redactMetadata(result.summary) as Prisma.InputJsonValue,
+            invariantResultsJson:
+              outcomes.length > 0
+                ? (outcomes as unknown as Prisma.InputJsonValue)
+                : Prisma.JsonNull,
+            invariantViolations: stepHasViolations,
           },
         }),
         ...((result.artifacts ?? []).map((a) =>
@@ -312,6 +442,44 @@ export async function executeRun(input: ExecuteInput): Promise<{
           }),
         ) as ReturnType<typeof prisma.agentArtifact.create>[]),
       ]);
+
+      // Refuse the run if invariants violated and tolerance is strict
+      // or moderate. (v1 treats moderate as strict; baseline-snapshot
+      // wiring lands in a follow-up.)
+      if (
+        stepHasViolations &&
+        (run.intentRiskTolerance === "strict" ||
+          run.intentRiskTolerance === "moderate")
+      ) {
+        refused = true;
+        for (const bad of outcomes.filter((o) => !o.ok)) {
+          refusalDetails.push(
+            `step ${step.stepIndex} (${step.capabilityKey}) invariant '${bad.invariantKey}': ${bad.message}`,
+          );
+        }
+        await writeAuditLog({
+          eventType: "agent.invariant.violated",
+          eventCategory: "system",
+          severity: "warning",
+          action: `agent: invariant violation on step ${step.stepIndex} (${step.capabilityKey})`,
+          actorClerkUserId: input.executorClerkUserId,
+          actorEmail: input.executorEmail,
+          resourceType: "agent_run",
+          resourceId: run.id,
+          metadata: {
+            stepIndex: step.stepIndex,
+            capability: step.capabilityKey,
+            failures: outcomes
+              .filter((o) => !o.ok)
+              .map((o) => ({
+                key: o.invariantKey,
+                actual: o.actual,
+                message: o.message,
+              })),
+          },
+        });
+        break;
+      }
     } catch (err) {
       const completedAt = new Date();
       const errorMessage = err instanceof Error ? err.message : "unknown_error";
@@ -331,30 +499,67 @@ export async function executeRun(input: ExecuteInput): Promise<{
   }
 
   const completedAt = new Date();
+  const finalStatus: "failed" | "refused" | "completed" = failed
+    ? "failed"
+    : refused
+      ? "refused"
+      : "completed";
+  const refusalReason =
+    refused && refusalDetails.length > 0
+      ? `IBE invariant violation: ${refusalDetails.join("; ")}`
+      : null;
+
   await prisma.agentRun.update({
     where: { id: run.id },
     data: {
-      status: failed ? "failed" : "completed",
+      status: finalStatus,
       completedAt,
       failureReason,
+      refusalReason,
     },
   });
 
   await writeAuditLog({
-    eventType: failed ? "agent.run.failed" : "agent.run.completed",
+    eventType:
+      finalStatus === "failed"
+        ? "agent.run.failed"
+        : finalStatus === "refused"
+          ? "agent.run.refused"
+          : "agent.run.completed",
     eventCategory: "system",
-    severity: failed ? "warning" : "info",
-    action: failed
-      ? `agent: run failed — ${failureReason ?? "unknown"}`
-      : "agent: run completed",
+    severity: finalStatus === "completed" ? "info" : "warning",
+    action:
+      finalStatus === "failed"
+        ? `agent: run failed — ${failureReason ?? "unknown"}`
+        : finalStatus === "refused"
+          ? `agent: run refused — ${refusalReason ?? "invariant violation"}`
+          : "agent: run completed",
     actorClerkUserId: input.executorClerkUserId,
     actorEmail: input.executorEmail,
     resourceType: "agent_run",
     resourceId: run.id,
-    metadata: { stepCount: run.steps.length, failed },
+    metadata: {
+      stepCount: run.steps.length,
+      failed,
+      refused,
+    },
   });
 
-  return { status: failed ? "failed" : "completed" };
+  return { status: finalStatus };
+}
+
+function parseInvariantsJson(raw: unknown): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (Array.isArray(v)) {
+      out.set(
+        k,
+        v.filter((x): x is string => typeof x === "string"),
+      );
+    }
+  }
+  return out;
 }
 
 // ───────────────────────────────────────────────────────────────────────────

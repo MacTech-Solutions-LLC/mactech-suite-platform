@@ -19,7 +19,8 @@ import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
 import { plannerLlmConfigured } from "@/lib/agents/llm";
 import { listCapabilities } from "@/lib/agents/capabilities/registry";
-import { PlanForm } from "@/components/agents/plan-form";
+import { listAllInvariants } from "@/lib/agents/intent/invariants";
+import { IntentBuilder } from "@/components/agents/intent-builder";
 
 export const dynamic = "force-dynamic";
 
@@ -35,25 +36,26 @@ export default async function AgentsPage() {
   const caps = listCapabilities();
   const readOnly = caps.filter((c) => c.kind === "read_only").length;
   const approval = caps.filter((c) => c.kind === "approval_required").length;
+  const invariantCount = listAllInvariants().length;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Agents"
-        description={`Natural-language requests against the Command Center. Every plan goes through review before any write executes; read-only summaries run on the requester's own permission set. ${
+        description={`IBE-gated agent runtime. Every plan declares a goal, scope, and indicators; the orchestrator refuses runs that violate the contract. Read-only summaries run on the requester's permission set; writes still go through human approval. ${
           llmOn
             ? "LLM planner is on."
-            : "LLM planner is off — set ENABLE_AI_PLANNER=true + OPENAI_API_KEY to enable; deterministic keyword planner is the fallback."
+            : "LLM planner is off — deterministic keyword planner is the fallback."
         }`}
         actions={
           <span className="text-xs text-muted-foreground">
             <Bot className="mr-1 inline h-3 w-3" />
-            {readOnly} read-only · {approval} approval-required capabilities
+            {readOnly} read-only · {approval} write capabilities · {invariantCount} invariants
           </span>
         }
       />
 
-      {canCreate ? <PlanForm /> : null}
+      {canCreate ? <IntentBuilder /> : null}
 
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-3">
@@ -124,6 +126,8 @@ function StatusBadge({ status }: { status: string }) {
       case "rejected":
       case "cancelled":
         return "destructive";
+      case "refused":
+        return "warning";
       case "awaiting_approval":
         return "warning";
       case "running":

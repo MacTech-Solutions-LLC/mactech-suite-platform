@@ -1259,6 +1259,21 @@ enum AgentRunStatus {
   completed
   failed
   cancelled
+  // IBE gate (Slice 5.5): every step ran, but at least one declared
+  // invariant did not hold. Distinct from `failed` (which means a step
+  // threw); a `refused` run executed cleanly but did not satisfy the
+  // user's declared intent contract.
+  refused
+}
+
+enum AgentRiskTolerance {
+  // Any invariant violation refuses the run. Default for bulk actions.
+  strict
+  // Only NEW violations (vs. baseline state) refuse. v1 still treats
+  // moderate as "any violation" pending baseline-snapshot wiring.
+  moderate
+  // Invariants are evaluated + recorded but never refuse the run.
+  permissive
 }
 
 enum AgentStepStatus {
@@ -1325,6 +1340,32 @@ model AgentRun {
   completedAt DateTime?
   failureReason String?
 
+  // ── Slice 5.5: IBE Gates ─────────────────────────────────────────────
+  // The user-declared Intent the run must satisfy. Stored verbatim so
+  // assessors can replay both the request and the contract it carried.
+  // Validation rules are ported from /Users/patrick/IBE/src/intent.
+  intentGoal           String?              @db.Text
+  intentRiskTolerance  AgentRiskTolerance   @default(strict)
+  // Resource-scope: which apps/repos this call is allowed to touch.
+  // Empty array == unbounded (legacy runs and read-only fan-outs).
+  // Stored as String[] (Postgres text[]) so we can index later if
+  // needed; the orchestrator validates each step's input against
+  // these arrays before execution.
+  intentScopeAppIds    String[]             @default([])
+  intentScopeRepoIds   String[]             @default([])
+  // User-selected invariant keys grouped by capability:
+  //   { "<capabilityKey>": ["<invariantKey>", ...], ... }
+  // The orchestrator only enforces invariants the user explicitly
+  // checked — nothing implicit, nothing surprising.
+  intentInvariantsJson Json?
+  // Validation outcome for the goal text + scope + invariants. Captured
+  // even on accepted runs so an admin can audit the validator's pass
+  // history. Shape: { errors: ValidationError[], passed: boolean }.
+  intentValidationJson Json?
+  // Refusal explanation when status=refused. Lists which invariants
+  // failed on which steps so the operator can act.
+  refusalReason        String?              @db.Text
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1363,6 +1404,15 @@ model AgentStep {
   // Raw error message on failure, redacted. Stored for assessor replay.
   errorMessage    String?         @db.Text
   durationMs      Int?
+
+  // ── Slice 5.5: IBE invariant results ───────────────────────────────
+  // List of { key, ok, actual, message } objects — one per invariant
+  // the user requested for this step's capability. Recorded on every
+  // step so a `refused` run is post-mortem-able without re-running.
+  invariantResultsJson Json?
+  // True when at least one declared invariant on this step did not
+  // hold (regardless of run-level risk_tolerance).
+  invariantViolations  Boolean    @default(false)
 
   startedAt   DateTime?
   completedAt DateTime?
