@@ -59,6 +59,16 @@ const APP_FIXTURES = [
     status: "active" as const,
   },
   {
+    appKey: "cleard",
+    name: "clearD by MacTech Solutions",
+    description: "Cleared talent network and sourcing platform for mission-ready defense work.",
+    category: "other" as const,
+    baseUrl: "https://cleard.mactechsolutionsllc.com",
+    requiresOrgContext: true,
+    isInternalOnly: false,
+    status: "active" as const,
+  },
+  {
     appKey: "identity-command-center",
     name: "Identity Command Center",
     description: "Central SSO, RBAC, entitlement, and audit hub for the suite.",

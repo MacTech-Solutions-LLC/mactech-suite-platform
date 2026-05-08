@@ -7,6 +7,7 @@ Suite. The live apps registered today are:
 - **MacTech Codex** (`codex.mactechsolutionsllc.com`) — CMMC compliance plane
 - **MacTech Training** (`training.mactechsolutionsllc.com`) — training courses
 - **MacTech Quality** (`quality.mactechsolutionsllc.com`) — document control / QMS
+- **clearD by MacTech Solutions** (`cleard.mactechsolutionsllc.com`) — cleared talent network and sourcing
 
 Future apps register themselves in `AppRegistry` and start showing up in the
 entitlement matrix automatically.

@@ -17,6 +17,7 @@ This directory is the operating index for MacTech Suite Platform foundation work
 - QMS readiness notes: `../03-qms-readiness/qms-readiness-notes.md`
 - Evidence index: `../04-evidence/evidence-index.md`
 - Platform architecture: `../05-architecture/platform-architecture.md`
+- clearD onboarding: `./cleard-production-onboarding.md`
 - Decisions: `../06-decisions/`
 
 ## Routine Workflow
