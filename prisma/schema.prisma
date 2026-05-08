@@ -26,13 +26,13 @@ enum MembershipRole {
 }
 
 model Tenant {
-  id          String   @id @default(cuid())
-  externalId  String?  @unique
-  name        String
-  slug        String   @unique
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  externalId String?  @unique
+  name       String
+  slug       String   @unique
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   memberships Membership[]
   auditEvents AuditEvent[]
@@ -43,14 +43,14 @@ model Tenant {
 }
 
 model User {
-  id          String   @id @default(cuid())
-  externalId  String   @unique
-  email       String   @unique
-  name        String?
-  avatarUrl   String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  externalId String   @unique
+  email      String   @unique
+  name       String?
+  avatarUrl  String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   memberships Membership[]
   auditEvents AuditEvent[]
@@ -119,15 +119,15 @@ model Project {
 }
 
 model Document {
-  id          String   @id @default(cuid())
-  tenantId    String
-  projectId   String?
-  title       String
-  content     String?
-  status      String   @default("draft")
-  createdBy   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  tenantId  String
+  projectId String?
+  title     String
+  content   String?
+  status    String   @default("draft")
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([tenantId])
   @@index([projectId])
@@ -208,6 +208,81 @@ enum AppCategory {
   training
   admin
   other
+}
+
+// ============================================================================
+// COMMAND CENTER OPERATIONAL ENUMS
+// ============================================================================
+
+enum AppCriticality {
+  low
+  medium
+  high
+  mission_critical
+}
+
+enum AppLifecycle {
+  planned
+  development
+  staging
+  production
+  deprecated
+  retired
+}
+
+enum AppVisibility {
+  internal
+  customer
+  hybrid
+}
+
+enum HealthStatus {
+  up
+  degraded
+  down
+  unknown
+}
+
+enum RiskSeverity {
+  info
+  low
+  medium
+  high
+  critical
+}
+
+enum RiskStatus {
+  open
+  acknowledged
+  resolved
+  ignored
+}
+
+enum RiskCategory {
+  health_down
+  degraded
+  failed_deployment
+  crashed_deployment
+  failed_workflow
+  production_behind_main
+  stale_deployment
+  security_sensitive_change
+  database_change
+  auth_change
+  env_config_change
+  webhook_failure
+  missing_health_endpoint
+  missing_build_info
+  missing_repo_mapping
+  missing_railway_mapping
+}
+
+enum IntegrationProvider {
+  github
+  railway
+  cloudflare
+  clerk
+  internal
 }
 
 enum EntitlementPlan {
@@ -333,25 +408,81 @@ model CustomerOrganization {
   @@index([customerType])
 }
 
+// AppRegistry is the canonical source of truth for every MacTech app.
+// Suite is the product; Command Center is the flagship capability —
+// the operational fields below let `/command-center` answer "which apps
+// exist, where do they live, are they healthy, are they behind main".
 model AppRegistry {
-  id                String      @id @default(cuid())
-  appKey            String      @unique
-  name              String
-  description       String?
-  baseUrl           String?
-  status            AppStatus   @default(active)
-  category          AppCategory @default(other)
-  requiresOrgContext Boolean    @default(true)
-  isInternalOnly    Boolean     @default(false)
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  id                 String      @id @default(cuid())
+  appKey             String      @unique
+  name               String
+  description        String?
+  baseUrl            String?
+  status             AppStatus   @default(active)
+  category           AppCategory @default(other)
+  requiresOrgContext Boolean     @default(true)
+  isInternalOnly     Boolean     @default(false)
 
-  entitlements ProductEntitlement[]
-  auditLogs    AuditLog[]
+  // ── Command Center operational metadata ──────────────────────────────
+  // Slug used in URLs and join keys when appKey isn't url-safe enough.
+  slug                    String?        @unique
+  // Public-facing URL the customer hits. e.g. https://capture.mactechsolutionsllc.com
+  publicUrl               String?
+  // Admin/console URL inside the app, when distinct from publicUrl.
+  adminUrl                String?
+  // Health endpoint the Suite probes during reconciliation. /api/health convention.
+  healthUrl               String?
+  // Build-info endpoint exposing { service, commitSha, branch, ... } per the
+  // standard documented in docs/COMMAND_CENTER.md.
+  buildInfoUrl            String?
+  docsUrl                 String?
+  supportUrl              String?
+  // Subdomain (e.g. "capture") + apex domain (e.g. "mactechsolutionsllc.com")
+  // used by the Subdomains registry view.
+  subdomain               String?
+  apexDomain              String?
+  criticality             AppCriticality @default(medium)
+  lifecycle               AppLifecycle   @default(production)
+  visibility              AppVisibility  @default(customer)
+  ownerName               String?
+  ownerEmail              String?
+  // Repository linkage. Slice 2 hangs GitRepository / AppRepositoryLink off
+  // these — for slice 1 we record raw fullName + branch so the seed can
+  // populate them now and the GitRepository sync can backfill later.
+  repoFullName            String?
+  repoDefaultBranch       String?        @default("main")
+  // Railway linkage. Same story — slice 3 promotes these into RailwayResource
+  // rows; slice 1 keeps them flat so the page can show "this app maps to
+  // <project>/<service>" the moment seed data lands.
+  railwayProjectId        String?
+  railwayServiceId        String?
+  railwayEnvironmentId    String?
+  railwayEnvironmentName  String?        @default("production")
+  cloudflareZoneId        String?
+  cloudflareHostname      String?
+  // Free-form JSON describing which compliance domains this app touches
+  // (e.g. {"cmmc": ["3.3.1", "3.3.2"], "iso27001": ["A.9.2.5"]}).
+  complianceRelevanceJson Json?
+  dependencyNotes         String?
+  operationalNotes        String?
+  lastObservedAt          DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entitlements      ProductEntitlement[]
+  auditLogs         AuditLog[]
+  healthSnapshots   HealthCheckSnapshot[]
+  riskFlags         OperationalRiskFlag[]
+  integrationEvents IntegrationEvent[]
 
   @@index([appKey])
+  @@index([slug])
   @@index([status])
   @@index([category])
+  @@index([criticality])
+  @@index([lifecycle])
+  @@index([repoFullName])
 }
 
 model ProductEntitlement {
@@ -496,19 +627,19 @@ enum ApiKeyScope {
 /// creation time and never retrievable again. Scopes restrict which
 /// endpoints a key can hit.
 model ApiKey {
-  id          String       @id @default(cuid())
+  id          String        @id @default(cuid())
   name        String
-  keyHash     String       @unique
+  keyHash     String        @unique
   keyPrefix   String // first 12 chars of plaintext, for display ("mts_a1b2c3d4..."")
   scopes      ApiKeyScope[]
   appKey      String? // optional: tag this key as belonging to a specific MacTech app
   description String?
   createdById String?
-  status      ApiKeyStatus @default(active)
+  status      ApiKeyStatus  @default(active)
   lastUsedAt  DateTime?
   expiresAt   DateTime?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
   @@index([keyHash])
   @@index([status])
@@ -559,19 +690,19 @@ model WebhookSubscription {
 }
 
 model WebhookDelivery {
-  id                String                @id @default(cuid())
-  subscriptionId    String
-  eventId           String // matches AuditLog.id when the trigger was an audit-worthy event
-  eventType         String
-  status            WebhookDeliveryStatus @default(pending)
-  attemptCount      Int                   @default(0)
-  responseStatus    Int?
-  responseBodyHead  String? // first ~512 chars of the response, for debugging
-  errorMessage      String?
-  payloadJson       Json
-  scheduledAt       DateTime              @default(now())
-  deliveredAt       DateTime?
-  nextAttemptAt     DateTime?
+  id               String                @id @default(cuid())
+  subscriptionId   String
+  eventId          String // matches AuditLog.id when the trigger was an audit-worthy event
+  eventType        String
+  status           WebhookDeliveryStatus @default(pending)
+  attemptCount     Int                   @default(0)
+  responseStatus   Int?
+  responseBodyHead String? // first ~512 chars of the response, for debugging
+  errorMessage     String?
+  payloadJson      Json
+  scheduledAt      DateTime              @default(now())
+  deliveredAt      DateTime?
+  nextAttemptAt    DateTime?
 
   subscription WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
@@ -579,4 +710,92 @@ model WebhookDelivery {
   @@index([status])
   @@index([eventType])
   @@index([scheduledAt])
+}
+
+// ============================================================================
+// COMMAND CENTER — operational telemetry
+// ============================================================================
+
+// One row per health probe. Drives /command-center's "is the ecosystem
+// healthy right now" tile and feeds the risk evaluator.
+model HealthCheckSnapshot {
+  id               String       @id @default(cuid())
+  appRegistryId    String
+  url              String
+  status           HealthStatus @default(unknown)
+  statusCode       Int?
+  latencyMs        Int?
+  // First 512 chars of the response body so a flaky build-info JSON is
+  // diagnosable without storing a full payload.
+  responseBodyHead String?
+  errorMessage     String?
+  checkedAt        DateTime     @default(now())
+  createdAt        DateTime     @default(now())
+
+  app AppRegistry @relation(fields: [appRegistryId], references: [id], onDelete: Cascade)
+
+  @@index([appRegistryId, checkedAt(sort: Desc)])
+  @@index([status])
+  @@index([checkedAt(sort: Desc)])
+}
+
+// One row per derived operational risk. Created idempotently by the
+// evaluator: while the underlying condition holds, we keep ONE open row;
+// when the condition resolves, we set resolvedAt + status=resolved rather
+// than deleting so the audit trail is intact.
+model OperationalRiskFlag {
+  id              String       @id @default(cuid())
+  appRegistryId   String?
+  // Slice 2 fills this in for repo-level risks (security_sensitive_change,
+  // failed_workflow). Slice 1 only emits app-level risks.
+  gitRepositoryId String?
+  severity        RiskSeverity @default(medium)
+  status          RiskStatus   @default(open)
+  category        RiskCategory
+  title           String
+  description     String?
+  detectedAt      DateTime     @default(now())
+  resolvedAt      DateTime?
+  acknowledgedAt  DateTime?
+  acknowledgedBy  String? // email of the actor that acked it
+  metadataJson    Json?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  app AppRegistry? @relation(fields: [appRegistryId], references: [id], onDelete: SetNull)
+
+  // Idempotency: at most one OPEN flag of a given (app, category) pair at
+  // a time. The evaluator finds an existing row instead of stacking new
+  // ones every reconciliation cycle.
+  @@unique([appRegistryId, category, status], name: "idempotent_open_flag")
+  @@index([severity])
+  @@index([status])
+  @@index([category])
+  @@index([detectedAt(sort: Desc)])
+}
+
+// Thin event envelope for ANY external integration event we receive
+// (slice 2: GitHub webhooks; slice 3: Railway webhooks). Slice 1 only
+// emits 'internal' provider rows tagging reconciliation runs so the
+// timeline still has something to show before the webhooks land.
+model IntegrationEvent {
+  id              String              @id @default(cuid())
+  provider        IntegrationProvider
+  eventType       String
+  eventAction     String?
+  resourceType    String?
+  resourceId      String?
+  appRegistryId   String?
+  gitRepositoryId String?
+  severity        RiskSeverity        @default(info)
+  payloadJson     Json?
+  receivedAt      DateTime            @default(now())
+  processedAt     DateTime?
+  createdAt       DateTime            @default(now())
+
+  app AppRegistry? @relation(fields: [appRegistryId], references: [id], onDelete: SetNull)
+
+  @@index([provider, receivedAt(sort: Desc)])
+  @@index([eventType])
+  @@index([appRegistryId, receivedAt(sort: Desc)])
 }

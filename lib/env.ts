@@ -21,6 +21,45 @@ const RawEnvSchema = z.object({
   NEXT_PUBLIC_CLERK_SIGN_UP_URL: z.string().default("/sign-up"),
   NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: z.string().default("/dashboard"),
   NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL: z.string().default("/dashboard"),
+
+  // ── Auditor IP-allowlist portal (vault edge) ───────────────────────────
+  VAULT_ADMIN_BASE_URL: z.string().optional(),
+  VAULT_ADMIN_HMAC_SECRET: z.string().optional(),
+
+  // ── MacTech Command Center ─────────────────────────────────────────────
+  // Shared secret protecting POST /api/command-center/sync when called
+  // by cron from outside an authenticated browser session.
+  COMMAND_CENTER_CRON_SECRET: z.string().optional(),
+  // Per-probe HTTP timeout for /api/health and /api/build-info checks.
+  HEALTH_CHECK_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
+  HEALTH_CHECK_USER_AGENT: z.string().default("MacTechCommandCenter/1.0"),
+  // Master toggle so the reconciliation worker can be disabled without
+  // ripping the cron config out.
+  ENABLE_HEALTH_CHECKS: z
+    .string()
+    .default("true")
+    .transform((v) => v.toLowerCase() !== "false"),
+  // Sliced in later. Stub'd here so .env.example carries the contract
+  // and lib/env.ts type-checks every consumer from day 1.
+  ENABLE_GITHUB_SYNC: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
+  ENABLE_RAILWAY_SYNC: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
+  ENABLE_AI_SUMMARIES: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
+  GITHUB_TOKEN: z.string().optional(),
+  GITHUB_WEBHOOK_SECRET: z.string().optional(),
+  RAILWAY_API_TOKEN: z.string().optional(),
+  RAILWAY_WEBHOOK_SECRET: z.string().optional(),
+  CLOUDFLARE_API_TOKEN: z.string().optional(),
+  CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
 });
 
 const parsed = RawEnvSchema.safeParse(process.env);
@@ -63,6 +102,18 @@ export function auditIngestionConfigured(): boolean {
   return Boolean(env.AUDIT_INGEST_API_KEY);
 }
 
+export function commandCenterCronConfigured(): boolean {
+  return Boolean(env.COMMAND_CENTER_CRON_SECRET);
+}
+
+export function githubSyncConfigured(): boolean {
+  return Boolean(env.ENABLE_GITHUB_SYNC && env.GITHUB_TOKEN);
+}
+
+export function railwaySyncConfigured(): boolean {
+  return Boolean(env.ENABLE_RAILWAY_SYNC && env.RAILWAY_API_TOKEN);
+}
+
 export function envHealth(): Array<{ key: string; ok: boolean; required: boolean }> {
   return [
     { key: "DATABASE_URL", ok: Boolean(env.DATABASE_URL), required: true },
@@ -75,5 +126,8 @@ export function envHealth(): Array<{ key: string; ok: boolean; required: boolean
     { key: "CLERK_WEBHOOK_SECRET", ok: Boolean(env.CLERK_WEBHOOK_SECRET), required: false },
     { key: "AUDIT_INGEST_API_KEY", ok: Boolean(env.AUDIT_INGEST_API_KEY), required: false },
     { key: "NEXT_PUBLIC_APP_URL", ok: Boolean(env.NEXT_PUBLIC_APP_URL), required: true },
+    { key: "COMMAND_CENTER_CRON_SECRET", ok: Boolean(env.COMMAND_CENTER_CRON_SECRET), required: false },
+    { key: "GITHUB_TOKEN", ok: Boolean(env.GITHUB_TOKEN), required: false },
+    { key: "RAILWAY_API_TOKEN", ok: Boolean(env.RAILWAY_API_TOKEN), required: false },
   ];
 }

@@ -1,0 +1,274 @@
+/**
+ * Top-level reconciliation orchestrator + status aggregator for the
+ * MacTech Command Center. Slice 1 surface:
+ *   - runReconciliation()  — probe every active app, reconcile risks,
+ *                            emit IntegrationEvent + AuditLog summary.
+ *                            Fault-tolerant: one app's failure cannot
+ *                            crash the whole run.
+ *   - getCommandCenterStatus() — aggregate counts for the overview tiles.
+ *   - getAppOperationalSnapshots() — hydrated app rows for the apps list.
+ *   - getOpenRiskFlags() — risk feed for the page.
+ *
+ * Future slices extend runReconciliation with the GitHub + Railway sync
+ * legs without touching the contract here.
+ */
+
+import { prisma } from "@/lib/db/prisma";
+import { writeAuditLog } from "@/lib/audit";
+import { probeAndPersist } from "./health-check-service";
+import { reconcileRisksForApp } from "./risk-service";
+import type {
+  AppRegistry,
+  HealthCheckSnapshot,
+  HealthStatus,
+  OperationalRiskFlag,
+  RiskSeverity,
+} from "@prisma/client";
+
+// ─── Reconciliation ───────────────────────────────────────────────────────
+
+export interface ReconciliationOutcome {
+  startedAt: Date;
+  finishedAt: Date;
+  durationMs: number;
+  appsProbed: number;
+  appsHealthy: number;
+  appsDegraded: number;
+  appsDown: number;
+  appsUnknown: number;
+  risksOpened: number;
+  risksResolved: number;
+  perAppErrors: Array<{ appKey: string; error: string }>;
+  trigger: ReconciliationTrigger;
+}
+
+export type ReconciliationTrigger = "manual" | "cron" | "boot";
+
+export async function runReconciliation(
+  trigger: ReconciliationTrigger,
+  triggeredByEmail?: string | null,
+): Promise<ReconciliationOutcome> {
+  const startedAt = new Date();
+  const apps = await prisma.appRegistry.findMany({
+    where: { status: "active" },
+    orderBy: { name: "asc" },
+  });
+
+  let appsHealthy = 0,
+    appsDegraded = 0,
+    appsDown = 0,
+    appsUnknown = 0;
+  let risksOpened = 0,
+    risksResolved = 0;
+  const perAppErrors: Array<{ appKey: string; error: string }> = [];
+
+  for (const app of apps) {
+    try {
+      const probeResult = await probeAndPersist(app);
+      switch (probeResult.probe.status) {
+        case "up":
+          appsHealthy++;
+          break;
+        case "degraded":
+          appsDegraded++;
+          break;
+        case "down":
+          appsDown++;
+          break;
+        case "unknown":
+          appsUnknown++;
+          break;
+      }
+      const riskOutcome = await reconcileRisksForApp({
+        app,
+        probe: probeResult.probe,
+      });
+      risksOpened += riskOutcome.opened.length;
+      risksResolved += riskOutcome.resolved.length;
+    } catch (err) {
+      perAppErrors.push({
+        appKey: app.appKey,
+        error: err instanceof Error ? err.message : "unknown_error",
+      });
+    }
+  }
+
+  const finishedAt = new Date();
+  const durationMs = finishedAt.getTime() - startedAt.getTime();
+
+  // One IntegrationEvent so the timeline always has the run.
+  await prisma.integrationEvent.create({
+    data: {
+      provider: "internal",
+      eventType: "command_center.reconciliation.completed",
+      eventAction: trigger,
+      severity: perAppErrors.length > 0 ? "medium" : "info",
+      processedAt: finishedAt,
+      payloadJson: {
+        trigger,
+        triggered_by_email: triggeredByEmail ?? null,
+        apps_probed: apps.length,
+        apps_healthy: appsHealthy,
+        apps_degraded: appsDegraded,
+        apps_down: appsDown,
+        apps_unknown: appsUnknown,
+        risks_opened: risksOpened,
+        risks_resolved: risksResolved,
+        per_app_errors: perAppErrors,
+        duration_ms: durationMs,
+      },
+    },
+  });
+
+  await writeAuditLog({
+    eventType: "command_center.reconciliation.completed",
+    eventCategory: "system",
+    severity: appsDown > 0 ? "warning" : "info",
+    action: `Reconciliation (${trigger}): ${appsHealthy} up, ${appsDegraded} degraded, ${appsDown} down, ${appsUnknown} unknown · +${risksOpened} risks, -${risksResolved} resolved · ${durationMs}ms`,
+    actorEmail: triggeredByEmail ?? null,
+    metadata: {
+      trigger,
+      apps_probed: apps.length,
+      apps_healthy: appsHealthy,
+      apps_degraded: appsDegraded,
+      apps_down: appsDown,
+      apps_unknown: appsUnknown,
+      risks_opened: risksOpened,
+      risks_resolved: risksResolved,
+      per_app_errors: perAppErrors,
+      duration_ms: durationMs,
+    },
+  });
+
+  return {
+    startedAt,
+    finishedAt,
+    durationMs,
+    appsProbed: apps.length,
+    appsHealthy,
+    appsDegraded,
+    appsDown,
+    appsUnknown,
+    risksOpened,
+    risksResolved,
+    perAppErrors,
+    trigger,
+  };
+}
+
+// ─── Status aggregation ───────────────────────────────────────────────────
+
+export interface CommandCenterStatus {
+  totalApps: number;
+  byHealth: Record<HealthStatus, number>;
+  bySeverity: Record<RiskSeverity, number>;
+  openRiskCount: number;
+  criticalRiskCount: number;
+  appsMissingHealthUrl: number;
+  lastReconciliationAt: Date | null;
+  lastReconciliationOutcome: "ok" | "with_errors" | null;
+}
+
+export async function getCommandCenterStatus(): Promise<CommandCenterStatus> {
+  const [apps, openRisks, lastRecon] = await Promise.all([
+    prisma.appRegistry.findMany({
+      where: { status: "active" },
+      select: {
+        id: true,
+        appKey: true,
+        healthUrl: true,
+        healthSnapshots: {
+          orderBy: { checkedAt: "desc" },
+          take: 1,
+          select: { status: true },
+        },
+      },
+    }),
+    prisma.operationalRiskFlag.findMany({
+      where: { status: "open" },
+      select: { severity: true },
+    }),
+    prisma.integrationEvent.findFirst({
+      where: { eventType: "command_center.reconciliation.completed" },
+      orderBy: { receivedAt: "desc" },
+      select: { receivedAt: true, severity: true },
+    }),
+  ]);
+
+  const byHealth: Record<HealthStatus, number> = { up: 0, degraded: 0, down: 0, unknown: 0 };
+  let appsMissingHealthUrl = 0;
+  for (const a of apps) {
+    if (!a.healthUrl) appsMissingHealthUrl++;
+    const latest = a.healthSnapshots[0]?.status ?? "unknown";
+    byHealth[latest]++;
+  }
+
+  const bySeverity: Record<RiskSeverity, number> = {
+    info: 0,
+    low: 0,
+    medium: 0,
+    high: 0,
+    critical: 0,
+  };
+  for (const r of openRisks) bySeverity[r.severity]++;
+
+  return {
+    totalApps: apps.length,
+    byHealth,
+    bySeverity,
+    openRiskCount: openRisks.length,
+    criticalRiskCount: bySeverity.critical + bySeverity.high,
+    appsMissingHealthUrl,
+    lastReconciliationAt: lastRecon?.receivedAt ?? null,
+    lastReconciliationOutcome: lastRecon
+      ? lastRecon.severity === "info"
+        ? "ok"
+        : "with_errors"
+      : null,
+  };
+}
+
+// ─── App snapshots (page list) ────────────────────────────────────────────
+
+export interface AppOperationalSnapshot {
+  app: AppRegistry;
+  latestHealth: HealthCheckSnapshot | null;
+  openRisks: OperationalRiskFlag[];
+}
+
+export async function getAppOperationalSnapshots(): Promise<AppOperationalSnapshot[]> {
+  const apps = await prisma.appRegistry.findMany({
+    where: { status: "active" },
+    orderBy: [{ criticality: "desc" }, { name: "asc" }],
+    include: {
+      healthSnapshots: {
+        orderBy: { checkedAt: "desc" },
+        take: 1,
+      },
+      riskFlags: {
+        where: { status: "open" },
+        orderBy: [{ severity: "desc" }, { detectedAt: "desc" }],
+      },
+    },
+  });
+  return apps.map((a) => ({
+    app: a,
+    latestHealth: a.healthSnapshots[0] ?? null,
+    openRisks: a.riskFlags,
+  }));
+}
+
+// ─── Risk feed ─────────────────────────────────────────────────────────────
+
+export async function getOpenRiskFlags(limit = 50): Promise<
+  Array<OperationalRiskFlag & { app: { appKey: string; name: string } | null }>
+> {
+  return prisma.operationalRiskFlag.findMany({
+    where: { status: "open" },
+    orderBy: [{ severity: "desc" }, { detectedAt: "desc" }],
+    take: limit,
+    include: {
+      app: { select: { appKey: true, name: true } },
+    },
+  });
+}

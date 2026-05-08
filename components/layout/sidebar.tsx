@@ -16,17 +16,43 @@ import {
   Hexagon,
   Webhook,
   TerminalSquare,
+  Compass,
+  Network,
+  Globe2,
+  GitBranch,
+  Code2,
+  Rocket,
+  Activity,
+  AlertOctagon,
+  PlugZap,
+  Cloud,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const NAV: Array<{
-  group: string;
-  items: Array<{ href: string; label: string; icon: React.ComponentType<{ className?: string }> }>;
-}> = [
+/**
+ * MacTech Suite sidebar — destination structure for the Command Center
+ * era. Suite IS the product; Command Center IS the flagship capability.
+ * Repository / Operations / Subdomains groups are placeholders for the
+ * routes that land in slices 2-4; their nav entries are visible from
+ * day one so the muscle memory matches the destination.
+ *
+ * Disabled items are routed to "#" + aria-disabled so a click in this
+ * slice doesn't 404 — they light up as soon as their slice ships.
+ */
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  disabled?: boolean;
+};
+
+const NAV: Array<{ group: string; items: NavItem[] }> = [
   {
     group: "Overview",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/command-center", label: "Command Center", icon: Compass },
     ],
   },
   {
@@ -43,6 +69,26 @@ const NAV: Array<{
       { href: "/admin/product-access", label: "Product Access", icon: Boxes },
       { href: "/admin/roles", label: "Roles & Permissions", icon: KeyRound },
       { href: "/admin/app-registry", label: "App Registry", icon: PackageSearch },
+      { href: "#subdomains", label: "Subdomains", icon: Globe2, disabled: true },
+    ],
+  },
+  {
+    group: "Operations",
+    items: [
+      { href: "#ecosystem", label: "Ecosystem", icon: Network, disabled: true },
+      { href: "#deployments", label: "Railway Deployments", icon: Rocket, disabled: true },
+      { href: "#health", label: "Health Checks", icon: Activity, disabled: true },
+      { href: "#incidents", label: "Incidents", icon: AlertOctagon, disabled: true },
+      { href: "#runtime-risk", label: "Runtime Risk", icon: Siren, disabled: true },
+    ],
+  },
+  {
+    group: "Repositories",
+    items: [
+      { href: "#repos", label: "GitHub Repositories", icon: Code2, disabled: true },
+      { href: "#commits", label: "Commit Intelligence", icon: GitBranch, disabled: true },
+      { href: "#workflows", label: "Workflow Runs", icon: PlugZap, disabled: true },
+      { href: "#release-notes", label: "Release Notes", icon: ScrollText, disabled: true },
     ],
   },
   {
@@ -57,6 +103,9 @@ const NAV: Array<{
     items: [
       { href: "/admin/api-keys", label: "API Keys", icon: TerminalSquare },
       { href: "/admin/webhooks", label: "Webhooks", icon: Webhook },
+      { href: "#integrations-railway", label: "Railway", icon: Rocket, disabled: true },
+      { href: "#integrations-github", label: "GitHub", icon: Code2, disabled: true },
+      { href: "#integrations-cloudflare", label: "Cloudflare", icon: Cloud, disabled: true },
     ],
   },
   {
@@ -70,7 +119,7 @@ export function Sidebar() {
   return (
     <aside className="hidden md:flex h-screen w-64 shrink-0 flex-col border-r border-border bg-card">
       <Link
-        href="/dashboard"
+        href="/command-center"
         className="flex items-center gap-2 px-5 py-5 border-b border-border"
       >
         <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/15 text-primary">
@@ -78,9 +127,9 @@ export function Sidebar() {
         </div>
         <div className="leading-tight">
           <div className="text-[11px] uppercase tracking-widest text-muted-foreground">
-            MacTech
+            MacTech Suite
           </div>
-          <div className="text-sm font-semibold">Identity Command Center</div>
+          <div className="text-sm font-semibold">Command Center</div>
         </div>
       </Link>
 
@@ -93,9 +142,30 @@ export function Sidebar() {
             <ul className="space-y-0.5">
               {group.items.map((item) => {
                 const active =
-                  pathname === item.href ||
-                  (item.href !== "/dashboard" && pathname.startsWith(item.href));
+                  !item.disabled &&
+                  (pathname === item.href ||
+                    (item.href !== "/dashboard" &&
+                      item.href !== "#" &&
+                      !item.href.startsWith("#") &&
+                      pathname.startsWith(item.href)));
                 const Icon = item.icon;
+                if (item.disabled) {
+                  return (
+                    <li key={item.href}>
+                      <span
+                        aria-disabled
+                        title="Ships in a later Command Center slice"
+                        className="flex items-center gap-3 rounded-md px-2 py-1.5 text-muted-foreground/60 cursor-not-allowed"
+                      >
+                        <Icon className="h-4 w-4" />
+                        <span>{item.label}</span>
+                        <span className="ml-auto text-[10px] uppercase tracking-widest">
+                          soon
+                        </span>
+                      </span>
+                    </li>
+                  );
+                }
                 return (
                   <li key={item.href}>
                     <Link
@@ -120,8 +190,8 @@ export function Sidebar() {
 
       <div className="border-t border-border px-4 py-3 text-xs text-muted-foreground">
         <div className="flex items-center justify-between">
-          <span className="font-mono">v0.1.0</span>
-          <span>Defense-grade SaaS</span>
+          <span className="font-mono">v0.2.0</span>
+          <span>Suite · Command Center</span>
         </div>
       </div>
     </aside>
