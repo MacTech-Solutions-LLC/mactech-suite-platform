@@ -285,6 +285,35 @@ enum IntegrationProvider {
   internal
 }
 
+enum GitProvider {
+  github
+}
+
+// Workflow status normalised across providers. GitHub returns
+// `queued | in_progress | completed | waiting | requested`. We collapse
+// the rare ones into `queued` for display.
+enum WorkflowStatus {
+  queued
+  in_progress
+  completed
+  unknown
+}
+
+// Workflow conclusion. Null while status != completed; on completion
+// GitHub returns one of `success | failure | cancelled | skipped |
+// timed_out | action_required | neutral | stale | startup_failure`.
+enum WorkflowConclusion {
+  success
+  failure
+  cancelled
+  skipped
+  timed_out
+  action_required
+  neutral
+  stale
+  startup_failure
+}
+
 enum EntitlementPlan {
   none
   trial
@@ -475,6 +504,7 @@ model AppRegistry {
   healthSnapshots   HealthCheckSnapshot[]
   riskFlags         OperationalRiskFlag[]
   integrationEvents IntegrationEvent[]
+  repoLinks         AppRepositoryLink[]
 
   @@index([appKey])
   @@index([slug])
@@ -798,4 +828,155 @@ model IntegrationEvent {
   @@index([provider, receivedAt(sort: Desc)])
   @@index([eventType])
   @@index([appRegistryId, receivedAt(sort: Desc)])
+}
+
+// ============================================================================
+// COMMAND CENTER — Repository Intelligence (Slice 2)
+// ============================================================================
+
+// One row per GitHub repository the Suite tracks. Linked to one or more
+// AppRegistry rows via AppRepositoryLink (some monorepos serve multiple
+// apps). The Suite never stores the GitHub PAT here — that lives in
+// env at lib/integrations/github/client.ts. AgentOps capabilities
+// receive (repoId, branch, sha) inputs and never the token itself.
+model GitRepository {
+  id                    String      @id @default(cuid())
+  owner                 String
+  repo                  String
+  fullName              String      @unique // "owner/repo"
+  htmlUrl               String?
+  defaultBranch         String      @default("main")
+  visibility            String? // "public" | "private" | "internal"
+  provider              GitProvider @default(github)
+  installationId        String? // GitHub App installation id (slice 5+)
+  active                Boolean     @default(true)
+  // The latest HEAD sha we observed on the default branch — populated
+  // by syncRepository(). Drives production_behind_main detection in
+  // combination with the deployed sha from /api/build-info.
+  latestHeadSha         String?
+  latestHeadShortSha    String?
+  latestHeadCommittedAt DateTime?
+  // Counters refreshed each sync. Cheap to render on the repo table
+  // without re-querying every commit row.
+  recentCommitCount     Int         @default(0)
+  recentWorkflowCount   Int         @default(0)
+  lastSyncedAt          DateTime?
+  lastSyncError         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  appLinks     AppRepositoryLink[]
+  commits      GitCommitEvent[]
+  workflowRuns GitWorkflowRun[]
+
+  @@index([owner])
+  @@index([active])
+  @@index([provider])
+}
+
+// Many-to-many between AppRegistry and GitRepository. Most apps map
+// 1:1 to a repo; monorepos (e.g. WELCOMETOTHETRIBE/CMMC contains
+// codex + tooling) need many:many. The link carries deployment hints
+// (production branch differs from default, deployment branch differs
+// from production, etc.) so production_behind_main can compare the
+// right two SHAs.
+model AppRepositoryLink {
+  id               String   @id @default(cuid())
+  appRegistryId    String
+  gitRepositoryId  String
+  // The branch whose HEAD represents "what should be in production".
+  // Defaults to GitRepository.defaultBranch but can be overridden when
+  // an app deploys from `release/*` instead of `main`.
+  productionBranch String   @default("main")
+  // The branch the deployment pipeline pulls from. Same as production
+  // for trunk-based shops; different for environments that promote.
+  deploymentBranch String   @default("main")
+  // The "primary" repo for an app when it has multiple. The Slice 2
+  // production-drift evaluator only checks the primary link.
+  isPrimary        Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  app  AppRegistry   @relation(fields: [appRegistryId], references: [id], onDelete: Cascade)
+  repo GitRepository @relation(fields: [gitRepositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([appRegistryId, gitRepositoryId])
+  @@index([appRegistryId])
+  @@index([gitRepositoryId])
+}
+
+// One row per observed commit on a tracked branch. Inserted by both
+// the periodic sync (listRecentCommits) and the GitHub push webhook —
+// idempotency on (gitRepositoryId, sha) means doubled-up writes are
+// no-ops, which is what AgentOps wants when re-running a plan.
+model GitCommitEvent {
+  id               String    @id @default(cuid())
+  gitRepositoryId  String
+  sha              String // 40-char SHA-1
+  shortSha         String // first 7 chars; denormalised for display
+  branch           String?
+  authorName       String?
+  authorEmail      String?
+  authorLogin      String? // GitHub login when available
+  message          String // first line + body; trimmed at insert
+  htmlUrl          String?
+  committedAt      DateTime?
+  pushedAt         DateTime?
+  filesChanged     Int       @default(0)
+  additions        Int       @default(0)
+  deletions        Int       @default(0)
+  // List of file paths in this commit. Used by the
+  // security_sensitive_change evaluator. JSON array of strings.
+  changedFilesJson Json?
+  // Risk flags the commit triggered (`auth_change`, `database_change`,
+  // `security_sensitive_change`, …). JSON array of strings; the
+  // evaluator opens OperationalRiskFlag rows from these.
+  riskFlagsJson    Json?
+  // Raw webhook payload (minus signature headers). Stored for
+  // diagnostic + replay; secrets are redacted at write time by
+  // lib/audit.ts redactMetadata.
+  rawPayloadJson   Json?
+
+  createdAt DateTime @default(now())
+
+  repo GitRepository @relation(fields: [gitRepositoryId], references: [id], onDelete: Cascade)
+
+  // Idempotency. Per AgentOps discipline: re-running the same sync or
+  // re-receiving the same webhook MUST NOT create duplicate rows.
+  @@unique([gitRepositoryId, sha])
+  @@index([gitRepositoryId, committedAt(sort: Desc)])
+  @@index([authorEmail])
+  @@index([branch])
+  @@index([committedAt(sort: Desc)])
+}
+
+// One row per GitHub workflow run we've observed. Inserted by both
+// the periodic sync (listWorkflowRuns) and the workflow_run webhook;
+// idempotency is on githubRunId.
+model GitWorkflowRun {
+  id              String              @id @default(cuid())
+  gitRepositoryId String
+  githubRunId     BigInt              @unique
+  name            String
+  event           String // "push" | "pull_request" | "workflow_dispatch" | …
+  branch          String?
+  headSha         String
+  status          WorkflowStatus      @default(unknown)
+  conclusion      WorkflowConclusion?
+  htmlUrl         String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  durationMs      Int?
+  rawPayloadJson  Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  repo GitRepository @relation(fields: [gitRepositoryId], references: [id], onDelete: Cascade)
+
+  @@index([gitRepositoryId, startedAt(sort: Desc)])
+  @@index([branch])
+  @@index([status])
+  @@index([conclusion])
 }

@@ -15,8 +15,12 @@
 
 import { prisma } from "@/lib/db/prisma";
 import { writeAuditLog } from "@/lib/audit";
+import { env, githubSyncConfigured } from "@/lib/env";
 import { probeAndPersist } from "./health-check-service";
-import { reconcileRisksForApp } from "./risk-service";
+import { reconcileRepoRisksForApp, reconcileRisksForApp } from "./risk-service";
+import { syncAllRepositoriesForApps } from "./github-sync-service";
+import { getRepoSnapshotForApp } from "./repo-intelligence-service";
+import type { HealthProbeResult } from "@/lib/integrations/health/checker";
 import type {
   AppRegistry,
   HealthCheckSnapshot,
@@ -40,6 +44,12 @@ export interface ReconciliationOutcome {
   risksResolved: number;
   perAppErrors: Array<{ appKey: string; error: string }>;
   trigger: ReconciliationTrigger;
+  // Slice 2: GitHub sync leg. Zeros when ENABLE_GITHUB_SYNC is off.
+  reposAttempted: number;
+  reposSucceeded: number;
+  commitsInserted: number;
+  workflowRunsUpserted: number;
+  perRepoErrors: Array<{ fullName: string; error: string }>;
 }
 
 export type ReconciliationTrigger = "manual" | "cron" | "boot";
@@ -61,10 +71,15 @@ export async function runReconciliation(
   let risksOpened = 0,
     risksResolved = 0;
   const perAppErrors: Array<{ appKey: string; error: string }> = [];
+  // Track each app's probe so the repo-risk leg can read live commit
+  // shas from /api/build-info without re-probing.
+  const probeByAppId = new Map<string, HealthProbeResult>();
 
+  // ── Health leg ───────────────────────────────────────────────────────
   for (const app of apps) {
     try {
       const probeResult = await probeAndPersist(app);
+      probeByAppId.set(app.id, probeResult.probe);
       switch (probeResult.probe.status) {
         case "up":
           appsHealthy++;
@@ -93,6 +108,50 @@ export async function runReconciliation(
     }
   }
 
+  // ── GitHub sync leg ──────────────────────────────────────────────────
+  // Skipped entirely when ENABLE_GITHUB_SYNC is off or GITHUB_TOKEN
+  // is missing — outcome carries zeros so the caller can render.
+  let reposAttempted = 0,
+    reposSucceeded = 0,
+    commitsInserted = 0,
+    workflowRunsUpserted = 0;
+  let perRepoErrors: Array<{ fullName: string; error: string }> = [];
+  if (githubSyncConfigured()) {
+    try {
+      const syncOutcome = await syncAllRepositoriesForApps(triggeredByEmail ?? null);
+      reposAttempted = syncOutcome.reposAttempted;
+      reposSucceeded = syncOutcome.reposSucceeded;
+      commitsInserted = syncOutcome.totalCommitsInserted;
+      workflowRunsUpserted = syncOutcome.totalWorkflowsUpserted;
+      perRepoErrors = syncOutcome.perRepoErrors;
+    } catch (err) {
+      perRepoErrors.push({
+        fullName: "*",
+        error: err instanceof Error ? err.message : "unknown_error",
+      });
+    }
+
+    // ── Repo-risk reconciliation leg ───────────────────────────────────
+    // Reads the freshly-synced GitRepository state + the live commit
+    // sha from each app's most recent /api/build-info probe and
+    // opens/resolves slice-2 risk flags accordingly.
+    for (const app of apps) {
+      try {
+        const probe = probeByAppId.get(app.id) ?? null;
+        const liveCommitSha = probe?.parsed?.commitSha ?? null;
+        const snapshot = await getRepoSnapshotForApp(app, liveCommitSha);
+        const repoRiskOutcome = await reconcileRepoRisksForApp({ app, snapshot });
+        risksOpened += repoRiskOutcome.opened.length;
+        risksResolved += repoRiskOutcome.resolved.length;
+      } catch (err) {
+        perAppErrors.push({
+          appKey: app.appKey,
+          error: `repo_risk_${err instanceof Error ? err.message : "unknown_error"}`,
+        });
+      }
+    }
+  }
+
   const finishedAt = new Date();
   const durationMs = finishedAt.getTime() - startedAt.getTime();
 
@@ -102,7 +161,7 @@ export async function runReconciliation(
       provider: "internal",
       eventType: "command_center.reconciliation.completed",
       eventAction: trigger,
-      severity: perAppErrors.length > 0 ? "medium" : "info",
+      severity: perAppErrors.length > 0 || perRepoErrors.length > 0 ? "medium" : "info",
       processedAt: finishedAt,
       payloadJson: {
         trigger,
@@ -115,6 +174,11 @@ export async function runReconciliation(
         risks_opened: risksOpened,
         risks_resolved: risksResolved,
         per_app_errors: perAppErrors,
+        repos_attempted: reposAttempted,
+        repos_succeeded: reposSucceeded,
+        commits_inserted: commitsInserted,
+        workflow_runs_upserted: workflowRunsUpserted,
+        per_repo_errors: perRepoErrors,
         duration_ms: durationMs,
       },
     },
@@ -124,7 +188,7 @@ export async function runReconciliation(
     eventType: "command_center.reconciliation.completed",
     eventCategory: "system",
     severity: appsDown > 0 ? "warning" : "info",
-    action: `Reconciliation (${trigger}): ${appsHealthy} up, ${appsDegraded} degraded, ${appsDown} down, ${appsUnknown} unknown · +${risksOpened} risks, -${risksResolved} resolved · ${durationMs}ms`,
+    action: `Reconciliation (${trigger}): ${appsHealthy} up, ${appsDegraded} degraded, ${appsDown} down, ${appsUnknown} unknown · ${reposSucceeded}/${reposAttempted} repos · +${risksOpened} risks, -${risksResolved} resolved · ${durationMs}ms`,
     actorEmail: triggeredByEmail ?? null,
     metadata: {
       trigger,
@@ -136,6 +200,11 @@ export async function runReconciliation(
       risks_opened: risksOpened,
       risks_resolved: risksResolved,
       per_app_errors: perAppErrors,
+      repos_attempted: reposAttempted,
+      repos_succeeded: reposSucceeded,
+      commits_inserted: commitsInserted,
+      workflow_runs_upserted: workflowRunsUpserted,
+      per_repo_errors: perRepoErrors,
       duration_ms: durationMs,
     },
   });
@@ -153,6 +222,11 @@ export async function runReconciliation(
     risksResolved,
     perAppErrors,
     trigger,
+    reposAttempted,
+    reposSucceeded,
+    commitsInserted,
+    workflowRunsUpserted,
+    perRepoErrors,
   };
 }
 
