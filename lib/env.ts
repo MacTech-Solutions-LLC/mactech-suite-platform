@@ -104,16 +104,10 @@ const RawEnvSchema = z.object({
   CLOUDFLARE_API_TOKEN: z.string().optional(),
   CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
-  /** Slice 13: Anthropic API key used by the cross-repo patch agent
-   *  for codegen. Distinct from OPENAI_API_KEY (which the planner
-   *  uses) — code generation is a much higher-stakes call than plan
-   *  generation, so token isolation matters. */
-  ANTHROPIC_API_KEY: z.string().optional(),
-  /** Slice 13: opt-in flag to enable the cross-repo patch capability.
-   *  Even with ANTHROPIC_API_KEY + GITHUB_TOKEN set, the capability
-   *  refuses unless this is "true" — guards against an accidental
-   *  preview deploy gaining the ability to open PRs in customer
-   *  repos. */
+  /** Slice 13.1: opt-in flag to enable the cross-repo agent. Even
+   *  with GITHUB_TOKEN set, the capability refuses unless this is
+   *  "true" — guards against an accidental preview deploy gaining
+   *  the ability to file `@claude` issues in customer repos. */
   ENABLE_CROSS_REPO_AGENT: z
     .union([z.literal("true"), z.literal("false")])
     .optional()
@@ -173,9 +167,7 @@ export function railwaySyncConfigured(): boolean {
 }
 
 export function crossRepoAgentConfigured(): boolean {
-  return Boolean(
-    env.ENABLE_CROSS_REPO_AGENT && env.ANTHROPIC_API_KEY && env.GITHUB_TOKEN,
-  );
+  return Boolean(env.ENABLE_CROSS_REPO_AGENT && env.GITHUB_TOKEN);
 }
 
 export function envHealth(): Array<{ key: string; ok: boolean; required: boolean }> {
