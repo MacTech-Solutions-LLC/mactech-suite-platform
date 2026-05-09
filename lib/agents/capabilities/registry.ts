@@ -743,6 +743,130 @@ const create_github_issue: Capability = {
 };
 
 // ───────────────────────────────────────────────────────────────────────────
+// Slice 8: AI ask + team email capabilities.
+// ───────────────────────────────────────────────────────────────────────────
+
+const ai_summarize_dashboard: Capability = {
+  key: "ai_summarize_dashboard",
+  kind: "read_only",
+  label: "AI-summarize a dashboard with custom prompt",
+  description:
+    "Runs an AI ask grounded in one of the Command Center dashboards (commit_intelligence | open_risks | ecosystem | deployment_drift | workflow_failures). Prompt + contextKey are operator-supplied. Returns the AI narrative; does NOT email.",
+  inputSchema: {
+    required: ["contextKey", "prompt"],
+    optional: ["appKey"],
+  },
+  requesterPermission: PLATFORM_PERMISSIONS.OPS_VIEW,
+  async invoke(input, ctx): Promise<CapabilityResult> {
+    await requirePlatformPermission(PLATFORM_PERMISSIONS.OPS_VIEW);
+    const contextKey = String(input.contextKey);
+    const prompt = String(input.prompt);
+    const appKey = typeof input.appKey === "string" ? input.appKey : undefined;
+    const { ask } = await import("@/lib/services/command-center/ai-ask-service");
+    const result = await ask({
+      contextKey: contextKey as never,
+      prompt,
+      appKey,
+      sendToTeam: false,
+      actorClerkUserId: ctx.requesterClerkUserId,
+      actorEmail: ctx.requesterEmail,
+    });
+    await writeAuditLog({
+      eventType: "agent.capability.invoked",
+      eventCategory: "system",
+      action: `agent: ai_summarize_dashboard ${contextKey} (run ${ctx.agentRunId})`,
+      actorEmail: ctx.requesterEmail,
+      resourceType: "agent_run",
+      resourceId: ctx.agentRunId,
+      metadata: { capability: "ai_summarize_dashboard", contextKey },
+    });
+    return {
+      summary: {
+        contextKey,
+        contextChars: result.contextChars,
+        llmAvailable: result.llmAvailable,
+        answerLength: result.answer.length,
+      },
+      artifacts: [
+        {
+          kind: "audit_summary",
+          title: `AI summary — ${contextKey}`,
+          bodyMarkdown: `# Question\n\n${prompt}\n\n# Answer\n\n${result.answer}`,
+        },
+      ],
+    };
+  },
+};
+
+const email_team_summary: Capability = {
+  key: "email_team_summary",
+  kind: "approval_required",
+  label: "Email an AI summary to the team",
+  description:
+    "Runs an AI ask AND emails the answer to the configured team recipients (TEAM_EMAILS env var or operator override). Approval-required because broadcasting to leadership has the same blast radius as a write capability. No email is sent if RESEND_API_KEY is not configured server-side; the agent run still completes with the rendered narrative as an artifact.",
+  inputSchema: {
+    required: ["contextKey", "prompt"],
+    optional: ["appKey", "recipients"],
+  },
+  requesterPermission: PLATFORM_PERMISSIONS.OPS_VIEW,
+  async invoke(input, ctx): Promise<CapabilityResult> {
+    await requirePlatformPermission(PLATFORM_PERMISSIONS.OPS_VIEW);
+    const contextKey = String(input.contextKey);
+    const prompt = String(input.prompt);
+    const appKey = typeof input.appKey === "string" ? input.appKey : undefined;
+    const recipients = Array.isArray(input.recipients)
+      ? input.recipients.filter((r): r is string => typeof r === "string")
+      : undefined;
+    const { ask } = await import("@/lib/services/command-center/ai-ask-service");
+    const result = await ask({
+      contextKey: contextKey as never,
+      prompt,
+      appKey,
+      recipients,
+      sendToTeam: true,
+      actorClerkUserId: ctx.requesterClerkUserId,
+      actorEmail: ctx.requesterEmail,
+    });
+    await writeAuditLog({
+      eventType: "agent.capability.invoked",
+      eventCategory: "system",
+      action: `agent: email_team_summary ${contextKey} (run ${ctx.agentRunId})`,
+      actorEmail: ctx.requesterEmail,
+      resourceType: "agent_run",
+      resourceId: ctx.agentRunId,
+      metadata: {
+        capability: "email_team_summary",
+        contextKey,
+        approverEmail: ctx.approverEmail,
+        emailSent: result.email?.sent ?? false,
+        emailRecipients: result.email?.recipients.length ?? 0,
+        emailSkippedReason: result.email?.skippedReason ?? null,
+      },
+    });
+    return {
+      summary: {
+        contextKey,
+        emailSent: result.email?.sent ?? false,
+        recipients: result.email?.recipients.length ?? 0,
+        skippedReason: result.email?.skippedReason ?? null,
+        messageId: result.email?.messageId ?? null,
+      },
+      artifacts: [
+        {
+          kind: "audit_summary",
+          title: `Email — ${contextKey}`,
+          bodyMarkdown: `# Question\n\n${prompt}\n\n# Answer\n\n${result.answer}\n\n# Email\n\nSent: ${
+            result.email?.sent ? "yes" : "no"
+          }${result.email?.sent ? `\nRecipients: ${result.email.recipients.join(", ")}` : ""}${
+            result.email?.skippedReason ? `\nSkipped reason: ${result.email.skippedReason}` : ""
+          }`,
+        },
+      ],
+    };
+  },
+};
+
+// ───────────────────────────────────────────────────────────────────────────
 // Registry exports.
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -758,7 +882,9 @@ const ALL: Capability[] = [
   read_ecosystem_graph,
   summarize_recent_release_notes,
   list_repositories,
+  ai_summarize_dashboard,
   // approval-required
+  email_team_summary,
   generate_release_notes,
   acknowledge_risk_flag,
   trigger_repo_sync,

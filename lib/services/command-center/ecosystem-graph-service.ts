@@ -169,12 +169,13 @@ export async function getEcosystemGraph(
   // / "openai" / "clerk"), inject a node and a synthetic edge so the
   // map closes the loop. Skip when there's no observed traffic to a
   // given external service — the map stays clean for fresh installs.
-  const EXTERNAL_LABELS = new Set(["github", "railway", "openai", "clerk"]);
+  const EXTERNAL_LABELS = new Set(["github", "railway", "openai", "clerk", "resend"]);
   const EXTERNAL_PUBLIC_URL: Record<string, string> = {
     github: "https://github.com",
     railway: "https://railway.com",
     openai: "https://api.openai.com",
     clerk: "https://clerk.com",
+    resend: "https://resend.com",
   };
   const externalLabelsWithTraffic = new Set<string>();
   const externalEdgeAggregates = new Map<
@@ -265,6 +266,8 @@ function externalDisplayName(label: string): string {
       return "OpenAI";
     case "clerk":
       return "Clerk";
+    case "resend":
+      return "Resend";
     default:
       return label;
   }

@@ -61,4 +61,37 @@ export const INTENT_TEMPLATES: IntentTemplate[] = [
     cron: "0 6 * * *",
     tz: "UTC",
   },
+  // ── Slice 8: AI-summarize + email-the-team templates ──────────────
+  {
+    label: "Email weekly commit digest",
+    goal: "Generate a weekly engineering digest of the most active repositories and commits.",
+    request:
+      "Use ai_summarize_dashboard with contextKey=commit_intelligence to generate a weekly engineering digest, then use email_team_summary to send it to the team. Prompt: 'Draft a weekly engineering update for leadership covering the top commits, repos that shipped the most, and any security-flagged changes.'",
+    cron: "0 14 * * 1",
+    tz: "UTC",
+  },
+  {
+    label: "Email daily risk briefing",
+    goal: "Email a daily briefing of open operational risks ranked by severity to leadership.",
+    request:
+      "Use email_team_summary with contextKey=open_risks to send a morning risk briefing. Prompt: 'Group the open risks by app and call out which one needs attention first today.'",
+    cron: "0 12 * * *",
+    tz: "UTC",
+  },
+  {
+    label: "Email deployment drift alert",
+    goal: "Email the team when any app drifts more than ten commits behind main.",
+    request:
+      "Use email_team_summary with contextKey=deployment_drift to alert the team. Prompt: 'Are any apps drifting more than 10 commits behind main? If so, name them and recommend the next move.'",
+    cron: "0 */4 * * *",
+    tz: "UTC",
+  },
+  {
+    label: "Email weekly ecosystem narrative",
+    goal: "Send a weekly ecosystem-health narrative covering active apps and dependencies.",
+    request:
+      "Use email_team_summary with contextKey=ecosystem to brief leadership on overall posture. Prompt: 'Walk the dependency graph from identity-command-center outward and explain blast radius. Note any apps that look fragile right now.'",
+    cron: "0 14 * * 5",
+    tz: "UTC",
+  },
 ];

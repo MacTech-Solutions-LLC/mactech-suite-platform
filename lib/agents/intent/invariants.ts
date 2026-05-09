@@ -327,6 +327,67 @@ const create_github_issue_url_present: InvariantDefinition = {
 };
 
 // ───────────────────────────────────────────────────────────────────────────
+// Slice 8: AI ask + email capability invariants
+// ───────────────────────────────────────────────────────────────────────────
+
+const ai_summarize_dashboard_llm_available: InvariantDefinition = {
+  key: "llm_actually_ran",
+  capabilityKey: "ai_summarize_dashboard",
+  label: "LLM actually generated the answer (no deterministic fallback)",
+  description:
+    "Refuses if OPENAI_API_KEY isn't set or the call failed and the service fell back to deterministic copy. Useful when the trigger is supposed to produce a real summary, not a placeholder.",
+  defaultOn: false,
+  evaluate(_input, summary) {
+    if (summary.llmAvailable !== true) {
+      return fail("llm_actually_ran", false, "fell back to deterministic answer");
+    }
+    return pass("llm_actually_ran", true, "real LLM answer");
+  },
+};
+
+const ai_summarize_dashboard_answer_present: InvariantDefinition = {
+  key: "answer_present",
+  capabilityKey: "ai_summarize_dashboard",
+  label: "Answer is non-empty",
+  description: "Sanity check: the AI returned at least 50 chars.",
+  defaultOn: true,
+  evaluate(_input, summary) {
+    const len = Number(summary.answerLength ?? 0);
+    if (len < 50) return fail("answer_present", len, `answer was only ${len} chars`);
+    return pass("answer_present", len, `${len} chars`);
+  },
+};
+
+const email_team_summary_actually_sent: InvariantDefinition = {
+  key: "email_actually_sent",
+  capabilityKey: "email_team_summary",
+  label: "Email actually delivered to Resend",
+  description:
+    "Refuses if RESEND_API_KEY is missing or the Resend call failed. Important for compliance: a scheduled trigger that's supposed to email leadership should refuse silently-skipping.",
+  defaultOn: true,
+  evaluate(_input, summary) {
+    if (summary.emailSent !== true) {
+      const reason = String(summary.skippedReason ?? "send failed");
+      return fail("email_actually_sent", false, `email not sent: ${reason}`);
+    }
+    return pass("email_actually_sent", true, `delivered to ${summary.recipients} recipients`);
+  },
+};
+
+const email_team_summary_recipients_set: InvariantDefinition = {
+  key: "recipients_set",
+  capabilityKey: "email_team_summary",
+  label: "At least one recipient",
+  description: "Sanity check: the configured recipient list resolved to ≥1 email.",
+  defaultOn: true,
+  evaluate(_input, summary) {
+    const n = Number(summary.recipients ?? 0);
+    if (n < 1) return fail("recipients_set", n, "no recipients");
+    return pass("recipients_set", n, `${n} recipient(s)`);
+  },
+};
+
+// ───────────────────────────────────────────────────────────────────────────
 // Registry exports
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -350,6 +411,10 @@ const ALL: InvariantDefinition[] = [
   trigger_reconciliation_resolved_non_negative,
   create_github_issue_number_returned,
   create_github_issue_url_present,
+  ai_summarize_dashboard_llm_available,
+  ai_summarize_dashboard_answer_present,
+  email_team_summary_actually_sent,
+  email_team_summary_recipients_set,
 ];
 
 const BY_CAPABILITY = new Map<string, InvariantDefinition[]>();
