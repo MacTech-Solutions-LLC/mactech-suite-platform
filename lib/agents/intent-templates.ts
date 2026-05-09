@@ -94,17 +94,17 @@ export const INTENT_TEMPLATES: IntentTemplate[] = [
     cron: "0 14 * * 5",
     tz: "UTC",
   },
-  // ── Slice 13: cross-repo patch agent ──────────────────────────────
+  // ── Slice 13.1: cross-repo agent (Claude Code @claude routine) ────
   {
     label: "Add /api/health endpoint to an app",
-    goal: "Add a public /api/health endpoint to an allowlisted MacTech app that returns {status:'ok'} JSON without auth.",
+    goal: "File a @claude routine asking Claude Code to add a public /api/health endpoint in an allowlisted MacTech app.",
     request:
-      "Use open_repo_pull_request to add a public anonymous /api/health route to repo MacTech-Solutions-LLC/<APP>. The endpoint must return JSON {status:'ok',service:'<app>',timestamp:<ISO>} and must NOT be behind Clerk middleware. Set contextPaths to package.json, README.md, middleware.ts. Set intent: 'Add a public anonymous /api/health Next.js route that returns JSON status ok plus service name plus ISO timestamp. Match this repo's existing app/ vs pages/ convention.' Replace <APP> with one of: capture, codex, cleard, training. Submit one PR per app.",
+      "Use open_repo_pull_request with repoFullName=MacTech-Solutions-LLC/<APP> (replace <APP> with capture, codex, cleard, or training — submit one run per app). intent: 'Add a public anonymous /api/health Next.js route that returns JSON {status:\"ok\", service:\"<app>\", timestamp:<ISO-8601>}. The route must NOT be behind Clerk auth — exclude /api/health from middleware.ts public-route matching if needed. Match this repo's existing app/ vs pages/ convention.' contextHint: 'See package.json for framework version, README.md for conventions, middleware.ts for auth gate config. The MacTech Suite probes this endpoint anonymously every reconciliation tick.' The Claude Code GitHub App will read the @claude mention in the issue and open a PR; review and merge on GitHub.",
   },
   {
     label: "Cross-repo patch (free form)",
-    goal: "Open a PR in an allowlisted MacTech repo using the cross-repo patch agent.",
+    goal: "Ask Claude Code to make a change in an allowlisted MacTech repo via @claude routine.",
     request:
-      "Use open_repo_pull_request with repoFullName=MacTech-Solutions-LLC/<repo> and a clear plain-English intent describing the change. List context paths the planner should read for repo conventions (e.g. package.json, README.md). The agent never auto-merges; a human reviews on GitHub.",
+      "Use open_repo_pull_request with repoFullName=MacTech-Solutions-LLC/<repo> and a clear plain-English intent describing the change. Optionally include contextHint to point Claude Code at relevant files. The agent files an issue with `@claude <intent>`; Claude Code (installed as a GitHub App on the repo) reads it and opens a PR. The Suite never auto-merges.",
   },
 ];
