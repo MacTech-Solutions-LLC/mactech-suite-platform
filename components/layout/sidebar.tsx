@@ -42,11 +42,19 @@ import { cn } from "@/lib/utils";
  * slice doesn't 404 — they light up as soon as their slice ships.
  */
 
+import type { SidebarCounts } from "@/lib/services/command-center/sidebar-counts-service";
+
+type BadgeTone = "destructive" | "warning";
+
 type NavItem = {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   disabled?: boolean;
+  /** When set, the sidebar reads `counts[badgeKey]` and renders a
+   *  badge if the value is > 0. Tone controls the colour. */
+  badgeKey?: keyof SidebarCounts;
+  badgeTone?: BadgeTone;
 };
 
 const NAV: Array<{ group: string; items: NavItem[] }> = [
@@ -55,7 +63,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/command-center", label: "Command Center", icon: Compass },
-      { href: "/admin/agents", label: "Agents", icon: Bot },
+      { href: "/admin/agents", label: "Agents", icon: Bot, badgeKey: "agentsAwaiting", badgeTone: "warning" },
       { href: "/admin/agents/triggers", label: "Scheduled Triggers", icon: Clock },
     ],
   },
@@ -81,18 +89,18 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     items: [
       { href: "/admin/ops/ecosystem", label: "Ecosystem", icon: Network },
       { href: "/admin/ops/traffic", label: "Traffic", icon: Activity },
-      { href: "/admin/ops/deployments", label: "Railway Deployments", icon: Rocket },
+      { href: "/admin/ops/deployments", label: "Railway Deployments", icon: Rocket, badgeKey: "deploymentsBroken", badgeTone: "destructive" },
       { href: "#incidents", label: "Incidents", icon: AlertOctagon, disabled: true },
-      { href: "/admin/ops/risk", label: "Runtime Risk", icon: Siren },
-      { href: "/admin/public-status", label: "Public Status Page", icon: Globe2 },
+      { href: "/admin/ops/risk", label: "Runtime Risk", icon: Siren, badgeKey: "riskCriticalHigh", badgeTone: "destructive" },
+      { href: "/admin/public-status", label: "Public Status Page", icon: Globe2, badgeKey: "publicStatusDown", badgeTone: "destructive" },
     ],
   },
   {
     group: "Repositories",
     items: [
       { href: "/admin/repositories", label: "GitHub Repositories", icon: Code2 },
-      { href: "/admin/repositories/commits", label: "Commit Intelligence", icon: GitBranch },
-      { href: "/admin/repositories/workflow-runs", label: "Workflow Runs", icon: PlugZap },
+      { href: "/admin/repositories/commits", label: "Commit Intelligence", icon: GitBranch, badgeKey: "commitsFlagged24h", badgeTone: "warning" },
+      { href: "/admin/repositories/workflow-runs", label: "Workflow Runs", icon: PlugZap, badgeKey: "workflowsFailed24h", badgeTone: "warning" },
       { href: "/admin/repositories/release-notes", label: "Release Notes", icon: ScrollText },
     ],
   },
@@ -100,7 +108,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     group: "Compliance",
     items: [
       { href: "/admin/audit-logs", label: "Central Audit Logs", icon: ScrollText },
-      { href: "/admin/security-events", label: "Security Events", icon: Siren },
+      { href: "/admin/security-events", label: "Security Events", icon: Siren, badgeKey: "securityEventsOpen", badgeTone: "destructive" },
     ],
   },
   {
@@ -119,7 +127,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
   },
 ];
 
-export function Sidebar() {
+export function Sidebar({ counts }: { counts?: SidebarCounts }) {
   const pathname = usePathname();
   // Pick the single nav item whose href is the longest prefix of the
   // current pathname — avoids "/admin/agents" being highlighted when
@@ -186,6 +194,8 @@ export function Sidebar() {
                     </li>
                   );
                 }
+                const badgeValue =
+                  item.badgeKey && counts ? counts[item.badgeKey] : 0;
                 return (
                   <li key={item.href}>
                     <Link
@@ -199,6 +209,19 @@ export function Sidebar() {
                     >
                       <Icon className="h-4 w-4" />
                       <span>{item.label}</span>
+                      {badgeValue > 0 ? (
+                        <span
+                          className={cn(
+                            "ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
+                            item.badgeTone === "destructive"
+                              ? "bg-destructive/20 text-destructive"
+                              : "bg-warning/20 text-[hsl(38_92%_60%)]",
+                          )}
+                          aria-label={`${badgeValue} item${badgeValue === 1 ? "" : "s"} need attention`}
+                        >
+                          {badgeValue}
+                        </span>
+                      ) : null}
                     </Link>
                   </li>
                 );
