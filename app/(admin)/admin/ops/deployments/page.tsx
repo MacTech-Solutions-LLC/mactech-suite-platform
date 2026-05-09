@@ -12,6 +12,8 @@ import { PageHeader } from "@/components/layout/admin-shell";
 import { DeploymentTable } from "@/components/deployments/deployment-table";
 import { DeploymentOverviewTiles } from "@/components/deployments/deployment-overview-tiles";
 import { RecentDeployments } from "@/components/deployments/recent-deployments";
+import { LiveActivityStrip } from "@/components/deployments/live-activity-strip";
+import { LiveAutoRefresh } from "@/components/deployments/live-auto-refresh";
 import { LastSyncedStamp } from "@/components/ui/last-synced-stamp";
 import { AskAIPanel } from "@/components/ai/ask-ai-panel";
 import { requirePlatformPermission } from "@/lib/authz";
@@ -21,6 +23,7 @@ import {
   getDeploymentsOverview,
   getRecentDeployments,
 } from "@/lib/services/command-center/deployment-intelligence-service";
+import { getLiveDeploymentActivity } from "@/lib/services/command-center/live-deployments-service";
 import { railwaySyncConfigured } from "@/lib/env";
 import { emailReady } from "@/lib/services/command-center/ai-ask-service";
 
@@ -32,10 +35,11 @@ export default async function DeploymentsPage() {
   );
   const canEmail = ctx.permissions.includes(PLATFORM_PERMISSIONS.AGENTS_CREATE);
 
-  const [rows, overview, recent] = await Promise.all([
+  const [rows, overview, recent, live] = await Promise.all([
     getDeploymentSnapshots(),
     getDeploymentsOverview(),
     getRecentDeployments(30),
+    getLiveDeploymentActivity(),
   ]);
   const enabled = railwaySyncConfigured();
 
@@ -49,8 +53,17 @@ export default async function DeploymentsPage() {
       <PageHeader
         title="Railway Deployments"
         description="Per-resource live status, deployed commit, drift indicator, and stale-deployment triage. Updated by periodic reconciliation and Railway webhook deliveries."
-        actions={<LastSyncedStamp at={lastSync} />}
+        actions={
+          <div className="flex items-center gap-3">
+            <LiveAutoRefresh intervalSec={10} />
+            <LastSyncedStamp at={lastSync} />
+          </div>
+        }
       />
+
+      <section>
+        <LiveActivityStrip activity={live} />
+      </section>
 
       {!enabled ? (
         <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-[hsl(38_92%_60%)]">
