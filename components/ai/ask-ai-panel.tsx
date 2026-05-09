@@ -20,6 +20,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Sparkles,
@@ -31,6 +32,7 @@ import {
   AlertTriangle,
   Copy,
   Check,
+  Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ContextKey } from "@/lib/services/command-center/ai-ask-service";
@@ -275,17 +277,34 @@ export function AskAIPanel(props: AskAIPanelProps) {
               {busy ? "Thinking…" : sendToTeam ? "Ask + email team" : "Ask"}
             </Button>
             {resp?.answer ? (
-              <Button size="sm" variant="ghost" onClick={copyAnswer}>
-                {copied ? (
-                  <>
-                    <Check className="mr-1 h-3 w-3 text-success" /> Copied
-                  </>
-                ) : (
-                  <>
-                    <Copy className="mr-1 h-3 w-3" /> Copy
-                  </>
-                )}
-              </Button>
+              <>
+                <Button size="sm" variant="ghost" onClick={copyAnswer}>
+                  {copied ? (
+                    <>
+                      <Check className="mr-1 h-3 w-3 text-success" /> Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="mr-1 h-3 w-3" /> Copy
+                    </>
+                  )}
+                </Button>
+                {/* Sprint 29: turn the answer into the start of an
+                    agent run. We deep-link to the agents list page
+                    with ?request= prefilled with the prompt + answer
+                    so the operator lands in IntentBuilder ready to
+                    declare goal/scope/invariants and click Plan. */}
+                <Button asChild size="sm" variant="ghost">
+                  <Link
+                    href={`/admin/agents?request=${encodeURIComponent(
+                      buildAgentRequest(prompt, resp.answer),
+                    )}#intent-builder`}
+                  >
+                    <Bot className="mr-1 h-3 w-3" />
+                    Plan agent run
+                  </Link>
+                </Button>
+              </>
             ) : null}
           </div>
 
@@ -353,6 +372,19 @@ export function AskAIPanel(props: AskAIPanelProps) {
       ) : null}
     </div>
   );
+}
+
+/**
+ * Sprint 29: build a request body for the planner from a Q+A pair.
+ * Truncates the answer to keep the URL under typical limits (~2KB)
+ * — operators can always extend on the IntentBuilder side. */
+function buildAgentRequest(prompt: string, answer: string): string {
+  const MAX = 1800;
+  const head = `Plan an agent run based on this AI conversation:\n\nQ: ${prompt}\n\nA: `;
+  const room = MAX - head.length - 32;
+  const body =
+    answer.length > room ? answer.slice(0, room) + "\n…[truncated]" : answer;
+  return head + body;
 }
 
 function labelFromKey(key: ContextKey): string {

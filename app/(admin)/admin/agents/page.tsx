@@ -49,6 +49,10 @@ const FILTERS: Array<{ key: string; label: string; statuses: AgentRunStatus[] }>
 interface SearchParams {
   status?: string;
   clone?: string;
+  /** Sprint 29: AskAIPanel "Plan agent run" deep-link prefills via
+   *  this. Server-side passed through to IntentBuilder as
+   *  initialRequest. */
+  request?: string;
 }
 
 export default async function AgentsPage({
@@ -124,11 +128,15 @@ export default async function AgentsPage({
       {canCreate ? (
         <IntentBuilder
           initialGoal={cloneSource?.intentGoal ?? undefined}
-          initialRequest={cloneSource?.requestText ?? undefined}
+          initialRequest={
+            cloneSource?.requestText ?? searchParams?.request ?? undefined
+          }
           banner={
             cloneSource
               ? `Cloned from run ${cloneSource.id.slice(0, 8)} — review and click Plan to retry.`
-              : undefined
+              : searchParams?.request
+                ? "Prefilled from an Ask AI conversation — declare a goal + scope and click Plan."
+                : undefined
           }
         />
       ) : null}
