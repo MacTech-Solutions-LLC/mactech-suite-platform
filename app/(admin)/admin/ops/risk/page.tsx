@@ -22,6 +22,7 @@ import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
 import { getOpenRiskFlags } from "@/lib/services/command-center/command-center-service";
 import { AskAIPanel } from "@/components/ai/ask-ai-panel";
 import { emailReady } from "@/lib/services/command-center/ai-ask-service";
+import { RiskRowActions } from "@/components/command-center/risk-row-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -100,12 +101,13 @@ export default async function RiskPage({
               <TableHead>Description</TableHead>
               <TableHead>Detected</TableHead>
               <TableHead>Acked</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
                   <ShieldCheck className="mx-auto mb-2 h-4 w-4 text-success" />
                   No open risks matching this filter. Quiet is the goal.
                 </TableCell>
@@ -150,6 +152,15 @@ export default async function RiskPage({
                     <span className="text-muted-foreground/60">—</span>
                   )}
                 </TableCell>
+                <TableCell className="text-right">
+                  <RiskRowActions
+                    riskId={r.id}
+                    status={r.status}
+                    category={r.category}
+                    title={r.title}
+                    appKey={r.app?.appKey ?? null}
+                  />
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -158,9 +169,13 @@ export default async function RiskPage({
 
       <div className="rounded-md border border-border bg-card/40 p-3 text-xs text-muted-foreground">
         <Siren className="mr-1 inline h-3 w-3" />
-        Risks auto-resolve when the underlying condition clears. Manual ack/resolve actions ship in
-        the next AgentOps slice — until then, fix the root cause and watch the flag drop on the next
-        reconciliation pass.
+        Risks auto-resolve when the underlying condition clears. The inline actions are for
+        triage:{" "}
+        <strong className="text-foreground">Ack</strong> = "I&rsquo;m on it",{" "}
+        <strong className="text-foreground">Resolve</strong> = handled out-of-band, and{" "}
+        <strong className="text-foreground">Ignore</strong> = false positive. For categories the
+        cross-repo agent can fix automatically (e.g. <code className="font-mono">missing_health_endpoint</code>),
+        the row dropdown surfaces a "Fix this with agent" deep-link.
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import { RiskBadge } from "@/components/ui/risk-badge";
+import { RiskRowActions } from "./risk-row-actions";
 import type { OperationalRiskFlag } from "@prisma/client";
 
 type RiskRow = OperationalRiskFlag & { app: { appKey: string; name: string } | null };
@@ -36,6 +37,13 @@ export function RiskFeed({ risks }: { risks: RiskRow[] }) {
               <span>{new Date(r.detectedAt).toLocaleString()}</span>
             </div>
           </div>
+          <RiskRowActions
+            riskId={r.id}
+            status={r.status}
+            category={r.category}
+            title={r.title}
+            appKey={r.app?.appKey ?? null}
+          />
         </li>
       ))}
     </ul>
