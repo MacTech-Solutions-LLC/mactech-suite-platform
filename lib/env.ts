@@ -88,6 +88,19 @@ const RawEnvSchema = z.object({
   GITHUB_WEBHOOK_SECRET: z.string().optional(),
   RAILWAY_API_TOKEN: z.string().optional(),
   RAILWAY_WEBHOOK_SECRET: z.string().optional(),
+  /** Slice 8.1: Railway PROJECT-scoped token for the
+   *  "MacTech Solutions" project (services: Postgres + mactech, the
+   *  app behind AppRegistry.appKey="mactech-core"). Project tokens
+   *  use a Project-Access-Token header instead of Bearer. Routed in
+   *  lib/integrations/railway/token-routing.ts. */
+  RAILWAY_API_TOKEN_MACTECH: z.string().optional(),
+  /** Slice 8.1: Railway WORKSPACE-scoped token for bmacdonald417's
+   *  workspace. Currently a duplicate-access credential (his
+   *  workspace overlaps with the existing RAILWAY_API_TOKEN's
+   *  workspace) — left wired for completeness; ignored by the
+   *  current routing because it adds no projects we don't already
+   *  see. See issue #55 for context. */
+  RAILWAY_API_TOKEN_BMAC: z.string().optional(),
   CLOUDFLARE_API_TOKEN: z.string().optional(),
   CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),

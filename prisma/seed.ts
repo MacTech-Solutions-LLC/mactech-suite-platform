@@ -254,6 +254,13 @@ const APP_FIXTURES = [
     visibility: "internal" as const,
     repoFullName: "MacTechSolutionsLLC/mactech",
     repoDefaultBranch: "main",
+    // Slice 8.1: Railway IDs for the standalone "MacTech Solutions"
+    // project. Project token in lib/integrations/railway/token-routing.ts
+    // (RAILWAY_API_TOKEN_MACTECH) authenticates to this project.
+    railwayProjectId: "72740679-75b1-4b1d-b0ec-0fbee4b7a710",
+    railwayServiceId: "e9be0da9-41c9-4052-a36d-c58b5f5a579f",
+    railwayEnvironmentId: "2e5bc7ae-ebfb-4423-8102-7bf1bfa1c588",
+    railwayEnvironmentName: "production",
   },
 ];
 
@@ -288,6 +295,22 @@ async function seedApps() {
       repoFullName: ("repoFullName" in app ? app.repoFullName : null) ?? null,
       repoDefaultBranch:
         ("repoDefaultBranch" in app ? app.repoDefaultBranch : null) ?? "main",
+      // Slice 8.1: Railway IDs only flow through when the fixture
+      // explicitly sets them — guards against the seed nulling out
+      // values that runtime sync / admin edits populated for apps
+      // whose fixture doesn't carry them.
+      ...("railwayProjectId" in app
+        ? { railwayProjectId: app.railwayProjectId }
+        : {}),
+      ...("railwayServiceId" in app
+        ? { railwayServiceId: app.railwayServiceId }
+        : {}),
+      ...("railwayEnvironmentId" in app
+        ? { railwayEnvironmentId: app.railwayEnvironmentId }
+        : {}),
+      ...("railwayEnvironmentName" in app
+        ? { railwayEnvironmentName: app.railwayEnvironmentName }
+        : {}),
     };
     await prisma.appRegistry.upsert({
       where: { appKey: app.appKey },
