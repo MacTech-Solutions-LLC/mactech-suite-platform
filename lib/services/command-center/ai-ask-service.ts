@@ -25,6 +25,11 @@ import { prisma } from "@/lib/db/prisma";
 import { env } from "@/lib/env";
 import { writeAuditLog } from "@/lib/audit";
 import { sendTeamEmail, emailConfigured } from "@/lib/integrations/email/client";
+import {
+  renderEmailHtml,
+  renderEmailText,
+  type EmailTemplate,
+} from "@/lib/integrations/email/template";
 
 export type ContextKey =
   | "commit_intelligence"
@@ -393,26 +398,41 @@ function renderSubject(contextKey: ContextKey, prompt: string): string {
   return `[Suite · ${tag}] ${trimmed}`;
 }
 
+/**
+ * Slice 8.2: ai-ask emails now go through the shared template helper
+ * (lib/integrations/email/template.ts). Same gorgeous shape every
+ * Suite email uses — dark hero card on top, white content body,
+ * primary CTA button to the live dashboard, brand footer.
+ */
+function buildEmailTemplate(args: {
+  contextKey: ContextKey;
+  prompt: string;
+  answer: string;
+  requestedBy: string;
+}): EmailTemplate {
+  const dashboardLabel = labelForKey(args.contextKey);
+  const dashboardUrl = `https://www.suite.mactechsolutionsllc.com/${routeForKey(args.contextKey)}`;
+  return {
+    heroEyebrow: `MacTech Suite · ${dashboardLabel}`,
+    heroTitle: "AI ask",
+    heroSubtitle: `Requested by **${args.requestedBy}** · ${new Date().toUTCString()}`,
+    sections: [
+      { heading: "Question", body: args.prompt },
+      { heading: "Answer", body: args.answer },
+    ],
+    cta: { label: `Open ${dashboardLabel} dashboard →`, href: dashboardUrl },
+    footer:
+      'Triggered from the Command Center "Ask AI + send to team" affordance. Reply to this email — it routes to the requesting operator.',
+  };
+}
+
 function renderTextBody(args: {
   contextKey: ContextKey;
   prompt: string;
   answer: string;
   requestedBy: string;
 }): string {
-  return `MacTech Suite Command Center
-${labelForKey(args.contextKey)} — AI ask
-Requested by: ${args.requestedBy}
-
-QUESTION
-${args.prompt}
-
-ANSWER
-${args.answer}
-
-—
-This email was triggered from the Command Center "Ask AI + send to team" affordance.
-View live dashboard: https://www.suite.mactechsolutionsllc.com/${routeForKey(args.contextKey)}
-`;
+  return renderEmailText(buildEmailTemplate(args));
 }
 
 function renderHtmlBody(args: {
@@ -421,23 +441,7 @@ function renderHtmlBody(args: {
   answer: string;
   requestedBy: string;
 }): string {
-  // Plain HTML, no framework. Keep it simple — most enterprise mail
-  // clients butcher anything fancier than this.
-  const escAnswer = escapeHtml(args.answer)
-    .replace(/\n\n+/g, "</p><p>")
-    .replace(/\n/g, "<br>");
-  return `<!doctype html>
-<html><body style="font-family: -apple-system, system-ui, sans-serif; line-height: 1.5; color: #111; max-width: 720px; margin: 0 auto; padding: 24px;">
-<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: #888;">MacTech Suite — ${escapeHtml(labelForKey(args.contextKey))}</div>
-<h2 style="margin: 8px 0 4px; font-size: 18px;">AI ask</h2>
-<div style="font-size: 12px; color: #666;">requested by ${escapeHtml(args.requestedBy)}</div>
-<h3 style="margin-top: 24px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; color: #444;">Question</h3>
-<p style="margin: 4px 0;">${escapeHtml(args.prompt)}</p>
-<h3 style="margin-top: 24px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; color: #444;">Answer</h3>
-<p>${escAnswer}</p>
-<hr style="border: 0; border-top: 1px solid #eee; margin: 24px 0;">
-<div style="font-size: 11px; color: #888;">Triggered from Command Center · <a href="https://www.suite.mactechsolutionsllc.com/${routeForKey(args.contextKey)}">View dashboard</a></div>
-</body></html>`;
+  return renderEmailHtml(buildEmailTemplate(args));
 }
 
 function labelForKey(key: ContextKey): string {
@@ -468,15 +472,6 @@ function routeForKey(key: ContextKey): string {
     case "workflow_failures":
       return "admin/repositories/workflow-runs";
   }
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 export function emailReady(): boolean {
