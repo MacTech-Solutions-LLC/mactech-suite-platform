@@ -23,6 +23,7 @@
 
 import { prisma } from "@/lib/db/prisma";
 import { writeAuditLog } from "@/lib/audit";
+import { open_repo_pull_request } from "../cross-repo/capability";
 import {
   getOpenRiskFlags,
   getAppOperationalSnapshots,
@@ -891,6 +892,8 @@ const ALL: Capability[] = [
   trigger_railway_sync,
   trigger_reconciliation,
   create_github_issue,
+  // Slice 13: cross-repo patch agent. Lives in its own module.
+  open_repo_pull_request,
 ];
 
 const BY_KEY = new Map<string, Capability>(ALL.map((c) => [c.key, c]));

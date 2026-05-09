@@ -388,6 +388,81 @@ const email_team_summary_recipients_set: InvariantDefinition = {
 };
 
 // ───────────────────────────────────────────────────────────────────────────
+// Slice 13 — cross-repo patch agent invariants
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Defense-in-depth: every check is also enforced inside the
+// capability before GitHub calls go out. The invariants observe what
+// the capability *returned* and refuse the run if the post-conditions
+// don't hold — so even if a future capability change quietly skipped
+// a pre-flight gate, the run is still marked refused at the
+// orchestrator level.
+
+const open_repo_pull_request_pr_returned: InvariantDefinition = {
+  key: "pr_returned",
+  capabilityKey: "open_repo_pull_request",
+  label: "PR was actually opened",
+  description:
+    "Sanity check: the capability returned ok=true with a PR number and a github.com URL. A refused or transient run won't satisfy this.",
+  defaultOn: true,
+  evaluate(_input, summary) {
+    if (summary.ok !== true) {
+      return fail("pr_returned", false, `not opened: ${String(summary.reason ?? "unknown")}`);
+    }
+    const num = Number(summary.prNumber ?? 0);
+    const url = String(summary.prUrl ?? "");
+    if (!num || !url.startsWith("https://github.com/")) {
+      return fail("pr_returned", url, "missing prNumber or non-github prUrl");
+    }
+    return pass("pr_returned", `#${num}`, url);
+  },
+};
+
+const open_repo_pull_request_repo_in_allowlist: InvariantDefinition = {
+  key: "repo_in_allowlist",
+  capabilityKey: "open_repo_pull_request",
+  label: "Repo is in the cross-repo allowlist",
+  description:
+    "Re-confirms post-execution that the repoFullName matches the code-defined allowlist. The capability also checks pre-flight; this is the second wall.",
+  defaultOn: true,
+  evaluate(input, summary) {
+    const repo = String(input.repoFullName ?? summary.repoFullName ?? "");
+    if (!repo.startsWith("MacTech-Solutions-LLC/")) {
+      return fail("repo_in_allowlist", repo, `repo ${repo} is outside the MacTech-Solutions-LLC namespace`);
+    }
+    return pass("repo_in_allowlist", repo, "in MacTech-Solutions-LLC namespace");
+  },
+};
+
+const open_repo_pull_request_under_loc_ceiling: InvariantDefinition = {
+  key: "under_loc_ceiling",
+  capabilityKey: "open_repo_pull_request",
+  label: "PR is under the LOC ceiling",
+  description:
+    "Refuses the run if the agent generated more than 400 total lines of new content. Big patches must be split into multiple agent runs.",
+  defaultOn: true,
+  evaluate(_input, summary) {
+    const total = Number(summary.totalLines ?? 0);
+    if (total > 400) return fail("under_loc_ceiling", total, `${total} lines exceeds 400-line ceiling`);
+    return pass("under_loc_ceiling", total, `${total} lines`);
+  },
+};
+
+const open_repo_pull_request_changed_some_files: InvariantDefinition = {
+  key: "changed_some_files",
+  capabilityKey: "open_repo_pull_request",
+  label: "PR changed at least one file",
+  description:
+    "Sanity check: a 0-file PR is a sign the codegen returned an empty patch and the capability mistakenly opened the PR anyway.",
+  defaultOn: true,
+  evaluate(_input, summary) {
+    const n = Number(summary.filesChanged ?? 0);
+    if (n < 1) return fail("changed_some_files", n, "PR has no file changes");
+    return pass("changed_some_files", n, `${n} file(s) changed`);
+  },
+};
+
+// ───────────────────────────────────────────────────────────────────────────
 // Registry exports
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -415,6 +490,11 @@ const ALL: InvariantDefinition[] = [
   ai_summarize_dashboard_answer_present,
   email_team_summary_actually_sent,
   email_team_summary_recipients_set,
+  // Slice 13
+  open_repo_pull_request_pr_returned,
+  open_repo_pull_request_repo_in_allowlist,
+  open_repo_pull_request_under_loc_ceiling,
+  open_repo_pull_request_changed_some_files,
 ];
 
 const BY_CAPABILITY = new Map<string, InvariantDefinition[]>();
