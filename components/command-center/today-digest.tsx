@@ -6,6 +6,7 @@
  * when empty so the card stays scannable on a quiet day.
  */
 
+import Link from "next/link";
 import {
   AlertOctagon,
   ShieldOff,
@@ -19,6 +20,7 @@ import {
   CheckCircle2,
   ArrowRightCircle,
   ExternalLink,
+  ChevronRight,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SeverityBadge } from "@/components/ui/severity-badge";
@@ -66,44 +68,53 @@ export function TodayDigestCard({ digest }: Props) {
             title="Deploys"
             count={digest.deploys.length}
             empty="no deploys"
+            allHref="/admin/ops/deployments"
           >
-            {digest.deploys.map((d) => (
-              <li key={d.id} className="flex items-start gap-2 py-1.5">
-                <DeployStatusDot status={d.railwayStatus} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="truncate font-medium">
-                      {d.appName ?? d.appKey ?? "?"}
-                    </span>
-                    {d.appKey && d.appName ? (
-                      <span className="font-mono text-[10px] text-muted-foreground">
-                        {d.appKey}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <span>{d.railwayStatus}</span>
-                    {d.productionDriftStatus !== "in_sync" ? (
-                      <>
-                        <span>·</span>
-                        <span className="text-warning">
-                          drift: {d.productionDriftStatus}
+            {digest.deploys.map((d) => {
+              const href = d.appKey ? `/admin/apps/${d.appKey}` : "/admin/ops/deployments";
+              return (
+                <li key={d.id}>
+                  <Link
+                    href={href}
+                    className="group flex items-start gap-2 rounded-sm py-1.5 hover:bg-muted/30"
+                  >
+                    <DeployStatusDot status={d.railwayStatus} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="truncate font-medium group-hover:text-primary">
+                          {d.appName ?? d.appKey ?? "?"}
                         </span>
-                      </>
-                    ) : null}
-                    {d.liveCommitShortSha ? (
-                      <>
-                        <span>·</span>
-                        <span className="font-mono">{d.liveCommitShortSha}</span>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
-                <span className="text-[10px] text-muted-foreground tabular-nums">
-                  {timeAgo(d.checkedAt)}
-                </span>
-              </li>
-            ))}
+                        {d.appKey && d.appName ? (
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            {d.appKey}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <span>{d.railwayStatus}</span>
+                        {d.productionDriftStatus !== "in_sync" ? (
+                          <>
+                            <span>·</span>
+                            <span className="text-warning">
+                              drift: {d.productionDriftStatus}
+                            </span>
+                          </>
+                        ) : null}
+                        {d.liveCommitShortSha ? (
+                          <>
+                            <span>·</span>
+                            <span className="font-mono">{d.liveCommitShortSha}</span>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground tabular-nums">
+                      {timeAgo(d.checkedAt)}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
           </Section>
 
           <Section
@@ -111,11 +122,15 @@ export function TodayDigestCard({ digest }: Props) {
             title="Commits"
             count={digest.commits.length}
             empty="no commits"
+            allHref="/admin/repositories/commits"
           >
             {digest.commits.map((c) => (
               <li key={c.id} className="flex items-start gap-2 py-1.5">
                 <GitCommit className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
+                <Link
+                  href="/admin/repositories/commits"
+                  className="group min-w-0 flex-1 hover:text-primary"
+                >
                   <div className="flex items-center gap-2 text-xs">
                     <span className="truncate font-medium">
                       {firstLine(c.message)}
@@ -137,14 +152,14 @@ export function TodayDigestCard({ digest }: Props) {
                       </Badge>
                     ) : null}
                   </div>
-                </div>
+                </Link>
                 {c.htmlUrl ? (
                   <a
                     href={c.htmlUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-muted-foreground hover:text-foreground"
-                    aria-label="open commit"
+                    aria-label="open on GitHub"
                   >
                     <ExternalLink className="h-3 w-3" />
                   </a>
@@ -158,6 +173,7 @@ export function TodayDigestCard({ digest }: Props) {
             title="Failed workflows"
             count={digest.failedWorkflows.length}
             empty="all green"
+            allHref="/admin/repositories/workflow-runs"
           >
             {digest.failedWorkflows.map((w) => (
               <li key={w.id} className="flex items-start gap-2 py-1.5">
@@ -190,26 +206,34 @@ export function TodayDigestCard({ digest }: Props) {
             title="Risks opened"
             count={digest.risksOpened.length}
             empty="no new risks"
+            allHref="/admin/ops/risk"
           >
             {digest.risksOpened.map((r) => (
-              <li key={r.id} className="flex items-start gap-2 py-1.5">
-                <SeverityBadge severity={r.severity} className="shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-medium">{r.title}</div>
-                  <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <span className="font-mono uppercase tracking-widest">
-                      {r.category}
-                    </span>
-                    {r.appKey ? (
-                      <>
-                        <span>·</span>
-                        <span className="font-mono">{r.appKey}</span>
-                      </>
-                    ) : null}
-                    <span>·</span>
-                    <span>{timeAgo(r.detectedAt)}</span>
+              <li key={r.id}>
+                <Link
+                  href={`/admin/ops/risk?severity=${encodeURIComponent(r.severity)}`}
+                  className="group flex items-start gap-2 rounded-sm py-1.5 hover:bg-muted/30"
+                >
+                  <SeverityBadge severity={r.severity} className="shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs font-medium group-hover:text-primary">
+                      {r.title}
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <span className="font-mono uppercase tracking-widest">
+                        {r.category}
+                      </span>
+                      {r.appKey ? (
+                        <>
+                          <span>·</span>
+                          <span className="font-mono">{r.appKey}</span>
+                        </>
+                      ) : null}
+                      <span>·</span>
+                      <span>{timeAgo(r.detectedAt)}</span>
+                    </div>
                   </div>
-                </div>
+                </Link>
               </li>
             ))}
           </Section>
@@ -219,30 +243,38 @@ export function TodayDigestCard({ digest }: Props) {
             title="Risks resolved"
             count={digest.risksResolved.length}
             empty="none resolved"
+            allHref="/admin/ops/risk"
           >
             {digest.risksResolved.map((r) => (
-              <li key={r.id} className="flex items-start gap-2 py-1.5">
-                <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-success" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-medium">{r.title}</div>
-                  <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <span className="font-mono uppercase tracking-widest">
-                      {r.category}
-                    </span>
-                    {r.appKey ? (
-                      <>
-                        <span>·</span>
-                        <span className="font-mono">{r.appKey}</span>
-                      </>
-                    ) : null}
-                    {r.resolvedAt ? (
-                      <>
-                        <span>·</span>
-                        <span>{timeAgo(r.resolvedAt)}</span>
-                      </>
-                    ) : null}
+              <li key={r.id}>
+                <Link
+                  href="/admin/ops/risk"
+                  className="group flex items-start gap-2 rounded-sm py-1.5 hover:bg-muted/30"
+                >
+                  <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-success" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs font-medium group-hover:text-primary">
+                      {r.title}
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <span className="font-mono uppercase tracking-widest">
+                        {r.category}
+                      </span>
+                      {r.appKey ? (
+                        <>
+                          <span>·</span>
+                          <span className="font-mono">{r.appKey}</span>
+                        </>
+                      ) : null}
+                      {r.resolvedAt ? (
+                        <>
+                          <span>·</span>
+                          <span>{timeAgo(r.resolvedAt)}</span>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
+                </Link>
               </li>
             ))}
           </Section>
@@ -252,33 +284,39 @@ export function TodayDigestCard({ digest }: Props) {
             title="Agent runs"
             count={digest.agentRuns.length}
             empty="no agent activity"
+            allHref="/admin/agents"
           >
             {digest.agentRuns.map((a) => (
-              <li key={a.id} className="flex items-start gap-2 py-1.5">
-                <Bot className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-medium">
-                    {firstLine(a.requestText)}
+              <li key={a.id}>
+                <Link
+                  href={`/admin/agents/${a.id}`}
+                  className="group flex items-start gap-2 rounded-sm py-1.5 hover:bg-muted/30"
+                >
+                  <Bot className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs font-medium group-hover:text-primary">
+                      {firstLine(a.requestText)}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                      <RunStatusBadge status={a.status} />
+                      <span>·</span>
+                      <span>{a.requestedByEmail}</span>
+                      {a.triggeredByApiKeyName ? (
+                        <>
+                          <span>·</span>
+                          <span className="font-mono">
+                            via {a.triggeredByApiKeyName}
+                          </span>
+                        </>
+                      ) : null}
+                      <span>·</span>
+                      <span>{a.plannedStepCount} steps</span>
+                    </div>
                   </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                    <RunStatusBadge status={a.status} />
-                    <span>·</span>
-                    <span>{a.requestedByEmail}</span>
-                    {a.triggeredByApiKeyName ? (
-                      <>
-                        <span>·</span>
-                        <span className="font-mono">
-                          via {a.triggeredByApiKeyName}
-                        </span>
-                      </>
-                    ) : null}
-                    <span>·</span>
-                    <span>{a.plannedStepCount} steps</span>
-                  </div>
-                </div>
-                <span className="text-[10px] text-muted-foreground tabular-nums">
-                  {timeAgo(a.completedAt ?? a.createdAt)}
-                </span>
+                  <span className="text-[10px] text-muted-foreground tabular-nums">
+                    {timeAgo(a.completedAt ?? a.createdAt)}
+                  </span>
+                </Link>
               </li>
             ))}
           </Section>
@@ -288,11 +326,15 @@ export function TodayDigestCard({ digest }: Props) {
             title="Top noisy traffic"
             count={digest.trafficErrors.length}
             empty="no error traffic"
+            allHref="/admin/ops/traffic"
           >
             {digest.trafficErrors.map((t, i) => (
               <li
                 key={`${t.sourceLabel}-${t.targetLabel}-${i}`}
-                className="flex items-start gap-2 py-1.5"
+              >
+              <Link
+                href="/admin/ops/traffic"
+                className="group flex items-start gap-2 rounded-sm py-1.5 hover:bg-muted/30"
               >
                 <AlertOctagon className="mt-0.5 h-3 w-3 shrink-0 text-warning" />
                 <div className="min-w-0 flex-1">
@@ -319,6 +361,7 @@ export function TodayDigestCard({ digest }: Props) {
                     ) : null}
                   </div>
                 </div>
+              </Link>
               </li>
             ))}
           </Section>
@@ -339,44 +382,51 @@ function CriticalNowStrip({
       label: "Critical risks",
       value: critical.openCriticalRisks,
       hot: critical.openCriticalRisks > 0,
+      href: "/admin/ops/risk?severity=critical",
     },
     {
       Icon: ShieldOff,
       label: "Apps down",
       value: critical.appsCurrentlyDown,
       hot: critical.appsCurrentlyDown > 0,
+      href: "/admin/public-status",
     },
     {
       Icon: XCircle,
       label: "Deploys failed (24h)",
       value: critical.failedDeployments24h,
       hot: critical.failedDeployments24h > 0,
+      href: "/admin/ops/deployments",
     },
     {
       Icon: Bot,
       label: "Agents refused (24h)",
       value: critical.refusedAgentRuns24h,
       hot: critical.refusedAgentRuns24h > 0,
+      href: "/admin/agents",
     },
     {
       Icon: AlertOctagon,
       label: "Awaiting approval",
       value: critical.awaitingApproval,
       hot: critical.awaitingApproval > 0,
+      href: "/admin/agents",
     },
   ];
 
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
       {items.map((it) => (
-        <div
+        <Link
           key={it.label}
+          href={it.href}
           className={
-            "flex items-center gap-2 rounded-md border px-3 py-2 " +
+            "group flex items-center gap-2 rounded-md border px-3 py-2 transition-colors " +
             (it.hot
-              ? "border-destructive/40 bg-destructive/5"
-              : "border-border bg-card/40")
+              ? "border-destructive/40 bg-destructive/5 hover:bg-destructive/10"
+              : "border-border bg-card/40 hover:bg-muted/40")
           }
+          aria-label={`${it.label}: ${it.value}`}
         >
           <it.Icon
             className={
@@ -397,7 +447,8 @@ function CriticalNowStrip({
               {it.label}
             </div>
           </div>
-        </div>
+          <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+        </Link>
       ))}
     </div>
   );
@@ -408,14 +459,22 @@ function Section({
   title,
   count,
   empty,
+  allHref,
   children,
 }: {
   Icon: React.ComponentType<{ className?: string }>;
   title: string;
   count: number;
   empty: string;
+  /** When set, the count badge becomes a link to the full list page. */
+  allHref?: string;
   children: React.ReactNode;
 }) {
+  const counter = (
+    <span className="text-[11px] text-muted-foreground tabular-nums">
+      {count === 0 ? empty : count}
+    </span>
+  );
   return (
     <div className="rounded-md border border-border bg-card/40 p-3">
       <div className="mb-1.5 flex items-center justify-between">
@@ -425,9 +484,18 @@ function Section({
             {title}
           </h3>
         </div>
-        <span className="text-[11px] text-muted-foreground tabular-nums">
-          {count === 0 ? empty : count}
-        </span>
+        {allHref && count > 0 ? (
+          <Link
+            href={allHref}
+            className="group flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+          >
+            <span className="tabular-nums">{count}</span>
+            <span>view all</span>
+            <ChevronRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+          </Link>
+        ) : (
+          counter
+        )}
       </div>
       {count === 0 ? null : (
         <ul className="divide-y divide-border/60">{children}</ul>
