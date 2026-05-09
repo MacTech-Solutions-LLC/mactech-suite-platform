@@ -2,6 +2,7 @@ import Link from "next/link";
 import { SignOutButton } from "@clerk/nextjs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CommandPalette } from "./command-palette";
 import { initialsFor, relativeTime } from "@/lib/utils";
 import { LogOut, ShieldCheck } from "lucide-react";
 import { platformRoleLabel } from "@/lib/permissions";
@@ -24,6 +25,7 @@ export function Topbar({ ctx }: { ctx: CommandCenterAuthContext }) {
       </div>
 
       <div className="flex items-center gap-3">
+        <CommandPalette />
         <Link
           href="/admin/audit-logs"
           className="hidden md:inline text-xs text-muted-foreground hover:text-foreground"
