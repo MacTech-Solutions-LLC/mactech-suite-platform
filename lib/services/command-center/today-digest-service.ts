@@ -98,6 +98,19 @@ export interface TodayDigest {
     callCount: number;
     lastSeenAt: Date;
   }>;
+  /** Sprint 40: awaiting-approval agent runs surfaced inline so the
+   *  operator can Approve & Execute without leaving the dashboard.
+   *  Not time-windowed — these accumulate until acted on. */
+  awaitingApprovalRuns: Array<{
+    id: string;
+    requestText: string;
+    requestedByEmail: string;
+    requestedByClerkUserId: string;
+    intentGoal: string | null;
+    plannedStepCount: number;
+    triggeredByApiKeyName: string | null;
+    createdAt: Date;
+  }>;
 }
 
 const TODAY_WINDOW_HOURS = 24;
@@ -118,6 +131,7 @@ export async function getTodayDigest(): Promise<TodayDigest> {
     risksResolved,
     agentRuns,
     trafficErrorRows,
+    awaitingApprovalRuns,
   ] = await Promise.all([
     // Critical-now metrics
     prisma.operationalRiskFlag.count({
@@ -201,6 +215,25 @@ export async function getTodayDigest(): Promise<TodayDigest> {
       where: { occurredAt: { gte: since }, statusCode: { gte: 400 } },
       _count: { _all: true },
       _max: { occurredAt: true },
+    }),
+    // Sprint 40: awaiting-approval queue surfaced inline on the
+    // dashboard so the operator can act without leaving Command
+    // Center. Newest first, capped — the per-row count badge in the
+    // sidebar is the source of truth for the FULL queue.
+    prisma.agentRun.findMany({
+      where: { status: "awaiting_approval" },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      select: {
+        id: true,
+        requestText: true,
+        requestedByEmail: true,
+        requestedByClerkUserId: true,
+        intentGoal: true,
+        plannedStepCount: true,
+        triggeredByApiKeyName: true,
+        createdAt: true,
+      },
     }),
   ]);
 
@@ -288,6 +321,7 @@ export async function getTodayDigest(): Promise<TodayDigest> {
     })),
     agentRuns: agentRuns,
     trafficErrors,
+    awaitingApprovalRuns,
   };
 }
 

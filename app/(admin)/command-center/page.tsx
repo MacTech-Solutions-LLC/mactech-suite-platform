@@ -17,6 +17,7 @@ import { SyncNowButton } from "@/components/command-center/sync-now-button";
 import { TodayDigestCard } from "@/components/command-center/today-digest";
 import { AskAIPanel } from "@/components/ai/ask-ai-panel";
 import { FixUnhealthyBanner } from "@/components/command-center/fix-unhealthy-banner";
+import { AwaitingApprovalStrip } from "@/components/command-center/awaiting-approval-strip";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
 import {
@@ -39,6 +40,9 @@ export default async function CommandCenterPage() {
   );
   const canEmail = ctx.permissions.includes(PLATFORM_PERMISSIONS.AGENTS_CREATE);
   const canStageAgents = ctx.permissions.includes(PLATFORM_PERMISSIONS.AGENTS_CREATE);
+  const canApproveAgents = ctx.permissions.includes(
+    PLATFORM_PERMISSIONS.AGENTS_APPROVE,
+  );
 
   const [status, snapshots, risks, digest, fixable] = await Promise.all([
     getCommandCenterStatus(),
@@ -62,6 +66,12 @@ export default async function CommandCenterPage() {
       />
 
       <FixUnhealthyBanner fixable={fixable} canStage={canStageAgents} />
+
+      <AwaitingApprovalStrip
+        runs={digest.awaitingApprovalRuns}
+        viewerClerkUserId={ctx.clerkUserId}
+        canApprove={canApproveAgents}
+      />
 
       <section>
         <TodayDigestCard digest={digest} />
