@@ -24,17 +24,32 @@
  * deploy that accidentally reads the production database still
  * cannot fire a PR.
  *
- * Note: NOT included on purpose: `mactech-suite-platform` itself.
- * The agent is for cross-repo work; modifying the Suite belongs in
- * the normal git flow, not behind an agent.
+ * Spans three GitHub locations:
+ *   - MacTech-Solutions-LLC: the org for shared back-office apps.
+ *   - MacTechSolutionsLLC (no hyphens): a separate org currently
+ *     hosting the `mactech` core service.
+ *   - WELCOMETOTHETRIBE: the operator's personal account, which
+ *     owns the customer-facing product repos. Personal-account
+ *     ownership doesn't change the safety contract — the @claude
+ *     routine still requires human PR review.
+ *
+ * NOT included on purpose: `mactech-suite-platform` itself. The
+ * agent is for cross-repo work; modifying the Suite belongs in the
+ * normal git flow, not behind an agent.
  */
 export const CROSS_REPO_ALLOWLIST: readonly string[] = Object.freeze([
-  "MacTech-Solutions-LLC/capture",
-  "MacTech-Solutions-LLC/codex",
-  "MacTech-Solutions-LLC/cleard",
-  "MacTech-Solutions-LLC/training",
-  "MacTech-Solutions-LLC/quality",
-  "MacTech-Solutions-LLC/governanceos",
+  // Customer-facing product repos (under operator's personal account)
+  "WELCOMETOTHETRIBE/mactech-captureos", // capture
+  "WELCOMETOTHETRIBE/CMMC", // codex
+  "WELCOMETOTHETRIBE/vetted", // cleard
+  "WELCOMETOTHETRIBE/cmmc-training-hub", // training
+  // Internal back-office apps (MacTech-Solutions-LLC org)
+  "MacTech-Solutions-LLC/QMS", // quality
+  "MacTech-Solutions-LLC/Governance", // governance
+  "MacTech-Solutions-LLC/Opportunities",
+  "MacTech-Solutions-LLC/Proposal",
+  // mactech core service (separate, no-hyphen org)
+  "MacTechSolutionsLLC/mactech",
 ]);
 
 export function isAllowlistedRepo(repoFullName: string): boolean {
