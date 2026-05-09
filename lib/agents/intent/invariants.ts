@@ -423,18 +423,30 @@ const open_repo_pull_request_repo_in_allowlist: InvariantDefinition = {
   capabilityKey: "open_repo_pull_request",
   label: "Repo is in the cross-repo allowlist",
   description:
-    "Re-confirms post-execution that the issueUrl points at a MacTech-Solutions-LLC repo. The capability also checks pre-flight; this is the second wall.",
+    "Re-confirms post-execution that repoFullName matches the code-defined CROSS_REPO_ALLOWLIST. The capability also checks pre-flight; this is the second wall.",
   defaultOn: true,
   evaluate(input, summary) {
+    // Lazy-import to keep invariants pure-import-safe (the policy module
+    // is just a constant, but this file is also bundled into the
+    // browser-side IntentBuilder UI, so we avoid any chance of
+    // pulling capability code into the client bundle).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { isAllowlistedRepo } = require("../cross-repo/policy") as {
+      isAllowlistedRepo: (repo: string) => boolean;
+    };
     const repo = String(input.repoFullName ?? summary.repoFullName ?? "");
+    if (!repo) return fail("repo_in_allowlist", "", "repoFullName missing from input");
+    if (!isAllowlistedRepo(repo)) {
+      return fail("repo_in_allowlist", repo, `repo ${repo} is not in CROSS_REPO_ALLOWLIST`);
+    }
     const url = String(summary.issueUrl ?? "");
-    if (!repo.startsWith("MacTech-Solutions-LLC/")) {
-      return fail("repo_in_allowlist", repo, `repo ${repo} is outside the MacTech-Solutions-LLC namespace`);
+    if (url) {
+      const expectedPrefix = `https://github.com/${repo}/`;
+      if (!url.startsWith(expectedPrefix)) {
+        return fail("repo_in_allowlist", url, `issueUrl ${url} does not match repo ${repo}`);
+      }
     }
-    if (url && !url.startsWith("https://github.com/MacTech-Solutions-LLC/")) {
-      return fail("repo_in_allowlist", url, `issueUrl points outside MacTech-Solutions-LLC: ${url}`);
-    }
-    return pass("repo_in_allowlist", repo, "in MacTech-Solutions-LLC namespace");
+    return pass("repo_in_allowlist", repo, "matches CROSS_REPO_ALLOWLIST");
   },
 };
 
