@@ -54,6 +54,15 @@ const APP_TOKEN_OVERRIDES: Record<string, Omit<TokenBinding, "token">> = {
     label: "mactech-project",
     scopedProjectId: "72740679-75b1-4b1d-b0ec-0fbee4b7a710",
   },
+  // codex (WELCOMETOTHETRIBE/CMMC) lives in the "CMMC Codex" project
+  // on a Railway workspace the default token can't see. Same project-
+  // token pattern as mactech-core.
+  codex: {
+    envVarName: "RAILWAY_API_TOKEN_CODEX",
+    authStyle: "project",
+    label: "codex-project",
+    scopedProjectId: "a03f2ff2-9b15-492c-a162-ab94c3124f74",
+  },
 };
 
 /**
@@ -110,6 +119,8 @@ function resolveTokenFromEnv(envVarName: string): string | undefined {
       return env.RAILWAY_API_TOKEN_MACTECH;
     case "RAILWAY_API_TOKEN_BMAC":
       return env.RAILWAY_API_TOKEN_BMAC;
+    case "RAILWAY_API_TOKEN_CODEX":
+      return env.RAILWAY_API_TOKEN_CODEX;
     default:
       return undefined;
   }
