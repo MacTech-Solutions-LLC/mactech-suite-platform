@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ExternalLink, Code2 } from "lucide-react";
+import { ExternalLink, Code2, ChevronRight } from "lucide-react";
 import { StatusPill } from "@/components/ui/status-pill";
 import { RiskBadge } from "@/components/ui/risk-badge";
 import {
@@ -32,12 +32,13 @@ export function AppStatusTable({ snapshots }: { snapshots: AppOperationalSnapsho
             <TableHead>Repo</TableHead>
             <TableHead>Criticality</TableHead>
             <TableHead className="text-right">Risks</TableHead>
+            <TableHead className="w-8"><span className="sr-only">Investigate</span></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {snapshots.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+              <TableCell colSpan={8} className="text-center text-sm text-muted-foreground">
                 No active apps in the registry yet. Run the seed or add rows in /admin/app-registry.
               </TableCell>
             </TableRow>
@@ -46,15 +47,23 @@ export function AppStatusTable({ snapshots }: { snapshots: AppOperationalSnapsho
             const a = s.app;
             const health = s.latestHealth?.status ?? "unknown";
             const latency = s.latestHealth?.latencyMs;
+            const investigateHref = `/admin/apps/${a.appKey}`;
             return (
-              <TableRow key={a.id}>
+              <TableRow
+                key={a.id}
+                className="group cursor-pointer transition-colors hover:bg-muted/40"
+              >
                 <TableCell>
-                  <div className="flex flex-col">
+                  <Link
+                    href={investigateHref}
+                    className="flex flex-col hover:text-primary"
+                    aria-label={`Investigate ${a.name}`}
+                  >
                     <span className="font-medium">{a.name}</span>
                     <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                       {a.appKey}
                     </span>
-                  </div>
+                  </Link>
                 </TableCell>
                 <TableCell>
                   <StatusPill status={health} />
@@ -108,6 +117,15 @@ export function AppStatusTable({ snapshots }: { snapshots: AppOperationalSnapsho
                       {s.openRisks[0] ? <RiskBadge severity={s.openRisks[0].severity} /> : null}
                     </div>
                   )}
+                </TableCell>
+                <TableCell className="w-8 text-right">
+                  <Link
+                    href={investigateHref}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    aria-label={`Investigate ${a.name}`}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Link>
                 </TableCell>
               </TableRow>
             );
