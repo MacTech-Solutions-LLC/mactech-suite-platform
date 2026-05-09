@@ -29,6 +29,7 @@ import parser from "cron-parser";
 import { prisma } from "@/lib/db/prisma";
 import { writeAuditLog } from "@/lib/audit";
 import { triggerExternalRun, ExternalTriggerError } from "./external-trigger";
+import { getThresholdMetric } from "./threshold-metrics";
 import type { Intent } from "./intent/types";
 import type { AgentTrigger, AgentRunStatus } from "@prisma/client";
 
@@ -103,21 +104,23 @@ export interface TickOutcome {
 }
 
 export async function runCronTick(now: Date = new Date()): Promise<TickOutcome> {
+  const out: TickOutcome = { fired: 0, skipped: 0, errors: 0, details: [] };
+
+  // ── Cron triggers (kind="cron"): fire when nextFireAt <= now ───────
   const due = await prisma.agentTrigger.findMany({
     where: {
       enabled: true,
+      kind: "cron",
       nextFireAt: { lte: now },
     },
     orderBy: { nextFireAt: "asc" },
     take: 100, // bound the per-tick work; subsequent ticks pick up the rest
   });
 
-  const out: TickOutcome = { fired: 0, skipped: 0, errors: 0, details: [] };
-
   for (const trigger of due) {
     // Advance nextFireAt FIRST so a fire that throws does not re-fire
     // on the next tick.
-    const next = nextFireTime(trigger.cronExpression, trigger.timezone, now);
+    const next = nextFireTime(trigger.cronExpression ?? "", trigger.timezone, now);
     if (!next) {
       out.skipped += 1;
       out.details.push({
@@ -186,7 +189,207 @@ export async function runCronTick(now: Date = new Date()): Promise<TickOutcome> 
     }
   }
 
+  // ── Threshold triggers (kind="threshold"): evaluate every tick,
+  //    fire on rising-edge with cooldown — Slice 9 ────────────────────
+  await runThresholdEvaluations(now, out);
+
   return out;
+}
+
+/**
+ * Slice 9: walk every enabled threshold trigger, evaluate its metric,
+ * fire on rising-edge transition (false → true) honoring cooldown.
+ *
+ * Rising-edge semantics avoid the obvious "stuck-high metric blasts
+ * the team every tick" problem: we record `thresholdConditionMet` on
+ * each evaluation and only fire when it transitions from false to
+ * true. Cooldown is a belt-and-suspenders: even if a metric oscillates
+ * around the threshold, the trigger won't refire within
+ * `cooldownMinutes` of its last fire.
+ */
+async function runThresholdEvaluations(now: Date, out: TickOutcome): Promise<void> {
+  const triggers = await prisma.agentTrigger.findMany({
+    where: { enabled: true, kind: "threshold" },
+    take: 100,
+  });
+
+  for (const trigger of triggers) {
+    if (
+      !trigger.thresholdMetric ||
+      !trigger.thresholdOperator ||
+      trigger.thresholdValue == null
+    ) {
+      // Misconfigured — skip cleanly with diagnostic.
+      out.skipped += 1;
+      out.details.push({
+        triggerId: trigger.id,
+        name: trigger.name,
+        status: "skipped",
+        error: "threshold trigger missing metric / operator / value",
+      });
+      continue;
+    }
+
+    const metric = getThresholdMetric(trigger.thresholdMetric);
+    if (!metric) {
+      out.skipped += 1;
+      out.details.push({
+        triggerId: trigger.id,
+        name: trigger.name,
+        status: "skipped",
+        error: `unknown metric '${trigger.thresholdMetric}'`,
+      });
+      continue;
+    }
+
+    let observed: number;
+    try {
+      observed = await metric.evaluate();
+    } catch (err) {
+      out.errors += 1;
+      const message = err instanceof Error ? err.message : "unknown_error";
+      out.details.push({
+        triggerId: trigger.id,
+        name: trigger.name,
+        status: "error",
+        error: `metric evaluation: ${message}`,
+      });
+      await prisma.agentTrigger.update({
+        where: { id: trigger.id },
+        data: { consecutiveFailures: trigger.consecutiveFailures + 1 },
+      });
+      continue;
+    }
+
+    const conditionNowMet = compareThresholdLocal(
+      observed,
+      trigger.thresholdOperator,
+      trigger.thresholdValue,
+    );
+    const wasMet = trigger.thresholdConditionMet;
+
+    // Cooldown: don't refire within cooldownMinutes of last fire.
+    const cooldownMs = trigger.cooldownMinutes * 60 * 1000;
+    const inCooldown =
+      trigger.lastFiredAt != null &&
+      now.getTime() - trigger.lastFiredAt.getTime() < cooldownMs;
+
+    // Rising-edge: fire only on false → true transition.
+    const shouldFire = conditionNowMet && !wasMet && !inCooldown;
+
+    // Update observed value + condition state regardless of fire.
+    await prisma.agentTrigger.update({
+      where: { id: trigger.id },
+      data: {
+        thresholdLastValue: observed,
+        thresholdConditionMet: conditionNowMet,
+      },
+    });
+
+    if (!shouldFire) {
+      // Diagnostic: record the no-fire path so the operator can see
+      // "the metric was evaluated, here's why we didn't fire."
+      out.skipped += 1;
+      out.details.push({
+        triggerId: trigger.id,
+        name: trigger.name,
+        status: "skipped",
+        error: !conditionNowMet
+          ? `metric=${observed} ${trigger.thresholdOperator} ${trigger.thresholdValue} → false`
+          : wasMet
+            ? `condition still met (no rising edge); waiting for fall first`
+            : `cooldown active (fired ${Math.round((now.getTime() - (trigger.lastFiredAt?.getTime() ?? 0)) / 60000)}min ago, cooldown=${trigger.cooldownMinutes}min)`,
+      });
+      continue;
+    }
+
+    // Rising edge — fire.
+    await prisma.agentTrigger.update({
+      where: { id: trigger.id },
+      data: { lastFiredAt: now },
+    });
+    try {
+      const result = await fireTrigger(trigger, "cron");
+      out.fired += 1;
+      out.details.push({
+        triggerId: trigger.id,
+        name: trigger.name,
+        status: "fired",
+        runId: result.runId,
+        runStatus: result.runStatus,
+        requiresApproval: result.requiresApproval,
+      });
+      await prisma.agentTrigger.update({
+        where: { id: trigger.id },
+        data: {
+          lastRunId: result.runId,
+          lastRunStatus: result.runStatus,
+          consecutiveFailures: 0,
+        },
+      });
+      await writeAuditLog({
+        eventType: "agent.trigger.threshold_fired",
+        eventCategory: "system",
+        action: `agent: threshold trigger '${trigger.name}' fired (${trigger.thresholdMetric}=${observed} ${trigger.thresholdOperator} ${trigger.thresholdValue})`,
+        resourceType: "agent_trigger",
+        resourceId: trigger.id,
+        metadata: {
+          metric: trigger.thresholdMetric,
+          operator: trigger.thresholdOperator,
+          threshold: trigger.thresholdValue,
+          observed,
+          runId: result.runId,
+        },
+      });
+    } catch (err) {
+      out.errors += 1;
+      const message = err instanceof Error ? err.message : "unknown_error";
+      out.details.push({
+        triggerId: trigger.id,
+        name: trigger.name,
+        status: "error",
+        error: message,
+      });
+      await prisma.agentTrigger.update({
+        where: { id: trigger.id },
+        data: { consecutiveFailures: trigger.consecutiveFailures + 1 },
+      });
+      await writeAuditLog({
+        eventType: "agent.trigger.fire_failed",
+        eventCategory: "system",
+        severity: "warning",
+        action: `agent: threshold trigger '${trigger.name}' fire failed — ${message}`,
+        resourceType: "agent_trigger",
+        resourceId: trigger.id,
+        metadata: { reason: message, source: "threshold" },
+      });
+    }
+  }
+}
+
+// Inlined to avoid a circular import — same arithmetic as
+// threshold-metrics.ts compare(). Keeping a copy here is fine since
+// both files are tiny and the duplication is intentional + tested by
+// usage.
+function compareThresholdLocal(
+  value: number,
+  op: import("@prisma/client").ThresholdOperator,
+  threshold: number,
+): boolean {
+  switch (op) {
+    case "gt":
+      return value > threshold;
+    case "gte":
+      return value >= threshold;
+    case "lt":
+      return value < threshold;
+    case "lte":
+      return value <= threshold;
+    case "eq":
+      return value === threshold;
+    case "ne":
+      return value !== threshold;
+  }
 }
 
 // ───────────────────────────────────────────────────────────────────────────

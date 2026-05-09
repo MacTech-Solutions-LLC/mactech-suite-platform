@@ -20,6 +20,7 @@ import {
   Target,
   Clock,
   CheckCircle2,
+  Activity,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
@@ -33,6 +34,26 @@ import {
 } from "@/components/agents/intent-editor";
 import { INTENT_TEMPLATES, type IntentTemplate } from "@/lib/agents/intent-templates";
 import { humanizeAgentError } from "@/lib/agents/error-copy";
+
+type TriggerKind = "cron" | "threshold";
+type ThresholdOp = "gt" | "gte" | "lt" | "lte" | "eq" | "ne";
+
+const THRESHOLD_OPERATORS: Array<{ value: ThresholdOp; label: string }> = [
+  { value: "gt", label: "> (greater than)" },
+  { value: "gte", label: "≥ (at least)" },
+  { value: "lt", label: "< (less than)" },
+  { value: "lte", label: "≤ (at most)" },
+  { value: "eq", label: "= (exactly)" },
+  { value: "ne", label: "≠ (not equal)" },
+];
+
+interface MetricCatalogEntry {
+  key: string;
+  label: string;
+  description: string;
+  unit: string;
+  windowHours: number | null;
+}
 
 const CRON_PRESETS: Array<{ label: string; expr: string; tz: string }> = [
   { label: "every minute", expr: "* * * * *", tz: "UTC" },
@@ -50,6 +71,8 @@ export interface TriggerFormProps {
     id: string;
     name: string;
     description: string | null;
+    /** Slice 9: cron (default) or threshold. */
+    kind?: TriggerKind;
     cronExpression: string;
     timezone: string;
     request: string;
@@ -62,6 +85,11 @@ export interface TriggerFormProps {
     };
     autoExecute: boolean;
     enabled: boolean;
+    // Threshold-only fields, all nullable for cron-flavored initials.
+    thresholdMetric?: string | null;
+    thresholdOperator?: ThresholdOp | null;
+    thresholdValue?: number | null;
+    cooldownMinutes?: number;
   };
 }
 
@@ -70,12 +98,48 @@ export function TriggerForm({ initial }: TriggerFormProps) {
 
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
+  // Slice 9: kind discriminator. Default cron for backward compat.
+  const [kind, setKind] = useState<TriggerKind>(initial?.kind ?? "cron");
   const [cronExpression, setCronExpression] = useState(
     initial?.cronExpression ?? "0 6 * * *",
   );
   const [timezone, setTimezone] = useState(initial?.timezone ?? "UTC");
   const [autoExecute, setAutoExecute] = useState(initial?.autoExecute ?? true);
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
+
+  // ── Slice 9: threshold trigger state ────────────────────────────────
+  const [thresholdMetric, setThresholdMetric] = useState<string>(
+    initial?.thresholdMetric ?? "",
+  );
+  const [thresholdOperator, setThresholdOperator] = useState<ThresholdOp>(
+    initial?.thresholdOperator ?? "gt",
+  );
+  const [thresholdValue, setThresholdValue] = useState<string>(
+    initial?.thresholdValue != null ? String(initial.thresholdValue) : "0",
+  );
+  const [cooldownMinutes, setCooldownMinutes] = useState<string>(
+    initial?.cooldownMinutes != null ? String(initial.cooldownMinutes) : "60",
+  );
+  const [metrics, setMetrics] = useState<MetricCatalogEntry[]>([]);
+  const [metricsLoading, setMetricsLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/agents/triggers/metrics")
+      .then((r) => r.json())
+      .then((body: { ok: boolean; metrics?: MetricCatalogEntry[] }) => {
+        if (!cancelled && body.ok && body.metrics) setMetrics(body.metrics);
+      })
+      .catch(() => {
+        /* leave list empty; form shows warning */
+      })
+      .finally(() => {
+        if (!cancelled) setMetricsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const selectedMetric = metrics.find((m) => m.key === thresholdMetric);
 
   // Intent state — flow through the shared editor.
   const [intent, setIntent] = useState<IntentEditorValue>(() => {
@@ -138,20 +202,46 @@ export function TriggerForm({ initial }: TriggerFormProps) {
     if (
       !name.trim() ||
       !intent.request.trim() ||
-      !intent.goal.trim() ||
-      !cronExpression.trim()
+      !intent.goal.trim()
     ) {
       setSubmitError("missing_required_fields");
       return;
     }
+    if (kind === "cron" && !cronExpression.trim()) {
+      setSubmitError("missing_required_fields");
+      return;
+    }
+    if (kind === "threshold") {
+      if (!thresholdMetric) {
+        setSubmitError("missing_required_fields");
+        return;
+      }
+      const tv = parseFloat(thresholdValue);
+      if (!Number.isFinite(tv)) {
+        setSubmitError("threshold_value_invalid");
+        return;
+      }
+    }
     setSaving(true);
     setSubmitError(null);
     try {
-      const payload = {
+      const tv = parseFloat(thresholdValue);
+      const cd = parseInt(cooldownMinutes, 10);
+      const payload: Record<string, unknown> = {
         name,
         description: description || undefined,
-        cronExpression,
-        timezone,
+        kind,
+        // Cron triggers carry cronExpression + tz; threshold triggers
+        // skip them (server zeros them out anyway).
+        ...(kind === "cron" ? { cronExpression, timezone } : {}),
+        ...(kind === "threshold"
+          ? {
+              thresholdMetric,
+              thresholdOperator,
+              thresholdValue: tv,
+              cooldownMinutes: Number.isFinite(cd) ? cd : 60,
+            }
+          : {}),
         request: intent.request,
         autoExecute,
         enabled,
@@ -198,15 +288,49 @@ export function TriggerForm({ initial }: TriggerFormProps) {
   if (!name.trim()) missing.push("trigger name");
   if (!intent.goal.trim() || !goalValid) missing.push("valid goal");
   if (!intent.request.trim()) missing.push("request text");
-  if (cronError) missing.push("valid cron expression");
+  if (kind === "cron" && cronError) missing.push("valid cron expression");
+  if (kind === "threshold" && !thresholdMetric) missing.push("threshold metric");
+  if (kind === "threshold" && !Number.isFinite(parseFloat(thresholdValue)))
+    missing.push("threshold value");
 
   return (
     <div className="space-y-4">
       {/* Schedule ---------------------------------------------------- */}
       <div className="space-y-3 rounded-lg border border-border bg-card/40 p-4">
-        <div className="flex items-center gap-2">
-          <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
-          <div className="text-sm font-semibold">Schedule</div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {kind === "cron" ? (
+              <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
+            ) : (
+              <Activity className="h-4 w-4 text-primary" aria-hidden="true" />
+            )}
+            <div className="text-sm font-semibold">
+              {kind === "cron" ? "Schedule" : "Threshold"}
+            </div>
+          </div>
+          {/* Kind picker — slice 9 */}
+          <div className="flex items-center gap-1.5">
+            <Chip
+              size="sm"
+              variant="ghost"
+              pressed={kind === "cron"}
+              onClick={() => setKind("cron")}
+              ariaLabel="Cron-scheduled trigger"
+            >
+              <Clock className="mr-1 inline h-3 w-3" aria-hidden="true" />
+              Cron
+            </Chip>
+            <Chip
+              size="sm"
+              variant="ghost"
+              pressed={kind === "threshold"}
+              onClick={() => setKind("threshold")}
+              ariaLabel="Threshold-evaluated trigger"
+            >
+              <Activity className="mr-1 inline h-3 w-3" aria-hidden="true" />
+              Threshold
+            </Chip>
+          </div>
         </div>
 
         <label className="block">
@@ -217,7 +341,11 @@ export function TriggerForm({ initial }: TriggerFormProps) {
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder='e.g. "Nightly ecosystem sweep"'
+            placeholder={
+              kind === "cron"
+                ? 'e.g. "Nightly ecosystem sweep"'
+                : 'e.g. "Critical risks opened"'
+            }
             className="w-full rounded-md border border-border bg-background p-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </label>
@@ -234,65 +362,153 @@ export function TriggerForm({ initial }: TriggerFormProps) {
           />
         </label>
 
-        <div>
-          <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Presets
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {CRON_PRESETS.map((p) => (
-              <Chip
-                key={p.label}
-                size="sm"
-                variant="ghost"
-                pressed={cronExpression === p.expr && timezone === p.tz}
-                onClick={() => applyPreset(p)}
-                ariaLabel={`Apply cron preset: ${p.label}`}
-              >
-                {p.label}
-              </Chip>
-            ))}
-          </div>
-        </div>
+        {kind === "cron" ? (
+          <>
+            <div>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                Presets
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {CRON_PRESETS.map((p) => (
+                  <Chip
+                    key={p.label}
+                    size="sm"
+                    variant="ghost"
+                    pressed={cronExpression === p.expr && timezone === p.tz}
+                    onClick={() => applyPreset(p)}
+                    ariaLabel={`Apply cron preset: ${p.label}`}
+                  >
+                    {p.label}
+                  </Chip>
+                ))}
+              </div>
+            </div>
 
-        <div className="grid gap-2 md:grid-cols-2">
-          <label className="block">
-            <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              Cron expression
+            <div className="grid gap-2 md:grid-cols-2">
+              <label className="block">
+                <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Cron expression
+                </div>
+                <input
+                  type="text"
+                  value={cronExpression}
+                  onChange={(e) => setCronExpression(e.target.value)}
+                  placeholder="0 6 * * *"
+                  className="w-full rounded-md border border-border bg-background p-2 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </label>
+              <label className="block">
+                <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Timezone (IANA)
+                </div>
+                <input
+                  type="text"
+                  value={timezone}
+                  onChange={(e) => setTimezone(e.target.value)}
+                  className="w-full rounded-md border border-border bg-background p-2 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </label>
             </div>
-            <input
-              type="text"
-              value={cronExpression}
-              onChange={(e) => setCronExpression(e.target.value)}
-              placeholder="0 6 * * *"
-              className="w-full rounded-md border border-border bg-background p-2 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-          </label>
-          <label className="block">
-            <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              Timezone (IANA)
+            {cronError ? (
+              <div className="flex items-center gap-1 text-xs text-warning">
+                <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                {cronError}
+              </div>
+            ) : cronPreview ? (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <CheckCircle2
+                  className="h-3 w-3 text-success"
+                  aria-hidden="true"
+                />
+                <span className="font-mono">{cronPreview}</span>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <>
+            {/* Threshold form — slice 9 */}
+            <p className="text-xs text-muted-foreground">
+              Evaluated on every cron tick (~5 min). Fires on the rising edge
+              of <code className="rounded bg-secondary/40 px-1 font-mono text-[11px]">metric op value</code>{" "}
+              becoming true. Re-fires only after the condition flips false then
+              true again, with cooldown as a belt-and-suspenders against rapid
+              oscillation.
+            </p>
+            <label className="block">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                Metric
+              </div>
+              <select
+                value={thresholdMetric}
+                onChange={(e) => setThresholdMetric(e.target.value)}
+                className="w-full rounded-md border border-border bg-background p-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="">
+                  {metricsLoading
+                    ? "Loading metrics…"
+                    : "— pick a metric —"}
+                </option>
+                {metrics.map((m) => (
+                  <option key={m.key} value={m.key}>
+                    {m.label}
+                    {m.windowHours ? ` (${m.windowHours}h)` : ""}
+                  </option>
+                ))}
+              </select>
+              {selectedMetric ? (
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  {selectedMetric.description}
+                </div>
+              ) : null}
+            </label>
+
+            <div className="grid gap-2 md:grid-cols-3">
+              <label className="block">
+                <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Operator
+                </div>
+                <select
+                  value={thresholdOperator}
+                  onChange={(e) =>
+                    setThresholdOperator(e.target.value as ThresholdOp)
+                  }
+                  className="w-full rounded-md border border-border bg-background p-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  {THRESHOLD_OPERATORS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Value{selectedMetric ? ` (${selectedMetric.unit})` : ""}
+                </div>
+                <input
+                  type="number"
+                  step="any"
+                  value={thresholdValue}
+                  onChange={(e) => setThresholdValue(e.target.value)}
+                  className="w-full rounded-md border border-border bg-background p-2 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </label>
+              <label className="block">
+                <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Cooldown (min)
+                </div>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={cooldownMinutes}
+                  onChange={(e) => setCooldownMinutes(e.target.value)}
+                  className="w-full rounded-md border border-border bg-background p-2 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </label>
             </div>
-            <input
-              type="text"
-              value={timezone}
-              onChange={(e) => setTimezone(e.target.value)}
-              className="w-full rounded-md border border-border bg-background p-2 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-          </label>
-        </div>
-        {cronError ? (
-          <div className="flex items-center gap-1 text-xs text-warning">
-            <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-            {cronError}
-          </div>
-        ) : cronPreview ? (
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <CheckCircle2
-              className="h-3 w-3 text-success"
-              aria-hidden="true"
-            />
-            <span className="font-mono">{cronPreview}</span>
-          </div>
-        ) : null}
+          </>
+        )}
 
         <div className="flex flex-wrap items-center gap-3 pt-1">
           <label htmlFor="trigger-enabled" className="flex cursor-pointer items-center gap-1.5 text-xs">
@@ -367,7 +583,13 @@ export function TriggerForm({ initial }: TriggerFormProps) {
         <Button
           size="sm"
           disabled={
-            saving || Boolean(cronError) || !name.trim() || !intent.request.trim() || !goalValid
+            saving ||
+            (kind === "cron" && Boolean(cronError)) ||
+            (kind === "threshold" &&
+              (!thresholdMetric || !Number.isFinite(parseFloat(thresholdValue)))) ||
+            !name.trim() ||
+            !intent.request.trim() ||
+            !goalValid
           }
           onClick={submit}
         >
