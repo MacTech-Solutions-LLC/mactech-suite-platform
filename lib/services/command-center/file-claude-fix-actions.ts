@@ -228,10 +228,10 @@ function renderIssueBody(args: {
     `- Branch prefix: \`mactech-agent/\` (e.g. \`mactech-agent/fix-${args.railwayStatus}-${(args.liveCommitShortSha ?? "deploy").slice(0, 7)}\`).`,
     `- Keep the diff small — target the failing line(s), not surrounding cleanup.`,
     `- Do NOT modify lockfiles, \`.env*\`, \`.github/workflows/*\`, \`Dockerfile\`, \`railway.toml\`, \`nixpacks.toml\`, or auth middleware.`,
-    `- **Do NOT auto-merge.** Open the PR; a human at MacTech Solutions reviews and merges.`,
+    `- **Auto-merge is approved.** This is a crash-fix issue from the Suite — the operator has pre-approved the class of action (broken-build → minimal patch). The Suite enables GitHub's native auto-merge on the PR as soon as it's opened; with branch protection / CI it waits for green, without it merges immediately. No additional human review needed unless your patch touches anything outside the failing module.`,
     "",
     `---`,
-    `_Filed by the MacTech Suite Crash Diagnosis (sprint 36+37). The full deploy logs live on Railway; the tail above is the Suite's heuristic extract of the relevant error lines._`,
+    `_Filed by the MacTech Suite Crash Diagnosis. Full deploy logs live on Railway; the tail above is the Suite's heuristic extract of the relevant error lines. Suite auto-merge: sprint 38._`,
   ]
     .filter((l) => l !== null)
     .join("\n");

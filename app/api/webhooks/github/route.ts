@@ -28,6 +28,11 @@ import { writeAuditLog, redactMetadata } from "@/lib/audit";
 import { prisma } from "@/lib/db/prisma";
 import { verifyGitHubSignature } from "@/lib/integrations/github/webhook-signature";
 import { classifyChangedFiles } from "@/lib/integrations/github/risk-paths";
+import { enableAutoMergeForPR } from "@/lib/integrations/github/auto-merge";
+import {
+  AGENT_BRANCH_PREFIX,
+  isAllowlistedRepo,
+} from "@/lib/agents/cross-repo/policy";
 import { withInboundTrafficRecording } from "@/lib/services/command-center/traffic-service";
 import type { Prisma } from "@prisma/client";
 
@@ -165,6 +170,8 @@ async function handleGitHubWebhook(request: NextRequest): Promise<NextResponse> 
       await persistPushCommits(repoRow.id, payload);
     } else if (event === "workflow_run") {
       await persistWorkflowRunWebhook(repoRow.id, payload);
+    } else if (event === "pull_request") {
+      await maybeAutoMergeAgentPR(fullName, payload);
     }
   } catch (err) {
     await writeAuditLog({
@@ -353,4 +360,70 @@ function normalizeConclusion(c: string | null) {
     "startup_failure",
   ] as const;
   return (ok as readonly string[]).includes(c) ? (c as (typeof ok)[number]) : null;
+}
+
+/**
+ * Sprint 38: when a PR opens on a `mactech-agent/` branch in an
+ * allowlisted repo, enable GitHub's native auto-merge so the
+ * crash-fix flow lands without a human click. Class-of-action was
+ * pre-approved when the operator filed the @claude issue from the
+ * Suite's Crash Diagnose dialog.
+ *
+ * Strict gates:
+ *   - action must be "opened" (not edited/synchronize/closed/etc.)
+ *   - branch must start with the AGENT_BRANCH_PREFIX
+ *   - repo must be in CROSS_REPO_ALLOWLIST
+ *   - draft PRs are skipped (let the author finish before merging)
+ *
+ * If GitHub's auto-merge is disabled at the repo level, the helper
+ * returns auto_merge_disabled_on_repo; we audit-log that distinctly
+ * so the operator sees the actionable next step in /admin/audit-logs.
+ */
+async function maybeAutoMergeAgentPR(
+  fullName: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const action = readPath(payload, ["action"]);
+  if (action !== "opened" && action !== "ready_for_review") return;
+
+  const branch = readPath(payload, ["pull_request", "head", "ref"]) as
+    | string
+    | null;
+  const number = readPath(payload, ["pull_request", "number"]) as number | null;
+  const draft = readPath(payload, ["pull_request", "draft"]);
+  if (!branch || typeof number !== "number") return;
+  if (draft === true) return;
+  if (!branch.startsWith(AGENT_BRANCH_PREFIX)) return;
+  if (!isAllowlistedRepo(fullName)) return;
+
+  const [owner, repo] = fullName.split("/");
+  if (!owner || !repo) return;
+
+  const result = await enableAutoMergeForPR(owner, repo, number);
+
+  await writeAuditLog({
+    eventType: result.ok
+      ? "command_center.auto_merge.enabled"
+      : `command_center.auto_merge.${result.reason}`,
+    eventCategory: "system",
+    severity: result.ok
+      ? "info"
+      : result.reason === "auto_merge_disabled_on_repo"
+        ? "warning"
+        : "warning",
+    action: result.ok
+      ? `Enabled auto-merge on ${fullName}#${number} (mactech-agent crash-fix branch ${branch})`
+      : `Auto-merge enable failed on ${fullName}#${number}: ${result.reason}${result.message ? ` — ${result.message}` : ""}`,
+    resourceType: "github_pull_request",
+    resourceId: `${fullName}#${number}`,
+    metadata: {
+      fullName,
+      pullNumber: number,
+      branch,
+      ok: result.ok,
+      reason: result.ok ? null : result.reason,
+      message: result.ok ? null : result.message,
+      sprint: "38",
+    },
+  });
 }
