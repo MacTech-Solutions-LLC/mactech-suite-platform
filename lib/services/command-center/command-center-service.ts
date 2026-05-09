@@ -222,6 +222,21 @@ export async function runReconciliation(
       });
       risksOpened += out.opened.length;
       risksResolved += out.resolved.length;
+
+      // Sprint 41: autonomous crash auto-fix. When the latest snapshot
+      // is failed/crashed AND AUTO_FILE_CRASH_FIXES=true, fire a fix
+      // issue. Cooldown + permission gates inside the service; this
+      // call is a no-op when the flag is off.
+      if (
+        ds.latest?.id &&
+        (ds.latest.railwayStatus === "failed" ||
+          ds.latest.railwayStatus === "crashed")
+      ) {
+        const { maybeAutoFileFixForSnapshot } = await import(
+          "./crash-auto-fix-service"
+        );
+        await maybeAutoFileFixForSnapshot(ds.latest.id, "reconciliation");
+      }
     } catch (err) {
       perAppErrors.push({
         appKey: app.appKey,
