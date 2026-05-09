@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { CreateWebhookForm } from "@/components/forms/create-webhook-form";
 import { WebhookRowActions } from "@/components/forms/webhook-row-actions";
+import { WebhookDeliveryRetryButton } from "@/components/forms/webhook-delivery-retry-button";
 import { prisma } from "@/lib/db/prisma";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
@@ -167,11 +168,12 @@ export default async function WebhooksPage() {
                 <TableHead>Status</TableHead>
                 <TableHead>Response</TableHead>
                 <TableHead>Attempts</TableHead>
+                <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {recentDeliveries.length === 0 ? (
-                <TableEmpty colSpan={6} message="No deliveries yet." />
+                <TableEmpty colSpan={7} message="No deliveries yet." />
               ) : (
                 recentDeliveries.map((d) => (
                   <TableRow key={d.id}>
@@ -205,6 +207,12 @@ export default async function WebhooksPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-xs">{d.attemptCount}</TableCell>
+                    <TableCell className="text-right">
+                      <WebhookDeliveryRetryButton
+                        deliveryId={d.id}
+                        status={d.status}
+                      />
+                    </TableCell>
                   </TableRow>
                 ))
               )}
