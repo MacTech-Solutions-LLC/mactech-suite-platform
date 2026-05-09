@@ -564,6 +564,12 @@ model AppRegistry {
   dependencyNotes         String?
   operationalNotes        String?
   lastObservedAt          DateTime?
+  // Public status page (Slice 11). Opt-in per app — defaults to false
+  // so nothing leaks until an admin explicitly enables it. Display
+  // name override lets an admin show a customer-friendly name on the
+  // public page (e.g. "Capture" instead of "MacTech Capture").
+  publicStatusVisible     Boolean        @default(false)
+  publicStatusName        String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -589,6 +595,7 @@ model AppRegistry {
   @@index([criticality])
   @@index([lifecycle])
   @@index([repoFullName])
+  @@index([publicStatusVisible])
 }
 
 model ProductEntitlement {

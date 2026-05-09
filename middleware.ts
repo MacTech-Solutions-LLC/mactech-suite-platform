@@ -6,6 +6,11 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/access-restricted",
+  // Public operational status page (Slice 11). Anonymous traffic only
+  // sees the sanitized projection from getPublicStatus(); no auth
+  // required. Served at /status and at status.suite.mactechsolutionsllc.com
+  // (host CNAME → this app).
+  "/status",
   "/api/health",
   "/api/build-info",
   "/api/webhooks/clerk",

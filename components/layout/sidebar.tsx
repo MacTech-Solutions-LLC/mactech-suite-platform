@@ -84,6 +84,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
       { href: "#deployments", label: "Railway Deployments", icon: Rocket, disabled: true },
       { href: "#incidents", label: "Incidents", icon: AlertOctagon, disabled: true },
       { href: "/admin/ops/risk", label: "Runtime Risk", icon: Siren },
+      { href: "/admin/public-status", label: "Public Status Page", icon: Globe2 },
     ],
   },
   {
