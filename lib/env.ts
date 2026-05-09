@@ -101,6 +101,12 @@ const RawEnvSchema = z.object({
    *  current routing because it adds no projects we don't already
    *  see. See issue #55 for context. */
   RAILWAY_API_TOKEN_BMAC: z.string().optional(),
+  /** Project-scoped Railway token for the "CMMC Codex" project,
+   *  which hosts the WELCOMETOTHETRIBE/CMMC repo (codex app). The
+   *  default workspace token can't see this project, so codex is
+   *  routed through this token via APP_TOKEN_OVERRIDES. Project
+   *  tokens use the Project-Access-Token header (authStyle="project"). */
+  RAILWAY_API_TOKEN_CODEX: z.string().optional(),
   CLOUDFLARE_API_TOKEN: z.string().optional(),
   CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
