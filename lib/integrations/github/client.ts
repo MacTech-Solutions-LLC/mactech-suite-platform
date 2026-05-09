@@ -101,6 +101,37 @@ export interface GitHubWorkflowRunSummary {
   completedAt: string | null;
 }
 
+export interface GitHubPullRequestSummary {
+  number: number;
+  title: string;
+  state: "open" | "closed";
+  draft: boolean;
+  htmlUrl: string;
+  authorLogin: string | null;
+  createdAt: string;
+  updatedAt: string;
+  baseBranch: string;
+  headBranch: string;
+  /** Reviewers + assignees count — informs "needs review" surface. */
+  reviewerCount: number;
+  /** Comment count from GitHub (issue + review comments combined). */
+  commentCount: number;
+}
+
+export interface GitHubIssueSummary {
+  number: number;
+  title: string;
+  state: "open" | "closed";
+  htmlUrl: string;
+  authorLogin: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** Slice-7 surface: which labels the issue carries — operators
+   *  filter on these to identify ops vs bug vs feature. */
+  labels: string[];
+  commentCount: number;
+}
+
 // ─── Client ───────────────────────────────────────────────────────────────
 
 export interface GitHubClient {
@@ -144,6 +175,26 @@ export interface GitHubClient {
     repo: string,
     input: { title: string; body: string; labels?: string[] },
   ): Promise<GitHubResult<{ data: { number: number; htmlUrl: string } }>>;
+  /**
+   * Slice 7: list open pull requests for the per-app investigate page.
+   * Returns the most recent N (capped at 30) so the UI can render a
+   * "PRs awaiting review" panel without paginating.
+   */
+  listOpenPullRequests(
+    owner: string,
+    repo: string,
+    perPage?: number,
+  ): Promise<GitHubResult<{ data: GitHubPullRequestSummary[] }>>;
+  /**
+   * Slice 7: list open issues (non-PR) for the same panel. GitHub's
+   * /issues endpoint returns both PRs and issues; we filter to issues
+   * only here.
+   */
+  listOpenIssues(
+    owner: string,
+    repo: string,
+    perPage?: number,
+  ): Promise<GitHubResult<{ data: GitHubIssueSummary[] }>>;
 }
 
 export function getGitHubClient(): GitHubClient {
@@ -170,6 +221,8 @@ function makeUnconfiguredClient(): GitHubClient {
     getCommit: fail as GitHubClient["getCommit"],
     listWorkflowRuns: fail as GitHubClient["listWorkflowRuns"],
     createIssue: fail as GitHubClient["createIssue"],
+    listOpenPullRequests: fail as GitHubClient["listOpenPullRequests"],
+    listOpenIssues: fail as GitHubClient["listOpenIssues"],
   };
 }
 
@@ -441,10 +494,105 @@ function makeRealClient(token: string): GitHubClient {
         }
       }
     },
+
+    async listOpenPullRequests(owner, repo, perPage = 20) {
+      const qs = new URLSearchParams({
+        state: "open",
+        per_page: String(Math.min(perPage, 30)),
+        sort: "updated",
+        direction: "desc",
+      });
+      const r = await fetchJson<RawPullRequestList>(
+        `/repos/${owner}/${repo}/pulls?${qs.toString()}`,
+      );
+      if (!r.ok) return r;
+      return {
+        ok: true,
+        data: r.data.map((pr) => ({
+          number: pr.number,
+          title: pr.title,
+          state: pr.state as "open" | "closed",
+          draft: Boolean(pr.draft),
+          htmlUrl: pr.html_url,
+          authorLogin: pr.user?.login ?? null,
+          createdAt: pr.created_at,
+          updatedAt: pr.updated_at,
+          baseBranch: pr.base?.ref ?? "",
+          headBranch: pr.head?.ref ?? "",
+          reviewerCount:
+            (pr.requested_reviewers?.length ?? 0) + (pr.assignees?.length ?? 0),
+          commentCount: (pr.comments ?? 0) + (pr.review_comments ?? 0),
+        })),
+      };
+    },
+
+    async listOpenIssues(owner, repo, perPage = 20) {
+      // GitHub /issues returns BOTH issues and PRs; the PR rows carry
+      // a `pull_request` field. We filter those out here so the panel
+      // shows pure issues. PRs have their own dedicated panel.
+      const qs = new URLSearchParams({
+        state: "open",
+        per_page: String(Math.min(perPage, 30)),
+        sort: "updated",
+        direction: "desc",
+      });
+      const r = await fetchJson<RawIssueList>(
+        `/repos/${owner}/${repo}/issues?${qs.toString()}`,
+      );
+      if (!r.ok) return r;
+      return {
+        ok: true,
+        data: r.data
+          .filter((i) => !i.pull_request)
+          .map((i) => ({
+            number: i.number,
+            title: i.title,
+            state: i.state as "open" | "closed",
+            htmlUrl: i.html_url,
+            authorLogin: i.user?.login ?? null,
+            createdAt: i.created_at,
+            updatedAt: i.updated_at,
+            labels: (i.labels ?? [])
+              .map((l) => (typeof l === "string" ? l : l.name))
+              .filter((s): s is string => typeof s === "string"),
+            commentCount: i.comments ?? 0,
+          })),
+      };
+    },
   };
 }
 
 // ─── Raw GitHub response shapes (we only narrow what we use) ──────────────
+
+interface RawPullRequestList extends Array<{
+  number: number;
+  title: string;
+  state: string;
+  draft?: boolean;
+  html_url: string;
+  user?: { login?: string } | null;
+  created_at: string;
+  updated_at: string;
+  base?: { ref?: string };
+  head?: { ref?: string };
+  requested_reviewers?: Array<unknown>;
+  assignees?: Array<unknown>;
+  comments?: number;
+  review_comments?: number;
+}> {}
+
+interface RawIssueList extends Array<{
+  number: number;
+  title: string;
+  state: string;
+  html_url: string;
+  user?: { login?: string } | null;
+  created_at: string;
+  updated_at: string;
+  labels?: Array<string | { name: string }>;
+  comments?: number;
+  pull_request?: unknown; // present means this is a PR, not an issue
+}> {}
 
 interface RawRepo {
   id: number;

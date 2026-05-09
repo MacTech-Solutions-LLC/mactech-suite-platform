@@ -103,7 +103,16 @@ export default async function RiskPage({
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-col">
-                    <span className="font-medium">{r.app?.name ?? "—"}</span>
+                    {r.app?.appKey ? (
+                      <Link
+                        href={`/admin/apps/${r.app.appKey}`}
+                        className="font-medium hover:underline"
+                      >
+                        {r.app.name}
+                      </Link>
+                    ) : (
+                      <span className="font-medium">—</span>
+                    )}
                     <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                       {r.category}
                     </span>
