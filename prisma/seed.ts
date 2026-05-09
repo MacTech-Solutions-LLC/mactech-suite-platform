@@ -518,6 +518,43 @@ const APP_DEPENDENCIES: Array<{
   { sourceAppKey: "identity-command-center", targetAppKey: "quality", dependencyType: "shared_component", description: "Suite tracks quality in AppRegistry + entitlements", criticality: "medium" },
   { sourceAppKey: "identity-command-center", targetAppKey: "governance", dependencyType: "shared_component", description: "Suite tracks governance in AppRegistry + entitlements", criticality: "medium" },
   { sourceAppKey: "identity-command-center", targetAppKey: "enclavewatch", dependencyType: "shared_component", description: "Suite tracks enclavewatch in AppRegistry + entitlements", criticality: "medium" },
+
+  // ── Slice 5.9 connector audit additions ─────────────────────────────
+  // Audit-ingest fanout for the apps the original seed missed. Every
+  // sibling app POSTs to /api/audit/ingest with its own ApiKey.
+  { sourceAppKey: "cleard", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "medium" },
+  { sourceAppKey: "opportunities", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "medium" },
+  { sourceAppKey: "proposal", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "medium" },
+  { sourceAppKey: "vetted", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "medium" },
+  { sourceAppKey: "mactech-core", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "medium" },
+
+  // Suite-as-registry fanout for the apps the original seed missed.
+  { sourceAppKey: "identity-command-center", targetAppKey: "cleard", dependencyType: "shared_component", description: "Suite tracks cleard in AppRegistry + entitlements", criticality: "medium" },
+  { sourceAppKey: "identity-command-center", targetAppKey: "opportunities", dependencyType: "shared_component", description: "Suite tracks opportunities in AppRegistry + entitlements", criticality: "medium" },
+  { sourceAppKey: "identity-command-center", targetAppKey: "proposal", dependencyType: "shared_component", description: "Suite tracks proposal in AppRegistry + entitlements", criticality: "medium" },
+  { sourceAppKey: "identity-command-center", targetAppKey: "vetted", dependencyType: "shared_component", description: "Suite tracks vetted in AppRegistry + entitlements", criticality: "medium" },
+  { sourceAppKey: "identity-command-center", targetAppKey: "mactech-core", dependencyType: "shared_component", description: "Suite tracks mactech-core in AppRegistry + entitlements", criticality: "low" },
+
+  // Webhooks → Suite. Combined GitHub + Railway flows per app since
+  // the (source, target, dependencyType) unique constraint allows only
+  // one webhook_source edge per pair. Description lists every wired
+  // flow so the operator knows the full ingest surface at a glance.
+  // GitHub webhooks were configured via gh api hooks during slice 2
+  // for every app with a repoFullName. Railway webhooks were
+  // manually configured on the Railway project Settings → Webhooks
+  // page (Railway API does not expose CRUD); currently set on QMS,
+  // Governance, MacTech Training, and MacTech_Suite. Self-edge
+  // (suite → suite) is omitted from the visual graph.
+  { sourceAppKey: "capture", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "high" },
+  { sourceAppKey: "codex", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "high" },
+  { sourceAppKey: "training", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub + Railway lifecycle webhooks → Suite ingest", criticality: "high" },
+  { sourceAppKey: "quality", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub + Railway lifecycle webhooks → Suite ingest", criticality: "high" },
+  { sourceAppKey: "governance", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub + Railway lifecycle webhooks → Suite ingest", criticality: "high" },
+  { sourceAppKey: "enclavewatch", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "high" },
+  { sourceAppKey: "opportunities", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "medium" },
+  { sourceAppKey: "proposal", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "medium" },
+  { sourceAppKey: "vetted", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "medium" },
+  { sourceAppKey: "mactech-core", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "low" },
 ];
 
 async function seedAppDependencies() {
