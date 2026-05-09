@@ -10,8 +10,8 @@
  * it is shared with TriggerForm so the two surfaces don't drift.
  */
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Sparkles, Loader2, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
@@ -24,16 +24,77 @@ import {
 import { INTENT_TEMPLATES, type IntentTemplate } from "@/lib/agents/intent-templates";
 import { humanizeAgentError } from "@/lib/agents/error-copy";
 
+/**
+ * Sprint 19: per-category recipes for the Risk row "Fix this with
+ * agent" deep-link. Adding a new category here unlocks the deep-link
+ * for that risk; the RiskRowActions component checks AGENT_FIXABLE
+ * (a parallel constant) to decide whether to render the menu item.
+ */
+const CROSS_REPO_FIX_RECIPES: Record<
+  string,
+  { goal: (appKey: string) => string; request: (appKey: string) => string }
+> = {
+  missing_health_endpoint: {
+    goal: (appKey) =>
+      `Create a public anonymous /api/health endpoint in the ${appKey} repository.`,
+    request: (appKey) =>
+      `Use open_repo_pull_request with repoFullName=MacTech-Solutions-LLC/${appKey} (or the operator's personal-account fork — check the AppRegistry repoFullName field). intent: 'Add a public anonymous /api/health Next.js route that returns JSON {status:"ok", service:"${appKey}", timestamp:<ISO-8601>}. The route must NOT be behind Clerk auth — exclude /api/health from middleware.ts public-route matching if needed. Match the repo's existing app/ vs pages/ convention.' contextHint: 'See package.json for framework version, README.md for conventions, middleware.ts for auth gate config. The MacTech Suite probes this endpoint anonymously every reconciliation tick.'`,
+  },
+  missing_build_info: {
+    goal: (appKey) =>
+      `Create a public anonymous /api/build-info endpoint in the ${appKey} repository.`,
+    request: (appKey) =>
+      `Use open_repo_pull_request with repoFullName=MacTech-Solutions-LLC/${appKey}. intent: 'Add a public anonymous /api/build-info Next.js route that returns JSON {service, environment, commitSha, commitShortSha, branch, repo, timestamp}. Read from RAILWAY_GIT_COMMIT_SHA and related Railway-injected env vars where available. The route must NOT be behind Clerk auth.' contextHint: 'See package.json + README.md. The MacTech Suite uses /api/build-info to detect production-behind-main drift.'`,
+  },
+};
+
 export function IntentBuilder() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [intent, setIntent] = useState<IntentEditorValue>(emptyIntentValue());
   const [goalValid, setGoalValid] = useState(false);
   const [planning, setPlanning] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const consumedRef = useRef(false);
 
   function applyTemplate(t: IntentTemplate) {
     setIntent((prev) => ({ ...prev, goal: t.goal, request: t.request }));
   }
+
+  // Sprint 19: accept ?intent=cross_repo_fix&appKey=X&category=Y
+  // from deep-links (e.g. the Risk row "Fix this with agent" item).
+  // Maps category → a known recipe and prefills the request text +
+  // intent goal so the operator can review and click Plan.
+  useEffect(() => {
+    if (consumedRef.current) return;
+    const intentParam = searchParams.get("intent");
+    if (intentParam !== "cross_repo_fix") return;
+    const appKey = searchParams.get("appKey");
+    const category = searchParams.get("category");
+    if (!appKey || !category) return;
+    const recipe = CROSS_REPO_FIX_RECIPES[category];
+    if (!recipe) return;
+    consumedRef.current = true;
+    setIntent((prev) => ({
+      ...prev,
+      goal: recipe.goal(appKey),
+      request: recipe.request(appKey),
+    }));
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("intent");
+    next.delete("appKey");
+    next.delete("category");
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    // Scroll the operator to the IntentBuilder so the prefill is visible.
+    if (typeof window !== "undefined") {
+      requestAnimationFrame(() => {
+        const el = document.getElementById("intent-builder");
+        el?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }, [searchParams, router, pathname]);
 
   async function submit() {
     if (!intent.request.trim()) {
