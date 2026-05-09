@@ -1,11 +1,40 @@
 "use client";
 
-import { useMemo } from "react";
-import Link from "next/link";
+import { useMemo, useState } from "react";
+import { Boxes, GitBranch } from "lucide-react";
 import type { EcosystemEdge, EcosystemNode } from "@/lib/services/command-center/ecosystem-graph-service";
+
+type ViewMode = "apps" | "repos";
 
 interface Props {
   graph: { nodes: EcosystemNode[]; edges: EcosystemEdge[] };
+}
+
+interface RepoNode {
+  id: string; // repoFullName, doubles as id
+  appKey: string; // owner/repo for label
+  name: string; // repo basename for the secondary line
+  category: string;
+  criticality: string;
+  lifecycle: string;
+  visibility: string;
+  publicUrl: string | null; // https://github.com/{repoFullName}
+  latestHealth: EcosystemNode["latestHealth"];
+  openRiskCount: number;
+  hasRailwayMapping: boolean;
+  hasRepoMapping: boolean;
+  /** Apps backed by this repo. Most repos back exactly one app today
+   *  but the model supports many; the visual lists them in the tooltip. */
+  appKeys: string[];
+}
+
+interface RepoEdge {
+  id: string;
+  sourceId: string; // repoFullName
+  targetId: string; // repoFullName
+  dependencyType: EcosystemEdge["dependencyType"];
+  description: string | null;
+  criticality: string;
 }
 
 /**
@@ -28,10 +57,22 @@ interface Props {
  * and the rendering predictable.
  */
 export function EcosystemGraph({ graph }: Props) {
-  const layout = useMemo(() => buildLayout(graph.nodes), [graph.nodes]);
+  const [view, setView] = useState<ViewMode>("apps");
+
+  // Repo-level projection: group apps by repoFullName, dedupe edges
+  // whose endpoints collapse to the same repo, drop self-edges.
+  const repoView = useMemo(() => projectToRepos(graph), [graph]);
+
+  // Pick the active node/edge set + layout. The structural shape is
+  // identical (id, appKey, name, criticality, etc.) so the SVG body
+  // doesn't branch on view.
+  const activeNodes = view === "apps" ? graph.nodes : repoView.nodes;
+  const activeEdges = view === "apps" ? graph.edges : repoView.edges;
+
+  const layout = useMemo(() => buildLayout(activeNodes), [activeNodes]);
   const nodeById = useMemo(
-    () => new Map(graph.nodes.map((n) => [n.id, n])),
-    [graph.nodes],
+    () => new Map<string, EcosystemNode | RepoNode>(activeNodes.map((n) => [n.id, n])),
+    [activeNodes],
   );
 
   if (graph.nodes.length === 0) {
@@ -41,13 +82,26 @@ export function EcosystemGraph({ graph }: Props) {
       </div>
     );
   }
+  if (view === "repos" && repoView.nodes.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+        No apps have a repoFullName set. Edit AppRegistry rows to enable the repo view.
+      </div>
+    );
+  }
 
   const W = 720;
   const H = 720;
-  const NODE_R = 38;
+  const NODE_R = view === "repos" ? 44 : 38; // repo labels are longer
 
   return (
     <div className="rounded-lg border border-border bg-card/30 p-4">
+      <ViewToggle
+        view={view}
+        onChange={setView}
+        appCount={graph.nodes.length}
+        repoCount={repoView.nodes.length}
+      />
       <svg
         viewBox={`0 0 ${W} ${H}`}
         width="100%"
@@ -81,7 +135,7 @@ export function EcosystemGraph({ graph }: Props) {
                 strokeDasharray={dash}
                 opacity={0.7}
               >
-                <title>{`${nodeById.get(e.sourceId)?.appKey} → ${nodeById.get(e.targetId)?.appKey}: ${e.dependencyType}${e.description ? ` (${e.description})` : ""}`}</title>
+                <title>{`${edgeEndpointLabel(nodeById.get(e.sourceId), view)} → ${edgeEndpointLabel(nodeById.get(e.targetId), view)}: ${e.dependencyType}${e.description ? ` (${e.description})` : ""}`}</title>
               </line>
             );
           })}
@@ -106,11 +160,11 @@ export function EcosystemGraph({ graph }: Props) {
                   x={p.x}
                   y={p.y - 4}
                   textAnchor="middle"
-                  className="text-[11px]"
+                  className={view === "repos" ? "text-[10px]" : "text-[11px]"}
                   fill="hsl(var(--foreground))"
                   style={{ fontWeight: 600 }}
                 >
-                  {n.appKey}
+                  {nodeLabel(n, view)}
                 </text>
                 <text
                   x={p.x}
@@ -119,9 +173,7 @@ export function EcosystemGraph({ graph }: Props) {
                   className="text-[9px]"
                   fill="hsl(var(--muted-foreground))"
                 >
-                  {n.criticality === "mission_critical"
-                    ? "mission-critical"
-                    : n.criticality}
+                  {nodeSublabel(n, view)}
                 </text>
                 {n.openRiskCount > 0 ? (
                   <g transform={`translate(${p.x + NODE_R - 8}, ${p.y - NODE_R + 8})`}>
@@ -136,9 +188,7 @@ export function EcosystemGraph({ graph }: Props) {
                     </text>
                   </g>
                 ) : null}
-                <title>
-                  {`${n.name} · ${n.appKey}\nhealth: ${n.latestHealth ?? "unknown"}\ncriticality: ${n.criticality}\nlifecycle: ${n.lifecycle}\nopen risks: ${n.openRiskCount}`}
-                </title>
+                <title>{nodeTitle(n, view)}</title>
                 {n.publicUrl ? (
                   <a
                     href={n.publicUrl}
@@ -169,7 +219,7 @@ export function EcosystemGraph({ graph }: Props) {
   );
 }
 
-function nodeTone(n: EcosystemNode): { fill: string; stroke: string } {
+function nodeTone(n: EcosystemNode | RepoNode): { fill: string; stroke: string } {
   if (n.latestHealth === "down") {
     return { fill: "hsl(var(--destructive) / 0.25)", stroke: "hsl(var(--destructive))" };
   }
@@ -199,7 +249,9 @@ const DASH_FOR_TYPE: Partial<Record<EcosystemEdge["dependencyType"], string>> = 
   other: "3 3",
 };
 
-function buildLayout(nodes: EcosystemNode[]): Map<string, { x: number; y: number }> {
+function buildLayout(
+  nodes: ReadonlyArray<EcosystemNode | RepoNode>,
+): Map<string, { x: number; y: number }> {
   const inner = nodes
     .filter((n) => n.criticality === "mission_critical" || n.criticality === "high")
     .sort((a, b) => a.appKey.localeCompare(b.appKey));
@@ -264,6 +316,194 @@ function Swatch({ tone, label }: { tone: "success" | "warning" | "destructive" |
         className="inline-block h-3 w-3 rounded-full border"
       />
       {label}
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Slice 5.9: repo-level projection
+// ───────────────────────────────────────────────────────────────────────
+
+interface RepoProjection {
+  nodes: RepoNode[];
+  edges: RepoEdge[];
+}
+
+/**
+ * Project an app-level graph to a repo-level graph: group apps by
+ * repoFullName, drop apps without a repo, dedupe edges that collapse
+ * to the same repo pair, omit self-edges (same source + target repo).
+ */
+function projectToRepos(graph: {
+  nodes: EcosystemNode[];
+  edges: EcosystemEdge[];
+}): RepoProjection {
+  // Group apps by repoFullName.
+  const byRepo = new Map<string, EcosystemNode[]>();
+  for (const a of graph.nodes) {
+    if (!a.repoFullName) continue;
+    const list = byRepo.get(a.repoFullName) ?? [];
+    list.push(a);
+    byRepo.set(a.repoFullName, list);
+  }
+
+  // Build a repo node by taking the worst-of-the-bunch health and the
+  // sum of open risks across the apps that share the repo. Criticality
+  // is the strongest tier present in the bunch.
+  const tierRank: Record<string, number> = {
+    mission_critical: 4,
+    high: 3,
+    medium: 2,
+    low: 1,
+  };
+  const healthRank: Record<string, number> = {
+    down: 4,
+    degraded: 3,
+    unknown: 2,
+    up: 1,
+  };
+  const repoNodes: RepoNode[] = Array.from(byRepo.entries()).map(([fullName, apps]) => {
+    const worstHealth = apps.reduce<EcosystemNode["latestHealth"]>((acc, app) => {
+      const a = app.latestHealth ?? "unknown";
+      const b = acc ?? "unknown";
+      return (healthRank[a] ?? 0) >= (healthRank[b] ?? 0)
+        ? (a as EcosystemNode["latestHealth"])
+        : acc;
+    }, null);
+    const topTier = apps.reduce<string>((acc, app) => {
+      return (tierRank[app.criticality] ?? 0) >= (tierRank[acc] ?? 0)
+        ? app.criticality
+        : acc;
+    }, "low");
+    const repoBase = fullName.split("/")[1] ?? fullName;
+    return {
+      id: fullName,
+      appKey: fullName,
+      name: repoBase,
+      category: apps[0]?.category ?? "service",
+      criticality: topTier,
+      lifecycle: apps[0]?.lifecycle ?? "production",
+      visibility: apps[0]?.visibility ?? "internal",
+      publicUrl: `https://github.com/${fullName}`,
+      latestHealth: worstHealth,
+      openRiskCount: apps.reduce((n, a) => n + a.openRiskCount, 0),
+      hasRailwayMapping: apps.some((a) => a.hasRailwayMapping),
+      hasRepoMapping: true,
+      appKeys: apps.map((a) => a.appKey).sort(),
+    };
+  });
+
+  // Map each app id → its repoFullName so we can rewrite edges.
+  const appIdToRepo = new Map<string, string>();
+  for (const a of graph.nodes) {
+    if (a.repoFullName) appIdToRepo.set(a.id, a.repoFullName);
+  }
+
+  // Dedupe edges by (sourceRepo, targetRepo, dependencyType). Drop
+  // self-edges and edges whose endpoints don't have a repo.
+  const seen = new Set<string>();
+  const repoEdges: RepoEdge[] = [];
+  for (const e of graph.edges) {
+    const src = appIdToRepo.get(e.sourceId);
+    const tgt = appIdToRepo.get(e.targetId);
+    if (!src || !tgt) continue;
+    if (src === tgt) continue;
+    const key = `${src}::${tgt}::${e.dependencyType}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    repoEdges.push({
+      id: key,
+      sourceId: src,
+      targetId: tgt,
+      dependencyType: e.dependencyType,
+      description: e.description,
+      criticality: e.criticality,
+    });
+  }
+
+  return { nodes: repoNodes.sort((a, b) => a.id.localeCompare(b.id)), edges: repoEdges };
+}
+
+function nodeLabel(n: EcosystemNode | RepoNode, view: ViewMode): string {
+  if (view === "apps") return n.appKey;
+  // In repos view, prefer the repo basename for readability.
+  return (n as RepoNode).name;
+}
+
+function nodeSublabel(n: EcosystemNode | RepoNode, view: ViewMode): string {
+  if (view === "apps") {
+    return n.criticality === "mission_critical" ? "mission-critical" : n.criticality;
+  }
+  // Repo sublabel: how many apps live here, plus org segment for context.
+  const r = n as RepoNode;
+  const owner = r.id.split("/")[0] ?? "";
+  if (r.appKeys.length > 1) return `${owner} · ${r.appKeys.length} apps`;
+  return owner;
+}
+
+function nodeTitle(n: EcosystemNode | RepoNode, view: ViewMode): string {
+  if (view === "apps") {
+    const a = n as EcosystemNode;
+    return `${a.name} · ${a.appKey}\nhealth: ${a.latestHealth ?? "unknown"}\ncriticality: ${a.criticality}\nlifecycle: ${a.lifecycle}\nopen risks: ${a.openRiskCount}`;
+  }
+  const r = n as RepoNode;
+  const apps = r.appKeys.length === 1 ? r.appKeys[0] : `${r.appKeys.length} apps: ${r.appKeys.join(", ")}`;
+  return `${r.id}\nbacks ${apps}\nworst health: ${r.latestHealth ?? "unknown"}\ncriticality: ${r.criticality}\nopen risks (sum): ${r.openRiskCount}`;
+}
+
+function edgeEndpointLabel(n: EcosystemNode | RepoNode | undefined, view: ViewMode): string {
+  if (!n) return "?";
+  if (view === "apps") return n.appKey;
+  return (n as RepoNode).name;
+}
+
+function ViewToggle({
+  view,
+  onChange,
+  appCount,
+  repoCount,
+}: {
+  view: ViewMode;
+  onChange: (v: ViewMode) => void;
+  appCount: number;
+  repoCount: number;
+}) {
+  const Btn = ({
+    mode,
+    icon: Icon,
+    label,
+    count,
+  }: {
+    mode: ViewMode;
+    icon: typeof Boxes;
+    label: string;
+    count: number;
+  }) => {
+    const active = view === mode;
+    return (
+      <button
+        type="button"
+        aria-pressed={active}
+        onClick={() => onChange(mode)}
+        className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+          active
+            ? "border-primary bg-primary/15 text-primary"
+            : "border-border bg-secondary/40 text-muted-foreground hover:bg-secondary"
+        }`}
+      >
+        <Icon className="h-3 w-3" aria-hidden="true" />
+        {label}
+        <span className="font-mono text-[10px] text-muted-foreground">{count}</span>
+      </button>
+    );
+  };
+  return (
+    <div className="mb-3 flex items-center gap-2">
+      <Btn mode="apps" icon={Boxes} label="Apps" count={appCount} />
+      <Btn mode="repos" icon={GitBranch} label="Repos" count={repoCount} />
+      <span className="ml-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+        view
+      </span>
     </div>
   );
 }

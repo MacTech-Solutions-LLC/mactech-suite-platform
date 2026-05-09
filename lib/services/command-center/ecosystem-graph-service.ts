@@ -30,6 +30,10 @@ export interface EcosystemNode {
   hasRailwayMapping: boolean;
   /** Has a GitHub repo mapping — same. */
   hasRepoMapping: boolean;
+  /** owner/repo if AppRegistry.repoFullName is set; null otherwise.
+   *  Slice 5.9 added this so the graph can re-project to a repo-level
+   *  view client-side without re-fetching. */
+  repoFullName: string | null;
 }
 
 export interface EcosystemEdge {
@@ -88,6 +92,7 @@ export async function getEcosystemGraph(): Promise<EcosystemGraph> {
     openRiskCount: a.riskFlags.length,
     hasRailwayMapping: a.railwayResources.length > 0,
     hasRepoMapping: linkedAppIds.has(a.id) || Boolean(a.repoFullName),
+    repoFullName: a.repoFullName,
   }));
 
   const deps = await prisma.appDependency.findMany({
