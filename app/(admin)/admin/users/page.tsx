@@ -125,12 +125,18 @@ export default async function AllUsersPage({
                   return (
                     <TableRow key={u.id}>
                       <TableCell>
-                        <div className="flex items-center gap-3">
+                        <Link
+                          href={`/admin/audit-logs?actorEmail=${encodeURIComponent(
+                            u.email,
+                          )}`}
+                          className="group flex items-center gap-3"
+                          aria-label={`Follow ${u.email} in audit logs`}
+                        >
                           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-xs font-medium">
                             {initialsFor(fullName, u.email)}
                           </div>
                           <div>
-                            <div className="text-sm font-medium">
+                            <div className="text-sm font-medium group-hover:text-primary">
                               {fullName || u.email}
                               {u.id === selfId && (
                                 <Badge variant="outline" className="ml-2 text-[10px]">
@@ -142,7 +148,7 @@ export default async function AllUsersPage({
                               {u.email}
                             </div>
                           </div>
-                        </div>
+                        </Link>
                       </TableCell>
                       <TableCell>
                         {u.isInternalMacTechUser ? (
