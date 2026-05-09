@@ -27,6 +27,7 @@ import {
   Rocket,
   Clock,
 } from "lucide-react";
+import { DiagnoseButton } from "./diagnose-button";
 import type {
   LiveDeployActivity,
   LiveDeployRow,
@@ -190,6 +191,17 @@ function CrashedRow({ row }: { row: LiveDeployRow }) {
           <ExternalRailwayLink row={row} />
         </div>
       </RowLink>
+      {/* Sprint 36: Diagnose expander pulls Railway buildLogs on
+          demand and surfaces the failure root-cause + tail. Lives
+          OUTSIDE the RowLink so clicking it doesn't navigate. */}
+      <div className="border-t border-destructive/40 p-2.5">
+        <DiagnoseButton
+          snapshotId={row.id}
+          appKey={row.appKey}
+          appName={row.appName}
+          repoFullName={row.repoFullName}
+        />
+      </div>
     </li>
   );
 }

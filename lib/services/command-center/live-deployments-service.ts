@@ -60,6 +60,9 @@ export interface LiveDeployRow {
   railwayDashboardUrl: string | null;
   /** Surface the snapshot's error message for failed/crashed rows. */
   errorMessage: string | null;
+  /** AppRegistry.repoFullName — used by the per-row "Plan agent run
+   *  to fix" deep-link on crashed cards. */
+  repoFullName: string | null;
 }
 
 export interface LiveDeployActivity {
@@ -92,7 +95,7 @@ export async function getLiveDeploymentActivity(): Promise<LiveDeployActivity> {
       projectName: true,
       environmentName: true,
       railwayDashboardUrl: true,
-      app: { select: { appKey: true, name: true } },
+      app: { select: { appKey: true, name: true, repoFullName: true } },
       deploymentSnapshots: {
         orderBy: { checkedAt: "desc" },
         take: 1,
@@ -147,6 +150,7 @@ export async function getLiveDeploymentActivity(): Promise<LiveDeployActivity> {
       liveBranch: snap.liveBranch,
       railwayDashboardUrl: r.railwayDashboardUrl,
       errorMessage: errMsg,
+      repoFullName: r.app?.repoFullName ?? null,
     };
 
     if (IN_FLIGHT_STATUSES.includes(snap.railwayStatus)) {
