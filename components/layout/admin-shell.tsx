@@ -2,17 +2,19 @@ import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { Toaster } from "@/components/ui/use-toast";
 import type { CommandCenterAuthContext } from "@/lib/authz";
+import { getSidebarCounts } from "@/lib/services/command-center/sidebar-counts-service";
 
-export function AdminShell({
+export async function AdminShell({
   ctx,
   children,
 }: {
   ctx: CommandCenterAuthContext;
   children: React.ReactNode;
 }) {
+  const counts = await getSidebarCounts();
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar />
+      <Sidebar counts={counts} />
       <div className="flex min-h-screen flex-1 flex-col">
         <Topbar ctx={ctx} />
         <main className="flex-1 overflow-x-hidden p-4 md:p-8">{children}</main>
