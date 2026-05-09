@@ -7,6 +7,7 @@
  */
 
 import { prisma } from "@/lib/db/prisma";
+import { getTrafficSummaryByPair } from "./traffic-service";
 import type {
   AppDependencyType,
   AppRegistry,
@@ -43,14 +44,29 @@ export interface EcosystemEdge {
   dependencyType: AppDependencyType;
   description: string | null;
   criticality: string;
+  /** Slice 6: observed call count over `trafficWindowHours`. 0 if no
+   *  AppCallEvent rows exist for this (source, target) pair in the
+   *  window. */
+  observedCalls: number;
+  /** Slice 6: bytes received by the target (sum of bytesIn). */
+  observedBytesIn: number;
+  /** Slice 6: error-status call count (status >= 400) in the window. */
+  observedErrors: number;
+  /** Slice 6: most recent observed call in the window, or null. */
+  lastSeenAt: Date | null;
 }
 
 export interface EcosystemGraph {
   nodes: EcosystemNode[];
   edges: EcosystemEdge[];
+  /** Slice 6: hours covered by the traffic aggregates (default 24). */
+  trafficWindowHours: number;
 }
 
-export async function getEcosystemGraph(): Promise<EcosystemGraph> {
+export async function getEcosystemGraph(
+  opts: { trafficWindowHours?: number } = {},
+): Promise<EcosystemGraph> {
+  const trafficWindowHours = opts.trafficWindowHours ?? 24;
   const apps = await prisma.appRegistry.findMany({
     where: { status: "active" },
     orderBy: [{ criticality: "desc" }, { name: "asc" }],
@@ -99,16 +115,50 @@ export async function getEcosystemGraph(): Promise<EcosystemGraph> {
     orderBy: [{ criticality: "desc" }, { dependencyType: "asc" }],
   });
 
-  const edges: EcosystemEdge[] = deps.map((d) => ({
-    id: d.id,
-    sourceId: d.sourceAppRegistryId,
-    targetId: d.targetAppRegistryId,
-    dependencyType: d.dependencyType,
-    description: d.description,
-    criticality: d.criticality,
-  }));
+  // Slice 6: pull observed traffic for the same window the caller asked
+  // for. Bucket by (source, target) — multiple dependency types between
+  // the same pair share the same observed counts since the AppCallEvent
+  // row carries no dependency-type semantic.
+  const since = new Date(Date.now() - trafficWindowHours * 60 * 60 * 1000);
+  const trafficRows = await getTrafficSummaryByPair({ since });
+  type Bucket = { calls: number; bytesIn: number; errors: number; lastSeenAt: Date };
+  const trafficByPair = new Map<string, Bucket>();
+  for (const t of trafficRows) {
+    if (!t.sourceAppRegistryId || !t.targetAppRegistryId) continue;
+    const key = `${t.sourceAppRegistryId}::${t.targetAppRegistryId}`;
+    const existing = trafficByPair.get(key);
+    if (existing) {
+      existing.calls += t.callCount;
+      existing.bytesIn += t.bytesIn;
+      existing.errors += t.errorCount;
+      if (t.lastSeenAt > existing.lastSeenAt) existing.lastSeenAt = t.lastSeenAt;
+    } else {
+      trafficByPair.set(key, {
+        calls: t.callCount,
+        bytesIn: t.bytesIn,
+        errors: t.errorCount,
+        lastSeenAt: t.lastSeenAt,
+      });
+    }
+  }
 
-  return { nodes, edges };
+  const edges: EcosystemEdge[] = deps.map((d) => {
+    const traffic = trafficByPair.get(`${d.sourceAppRegistryId}::${d.targetAppRegistryId}`);
+    return {
+      id: d.id,
+      sourceId: d.sourceAppRegistryId,
+      targetId: d.targetAppRegistryId,
+      dependencyType: d.dependencyType,
+      description: d.description,
+      criticality: d.criticality,
+      observedCalls: traffic?.calls ?? 0,
+      observedBytesIn: traffic?.bytesIn ?? 0,
+      observedErrors: traffic?.errors ?? 0,
+      lastSeenAt: traffic?.lastSeenAt ?? null,
+    };
+  });
+
+  return { nodes, edges, trafficWindowHours };
 }
 
 // ─── AppDependency CRUD (used by seed; UI defers to a future PR) ─────

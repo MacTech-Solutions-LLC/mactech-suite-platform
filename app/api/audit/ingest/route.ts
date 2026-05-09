@@ -4,6 +4,12 @@ import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/db/prisma";
 import { requireApiKey } from "@/lib/api-auth";
 import { consumeRateLimit, rate429Response } from "@/lib/rate-limit";
+import {
+  appRegistryIdForKey,
+  approxRequestBytes,
+  recordAppCall,
+  suiteAppRegistryId,
+} from "@/lib/services/command-center/traffic-service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,25 +22,56 @@ const INGEST_LIMIT = 600;
 const INGEST_WINDOW_MS = 60_000;
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
+  const bytesIn = approxRequestBytes(request);
+  // Helper closure so every early-return path emits a traffic event
+  // with the correct status + bytes attribution.
+  const recordTraffic = async (statusCode: number, sourceLabel: string) => {
+    const [sourceId, targetId] = await Promise.all([
+      appRegistryIdForKey(sourceLabel),
+      suiteAppRegistryId(),
+    ]);
+    void recordAppCall({
+      sourceLabel,
+      sourceAppRegistryId: sourceId,
+      targetAppRegistryId: targetId,
+      endpoint: "/api/audit/ingest",
+      method: "POST",
+      statusCode,
+      bytesIn,
+      durationMs: Date.now() - startedAt,
+    });
+  };
+
   const auth = await requireApiKey(request, "audit_ingest");
-  if (!auth.ok) return auth.response;
+  if (!auth.ok) {
+    void recordTraffic(401, "anonymous");
+    return auth.response;
+  }
+  // Caller appKey resolved from the issued ApiKey row when possible.
+  const sourceLabel = auth.apiKeyApp ?? auth.apiKeyName ?? "anonymous";
 
   const rl = consumeRateLimit({
     key: `ingest:${auth.apiKeyId ?? auth.apiKeyName}`,
     limit: INGEST_LIMIT,
     windowMs: INGEST_WINDOW_MS,
   });
-  if (!rl.allowed) return rate429Response(rl);
+  if (!rl.allowed) {
+    void recordTraffic(429, sourceLabel);
+    return rate429Response(rl);
+  }
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
+    void recordTraffic(400, sourceLabel);
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
   const parsed = auditIngestSchema.safeParse(body);
   if (!parsed.success) {
+    void recordTraffic(400, sourceLabel);
     return NextResponse.json(
       {
         error: "Validation failed.",
@@ -50,6 +87,7 @@ export async function POST(request: NextRequest) {
 
   const app = await prisma.appRegistry.findUnique({ where: { appKey: input.appKey } });
   if (!app) {
+    void recordTraffic(404, sourceLabel);
     return NextResponse.json(
       { error: `Unknown appKey: ${input.appKey}` },
       { status: 404 },
@@ -94,6 +132,11 @@ export async function POST(request: NextRequest) {
         ? (input.metadata as unknown as import("@prisma/client").Prisma.InputJsonValue)
         : null,
   });
+
+  // The body's appKey is the canonical source for traffic attribution
+  // (the issued ApiKey may be tagged with a different appKey in older
+  // configs; the body wins for app-to-app accounting).
+  void recordTraffic(201, input.appKey);
 
   return NextResponse.json({ ok: true, id: log.id }, { status: 201 });
 }

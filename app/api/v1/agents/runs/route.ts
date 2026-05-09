@@ -39,23 +39,61 @@ import {
 } from "@/lib/agents/external-trigger";
 import type { Intent } from "@/lib/agents/intent/types";
 import type { AgentRiskTolerance } from "@prisma/client";
+import {
+  appRegistryIdForKey,
+  approxRequestBytes,
+  recordAppCall,
+  suiteAppRegistryId,
+} from "@/lib/services/command-center/traffic-service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
+  const bytesIn = approxRequestBytes(request);
+
+  // Helper closure attributes the call to a stable source label.
+  const recordTraffic = async (
+    statusCode: number,
+    sourceLabel: string,
+    apiKeyId: string | null,
+  ) => {
+    const [sourceId, targetId] = await Promise.all([
+      appRegistryIdForKey(sourceLabel),
+      suiteAppRegistryId(),
+    ]);
+    void recordAppCall({
+      sourceLabel,
+      sourceAppRegistryId: sourceId,
+      targetAppRegistryId: targetId,
+      endpoint: "/api/v1/agents/runs",
+      method: "POST",
+      statusCode,
+      bytesIn,
+      apiKeyId,
+      durationMs: Date.now() - startedAt,
+    });
+  };
+
   const auth = await requireApiKey(request, "agents_trigger");
-  if (!auth.ok) return auth.response;
+  if (!auth.ok) {
+    void recordTraffic(401, "anonymous", null);
+    return auth.response;
+  }
+  const sourceLabel = auth.apiKeyApp ?? auth.apiKeyName ?? "anonymous";
 
   let body: Record<string, unknown> = {};
   try {
     body = (await request.json()) as Record<string, unknown>;
   } catch {
+    void recordTraffic(400, sourceLabel, auth.apiKeyId);
     return NextResponse.json({ ok: false, error: "bad_json" }, { status: 400 });
   }
 
   const requestText = body.request;
   if (typeof requestText !== "string" || requestText.trim().length === 0) {
+    void recordTraffic(400, sourceLabel, auth.apiKeyId);
     return NextResponse.json(
       { ok: false, error: "request_required" },
       { status: 400 },
@@ -64,6 +102,7 @@ export async function POST(request: NextRequest) {
 
   const intent = parseIntent(body.intent);
   if (!intent) {
+    void recordTraffic(400, sourceLabel, auth.apiKeyId);
     return NextResponse.json(
       { ok: false, error: "intent_required" },
       { status: 400 },
@@ -80,6 +119,7 @@ export async function POST(request: NextRequest) {
       apiKeyId: auth.apiKeyId ?? "unknown",
       apiKeyName: auth.apiKeyName,
     });
+    void recordTraffic(200, sourceLabel, auth.apiKeyId);
     return NextResponse.json({ ok: true, ...out });
   } catch (err) {
     if (err instanceof ExternalTriggerError) {
@@ -89,11 +129,13 @@ export async function POST(request: NextRequest) {
           : err.code === "execute_failed"
             ? 500
             : 400;
+      void recordTraffic(status, sourceLabel, auth.apiKeyId);
       return NextResponse.json(
         { ok: false, error: err.code, details: err.details ?? [] },
         { status },
       );
     }
+    void recordTraffic(500, sourceLabel, auth.apiKeyId);
     console.error("[api/v1/agents/runs]", err);
     return NextResponse.json({ ok: false, error: "trigger_failed" }, { status: 500 });
   }
