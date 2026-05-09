@@ -11,9 +11,9 @@
  */
 
 import Link from "next/link";
-import { Sparkles, Bot } from "lucide-react";
+import { Sparkles, Bot, Target } from "lucide-react";
 import { PageHeader } from "@/components/layout/admin-shell";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/db/prisma";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
@@ -22,6 +22,8 @@ import { listCapabilities } from "@/lib/agents/capabilities/registry";
 import { listAllInvariants } from "@/lib/agents/intent/invariants";
 import { IntentBuilder } from "@/components/agents/intent-builder";
 import { ClaudeToolSpec } from "@/components/agents/claude-tool-spec";
+import { RunStatusBadge } from "@/components/agents/run-status-badge";
+import { AgentEmptyState } from "@/components/agents/empty-state";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +52,7 @@ export default async function AgentsPage() {
         }`}
         actions={
           <span className="text-xs text-muted-foreground">
-            <Bot className="mr-1 inline h-3 w-3" />
+            <Bot className="mr-1 inline h-3 w-3" aria-hidden="true" />
             {readOnly} read-only · {approval} write capabilities · {invariantCount} invariants
           </span>
         }
@@ -61,25 +63,40 @@ export default async function AgentsPage() {
       {canCreate ? <ClaudeToolSpec /> : null}
 
       <section>
-        <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-3">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted-foreground">
           Recent runs ({runs.length})
         </h2>
         {runs.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-            <Sparkles className="mx-auto mb-2 h-4 w-4" />
-            No agent runs yet. Type a request above to plan one.
-          </div>
+          <AgentEmptyState
+            icon={Sparkles}
+            title="No agent runs yet"
+            body={
+              canCreate
+                ? "Declare an Intent above and click Plan to create your first run."
+                : "Once an admin plans a run, you'll see it here."
+            }
+            action={
+              canCreate ? (
+                <Button asChild size="sm" variant="outline">
+                  <a href="#intent-builder">
+                    <Target className="mr-1 h-3 w-3" aria-hidden="true" />
+                    Open the planner
+                  </a>
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
           <ul className="divide-y divide-border rounded-lg border border-border bg-card/40">
             {runs.map((r) => (
               <li key={r.id} className="p-3 text-sm">
                 <Link
                   href={`/admin/agents/${r.id}`}
-                  className="flex items-start justify-between gap-3 hover:underline"
+                  className="flex items-start justify-between gap-3 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <StatusBadge status={r.status} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <RunStatusBadge status={r.status} />
                       <span className="font-mono text-[10px] text-muted-foreground">
                         {r.id.slice(0, 8)}
                       </span>
@@ -109,36 +126,4 @@ export default async function AgentsPage() {
       </section>
     </div>
   );
-}
-
-type BadgeVariant =
-  | "default"
-  | "secondary"
-  | "destructive"
-  | "success"
-  | "warning"
-  | "outline"
-  | "muted";
-
-function StatusBadge({ status }: { status: string }) {
-  const variant: BadgeVariant = (() => {
-    switch (status) {
-      case "completed":
-        return "success";
-      case "failed":
-      case "rejected":
-      case "cancelled":
-        return "destructive";
-      case "refused":
-        return "warning";
-      case "awaiting_approval":
-        return "warning";
-      case "running":
-      case "approved":
-        return "default";
-      default:
-        return "secondary";
-    }
-  })();
-  return <Badge variant={variant}>{status.replace(/_/g, " ")}</Badge>;
 }

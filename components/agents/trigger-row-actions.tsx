@@ -1,26 +1,61 @@
 "use client";
 
 /**
- * Per-row action cluster on the triggers list — fire-now, toggle
- * enabled, edit link, delete. Optimistic UI: click → flips local
- * state → router.refresh() reconciles from server.
+ * Per-row action cluster on the triggers list. The primary action
+ * (Fire now) is a labeled button so it announces itself; secondary +
+ * destructive actions live behind a More-actions DropdownMenu so they
+ * cannot be misclicked. Delete pops a Dialog confirm — `window.confirm`
+ * is not screen-reader-friendly and ships a different visual style on
+ * every browser, which conflicts with the audit-tool look.
  */
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Loader2, Play, Power, PowerOff, Pencil, Trash2 } from "lucide-react";
+import {
+  Loader2,
+  Play,
+  Power,
+  PowerOff,
+  Pencil,
+  Trash2,
+  MoreHorizontal,
+} from "lucide-react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { humanizeAgentError } from "@/lib/agents/error-copy";
 
 interface TriggerRowActionsProps {
   triggerId: string;
+  triggerName: string;
   enabled: boolean;
   canManage: boolean;
 }
 
-export function TriggerRowActions({ triggerId, enabled, canManage }: TriggerRowActionsProps) {
+export function TriggerRowActions({
+  triggerId,
+  triggerName,
+  enabled,
+  canManage,
+}: TriggerRowActionsProps) {
   const router = useRouter();
   const [busy, setBusy] = useState<"fire" | "toggle" | "delete" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   async function fire() {
     if (!canManage) return;
@@ -69,7 +104,6 @@ export function TriggerRowActions({ triggerId, enabled, canManage }: TriggerRowA
 
   async function remove() {
     if (!canManage) return;
-    if (!confirm("Delete this trigger? This cannot be undone.")) return;
     setBusy("delete");
     setError(null);
     try {
@@ -77,67 +111,143 @@ export function TriggerRowActions({ triggerId, enabled, canManage }: TriggerRowA
       const body = (await r.json()) as { ok: boolean; error?: string };
       if (!r.ok || !body.ok) {
         setError(body.error ?? "delete_failed");
+        setConfirmingDelete(false);
         return;
       }
+      setConfirmingDelete(false);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "delete_failed");
+      setConfirmingDelete(false);
     } finally {
       setBusy(null);
     }
   }
 
+  const errorCopy = humanizeAgentError(error);
+
   return (
-    <div className="flex items-center gap-1">
-      <button
-        type="button"
+    <div className="flex items-center gap-2">
+      <Button
+        size="sm"
+        variant="outline"
         onClick={fire}
         disabled={!canManage || busy !== null}
-        title="Fire now"
-        className="rounded-md border border-border p-1 text-muted-foreground hover:bg-secondary/40 disabled:opacity-40"
+        aria-label={`Fire trigger ${triggerName} now`}
       >
         {busy === "fire" ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
         ) : (
-          <Play className="h-3.5 w-3.5" />
+          <Play className="h-3.5 w-3.5" aria-hidden="true" />
         )}
-      </button>
-      <button
-        type="button"
-        onClick={toggle}
-        disabled={!canManage || busy !== null}
-        title={enabled ? "Disable" : "Enable"}
-        className="rounded-md border border-border p-1 text-muted-foreground hover:bg-secondary/40 disabled:opacity-40"
+        Fire now
+      </Button>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 w-8 p-0"
+            disabled={!canManage || busy !== null}
+            aria-label={`More actions for ${triggerName}`}
+          >
+            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-[12rem]">
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              toggle();
+            }}
+            disabled={!canManage || busy !== null}
+          >
+            {enabled ? (
+              <PowerOff className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+            ) : (
+              <Power className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            {enabled ? "Disable" : "Enable"}
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href={`/admin/agents/triggers/${triggerId}/edit`}>
+              <Pencil className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+              Edit
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              setConfirmingDelete(true);
+            }}
+            disabled={!canManage || busy !== null}
+            className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+          >
+            <Trash2 className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+            Delete…
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {errorCopy ? (
+        <span
+          role="alert"
+          className="ml-1 max-w-[18rem] truncate text-[11px] text-destructive"
+          title={errorCopy.headline}
+        >
+          {errorCopy.headline}{" "}
+          <span className="font-mono text-[10px] opacity-70">
+            ({errorCopy.slug})
+          </span>
+        </span>
+      ) : null}
+
+      <Dialog
+        open={confirmingDelete}
+        onOpenChange={(open) => {
+          if (!open && busy !== "delete") setConfirmingDelete(false);
+        }}
       >
-        {busy === "toggle" ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : enabled ? (
-          <PowerOff className="h-3.5 w-3.5" />
-        ) : (
-          <Power className="h-3.5 w-3.5" />
-        )}
-      </button>
-      <Link
-        href={`/admin/agents/triggers/${triggerId}/edit`}
-        className="rounded-md border border-border p-1 text-muted-foreground hover:bg-secondary/40"
-        title="Edit"
-      >
-        <Pencil className="h-3.5 w-3.5" />
-      </Link>
-      <button
-        type="button"
-        onClick={remove}
-        disabled={!canManage || busy !== null}
-        title="Delete"
-        className="rounded-md border border-border p-1 text-muted-foreground hover:bg-destructive/15 hover:text-destructive disabled:opacity-40"
-      >
-        {busy === "delete" ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Trash2 className="h-3.5 w-3.5" />
-        )}
-      </button>
-      {error ? <span className="ml-1 font-mono text-[10px] text-destructive">{error}</span> : null}
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete this trigger?</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-foreground">{triggerName}</span>{" "}
+              and its saved IBE Intent will be removed. Any in-flight runs that
+              were already fired by this trigger keep running and stay in the
+              audit log; only the schedule is destroyed. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy === "delete"}
+              onClick={() => setConfirmingDelete(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={busy === "delete"}
+              onClick={remove}
+            >
+              {busy === "delete" ? (
+                <Loader2
+                  className="mr-1 h-3.5 w-3.5 animate-spin"
+                  aria-hidden="true"
+                />
+              ) : (
+                <Trash2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              Delete trigger
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
