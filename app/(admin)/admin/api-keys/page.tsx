@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { CreateApiKeyForm } from "@/components/forms/create-api-key-form";
 import { RevokeApiKeyButton } from "@/components/forms/revoke-api-key-button";
+import { RotateApiKeyButton } from "@/components/forms/rotate-api-key-button";
 import { prisma } from "@/lib/db/prisma";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
@@ -128,11 +129,18 @@ export default async function ApiKeysPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       {k.status === "active" && (
-                        <RevokeApiKeyButton
-                          id={k.id}
-                          name={k.name}
-                          prefix={k.keyPrefix}
-                        />
+                        <div className="flex items-center justify-end gap-1">
+                          <RotateApiKeyButton
+                            id={k.id}
+                            name={k.name}
+                            prefix={k.keyPrefix}
+                          />
+                          <RevokeApiKeyButton
+                            id={k.id}
+                            name={k.name}
+                            prefix={k.keyPrefix}
+                          />
+                        </div>
                       )}
                     </TableCell>
                   </TableRow>
