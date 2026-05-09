@@ -13,17 +13,20 @@
  */
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import {
   Stethoscope,
   Loader2,
   ChevronDown,
   ChevronUp,
   Bot,
+  Check,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { diagnoseDeploymentSnapshot } from "@/lib/services/command-center/deploy-diagnosis-actions";
+import { fileClaudeFixIssueForCrash } from "@/lib/services/command-center/file-claude-fix-actions";
 import type { DiagnosisResult } from "@/lib/services/command-center/deploy-diagnosis-service";
+import type { FileClaudeFixResult } from "@/lib/services/command-center/file-claude-fix-actions";
 
 interface Props {
   snapshotId: string;
@@ -99,6 +102,7 @@ export function DiagnoseButton({ snapshotId, appKey, appName, repoFullName }: Pr
           ) : (
             <DiagnosisBody
               result={result}
+              snapshotId={snapshotId}
               appKey={appKey}
               appName={appName}
               repoFullName={repoFullName}
@@ -112,28 +116,17 @@ export function DiagnoseButton({ snapshotId, appKey, appName, repoFullName }: Pr
 
 function DiagnosisBody({
   result,
+  snapshotId,
   appKey,
   appName,
   repoFullName,
 }: {
   result: Extract<DiagnosisResult, { ok: true }>;
+  snapshotId: string;
   appKey: string | null;
   appName: string | null;
   repoFullName: string | null;
 }) {
-  // Build the agent-fix deep-link. We feed IntentBuilder the build
-  // error + a clear instruction for the cross-repo agent.
-  const agentRequest = repoFullName
-    ? buildAgentRequest({
-        appKey,
-        appName,
-        repoFullName,
-        rootCause: result.rootCause,
-        errorTail: result.errorTail.map((l) => l.message).join("\n"),
-        isBuildFailure: result.isBuildFailure,
-      })
-    : null;
-
   return (
     <div className="space-y-2">
       {result.rootCause ? (
@@ -157,36 +150,107 @@ function DiagnosisBody({
   .join("\n")}
         </pre>
       </div>
-      {agentRequest ? (
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Button asChild size="sm" variant="outline">
-            <Link
-              href={`/admin/agents?request=${encodeURIComponent(agentRequest)}#intent-builder`}
-            >
-              <Bot className="mr-1 h-3 w-3" />
-              Plan agent run to fix
-            </Link>
-          </Button>
+      {repoFullName ? (
+        <FileFixIssueButton
+          snapshotId={snapshotId}
+          repoFullName={repoFullName}
+          appName={appName ?? appKey ?? repoFullName}
+        />
+      ) : (
+        <div className="text-[11px] text-muted-foreground">
+          No <code className="font-mono">repoFullName</code> on AppRegistry —
+          set it before filing a fix issue.
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
 
-function buildAgentRequest(args: {
-  appKey: string | null;
-  appName: string | null;
+/**
+ * Sprint 37: direct "file @claude fix issue" button. Bypasses the
+ * Suite's IBE planner+approve pipeline — for a build/deploy crash
+ * the action is bounded (one issue, one allowlisted repo) and the
+ * GitHub PR review IS the gate. One click → issue filed → operator
+ * sees the issue URL inline.
+ */
+function FileFixIssueButton({
+  snapshotId,
+  repoFullName,
+  appName,
+}: {
+  snapshotId: string;
   repoFullName: string;
-  rootCause: string | null;
-  errorTail: string;
-  isBuildFailure: boolean;
-}): string {
-  const MAX = 1800;
-  const head = `Use open_repo_pull_request with repoFullName=${args.repoFullName} to fix the failing ${args.isBuildFailure ? "build" : "deploy"} for ${args.appName ?? args.appKey ?? args.repoFullName}.\n\nintent: 'Fix the ${args.isBuildFailure ? "build" : "runtime"} failure described below. ${args.rootCause ? `Root cause: ${args.rootCause}.` : ""} Match the repo's existing conventions. Open a small PR with just the minimum change needed to make the deploy succeed.'\n\ncontextHint: 'See package.json + the failing file. Build error tail follows:'\n\n--- BUILD ERROR TAIL ---\n`;
-  const room = MAX - head.length - 32;
-  const tail =
-    args.errorTail.length > room
-      ? args.errorTail.slice(-room) + "\n…[truncated; full log on Railway]"
-      : args.errorTail;
-  return head + tail;
+  appName: string;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [result, setResult] = useState<FileClaudeFixResult | null>(null);
+
+  const filed = result?.ok && result.issueUrl;
+
+  const onClick = () => {
+    if (filed) return;
+    startTransition(async () => {
+      try {
+        const r = await fileClaudeFixIssueForCrash(snapshotId);
+        setResult(r);
+      } catch (err) {
+        setResult({
+          ok: false,
+          reason: "create_issue_failed",
+          message: err instanceof Error ? err.message : "request_failed",
+        });
+      }
+    });
+  };
+
+  if (filed) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px]">
+        <span className="inline-flex items-center gap-1 text-success">
+          <Check className="h-3 w-3" />
+          Issue #{result.issueNumber} filed
+        </span>
+        <a
+          href={result.issueUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-primary hover:underline"
+        >
+          {repoFullName}#{result.issueNumber}
+          <ExternalLink className="h-2.5 w-2.5" />
+        </a>
+        <span className="text-muted-foreground">
+          · @claude will read the mention and open a PR shortly
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 pt-1">
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={onClick}
+        disabled={pending}
+        title={`Files an issue in ${repoFullName} mentioning @claude with the build error context`}
+      >
+        {pending ? (
+          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+        ) : (
+          <Bot className="mr-1 h-3 w-3" />
+        )}
+        File @claude fix issue
+      </Button>
+      <span className="text-[11px] text-muted-foreground">
+        Direct GitHub issue → PR review on github.com (no IBE plan/approve)
+      </span>
+      {result && !result.ok ? (
+        <div className="basis-full text-[11px] text-destructive">
+          {result.reason}
+          {result.message ? ` — ${result.message}` : ""}
+        </div>
+      ) : null}
+    </div>
+  );
 }
