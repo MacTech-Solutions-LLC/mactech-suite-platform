@@ -18,6 +18,8 @@ import {
   AlertTriangle,
   Filter,
   XCircle,
+  Sparkles,
+  ChevronRight,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/admin-shell";
 import { Badge } from "@/components/ui/badge";
@@ -143,23 +145,76 @@ export default async function TrafficPage({
                 // also the name for external services like "github").
                 const sourceName = src?.name ?? p.sourceLabel;
                 const targetName = tgt?.name ?? p.targetLabel;
+                // Sprint 27: each pair row is now actionable.
+                // The whole row links to the pair-filtered view so
+                // operators can drill into "what's actually flowing
+                // on this edge". A separate "Ask AI" button on the
+                // right deep-links to /admin/ops/ecosystem (which
+                // hosts the AskAIPanel grounded on the ecosystem
+                // graph) with a prompt prefilled about this pair.
+                const filterParams = new URLSearchParams();
+                filterParams.set("windowH", String(windowHours));
+                if (p.sourceLabel) filterParams.set("from", p.sourceLabel);
+                if (tgt) filterParams.set("to", tgt.id);
+                else if (p.targetLabel) filterParams.set("toLabel", p.targetLabel);
+                if (p.errorCount > 0) filterParams.set("errorsOnly", "1");
+                const filterHref = `/admin/ops/traffic?${filterParams.toString()}`;
+                const askPrompt = `Tell me about the traffic edge "${sourceName} → ${targetName}" over the last ${windowHours}h: ${p.callCount} call${p.callCount === 1 ? "" : "s"}, ${p.errorCount} error${p.errorCount === 1 ? "" : "s"} (${errPct.toFixed(1)}%), ${formatBytes(p.bytesIn)} in. Is this normal? What might be causing the errors?`;
+                const askHref = `/admin/ops/ecosystem?prompt=${encodeURIComponent(askPrompt)}`;
                 return (
-                  <li key={key} className="flex items-center justify-between gap-3 p-3 text-sm">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">{sourceName}</span>
-                        <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                        <span className="font-medium">{targetName}</span>
-                        {p.errorCount > 0 ? (
-                          <Badge variant="destructive">{p.errorCount} err</Badge>
-                        ) : null}
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
-                        <span>{p.callCount} call{p.callCount === 1 ? "" : "s"}</span>
-                        <span>· {formatBytes(p.bytesIn)} in</span>
-                        {errPct > 0 ? <span>· {errPct.toFixed(1)}% errors</span> : null}
-                        <span>· last {p.lastSeenAt.toLocaleString()}</span>
-                      </div>
+                  <li key={key}>
+                    <div className="flex items-stretch gap-2 p-3 text-sm hover:bg-muted/30">
+                      <Link
+                        href={filterHref}
+                        className="group flex min-w-0 flex-1 items-center gap-3"
+                        aria-label={`Drill into ${sourceName} → ${targetName} traffic`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium group-hover:text-primary">
+                              {sourceName}
+                            </span>
+                            <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                            <span className="font-medium group-hover:text-primary">
+                              {targetName}
+                            </span>
+                            {p.errorCount > 0 ? (
+                              <Badge variant="destructive">{p.errorCount} err</Badge>
+                            ) : null}
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                            <span>
+                              {p.callCount} call{p.callCount === 1 ? "" : "s"}
+                            </span>
+                            <span>· {formatBytes(p.bytesIn)} in</span>
+                            {errPct > 0 ? (
+                              <span
+                                className={
+                                  errPct >= 10 ? "text-destructive" : undefined
+                                }
+                              >
+                                · {errPct.toFixed(1)}% errors
+                              </span>
+                            ) : null}
+                            <span>· last {p.lastSeenAt.toLocaleString()}</span>
+                          </div>
+                        </div>
+                      </Link>
+                      <Link
+                        href={askHref}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[11px] text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                        aria-label="Ask AI about this edge"
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        Ask AI
+                      </Link>
+                      <Link
+                        href={filterHref}
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+                        aria-label="Filter to this edge"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Link>
                     </div>
                   </li>
                 );
