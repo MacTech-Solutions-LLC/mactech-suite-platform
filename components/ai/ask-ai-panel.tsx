@@ -19,7 +19,8 @@
  *   - appKey: optional scope filter
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Sparkles,
   Loader2,
@@ -75,6 +76,9 @@ interface AskResponse {
 }
 
 export function AskAIPanel(props: AskAIPanelProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState(props.defaultPrompt ?? "");
   const [sendToTeam, setSendToTeam] = useState(false);
@@ -84,6 +88,25 @@ export function AskAIPanel(props: AskAIPanelProps) {
   const [busy, setBusy] = useState(false);
   const [resp, setResp] = useState<AskResponse | null>(null);
   const [copied, setCopied] = useState(false);
+  const consumedPromptRef = useRef(false);
+
+  // Sprint 19: accept ?prompt=... from deep-links (e.g. the Risk
+  // row "Ask AI about this" dropdown). On mount, if the panel's
+  // contextKey matches the page we landed on, seed the textarea
+  // and auto-open. Strip the param from the URL so refresh doesn't
+  // re-trigger.
+  useEffect(() => {
+    if (consumedPromptRef.current) return;
+    const incoming = searchParams.get("prompt");
+    if (!incoming) return;
+    consumedPromptRef.current = true;
+    setPrompt(incoming);
+    setOpen(true);
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("prompt");
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [searchParams, router, pathname]);
 
   const label = props.label ?? labelFromKey(props.contextKey);
 
