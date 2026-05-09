@@ -16,6 +16,7 @@ import { RiskFeed } from "@/components/command-center/risk-feed";
 import { SyncNowButton } from "@/components/command-center/sync-now-button";
 import { TodayDigestCard } from "@/components/command-center/today-digest";
 import { AskAIPanel } from "@/components/ai/ask-ai-panel";
+import { FixUnhealthyBanner } from "@/components/command-center/fix-unhealthy-banner";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
 import {
@@ -24,6 +25,7 @@ import {
   getOpenRiskFlags,
 } from "@/lib/services/command-center/command-center-service";
 import { getTodayDigest } from "@/lib/services/command-center/today-digest-service";
+import { getFixableUnhealthyApps } from "@/lib/services/command-center/fix-unhealthy-service";
 import { emailReady } from "@/lib/services/command-center/ai-ask-service";
 
 export const dynamic = "force-dynamic";
@@ -36,12 +38,14 @@ export default async function CommandCenterPage() {
     PLATFORM_PERMISSIONS.COMMAND_CENTER_MANAGE,
   );
   const canEmail = ctx.permissions.includes(PLATFORM_PERMISSIONS.AGENTS_CREATE);
+  const canStageAgents = ctx.permissions.includes(PLATFORM_PERMISSIONS.AGENTS_CREATE);
 
-  const [status, snapshots, risks, digest] = await Promise.all([
+  const [status, snapshots, risks, digest, fixable] = await Promise.all([
     getCommandCenterStatus(),
     getAppOperationalSnapshots(),
     getOpenRiskFlags(20),
     getTodayDigest(),
+    getFixableUnhealthyApps(),
   ]);
 
   return (
@@ -56,6 +60,8 @@ export default async function CommandCenterPage() {
           </div>
         }
       />
+
+      <FixUnhealthyBanner fixable={fixable} canStage={canStageAgents} />
 
       <section>
         <TodayDigestCard digest={digest} />
