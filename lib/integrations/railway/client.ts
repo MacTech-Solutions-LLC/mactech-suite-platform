@@ -113,6 +113,9 @@ function makeRealClient(token: string): RailwayClient {
   ): Promise<RailwayResult<{ data: T }>> {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), timeoutMs);
+    const startedAt = Date.now();
+    const bodyJson = JSON.stringify({ query, variables });
+    let statusForTraffic = 0;
     try {
       const resp = await fetch(ENDPOINT, {
         method: "POST",
@@ -122,10 +125,11 @@ function makeRealClient(token: string): RailwayClient {
           Accept: "application/json",
           "User-Agent": "MacTechCommandCenter/1.0",
         },
-        body: JSON.stringify({ query, variables }),
+        body: bodyJson,
         signal: controller.signal,
         cache: "no-store",
       });
+      statusForTraffic = resp.status;
       if (resp.status === 401) {
         return { ok: false, reason: "unauthorized", status: 401 };
       }
@@ -157,6 +161,28 @@ function makeRealClient(token: string): RailwayClient {
       return { ok: false, reason: "transient", status: 0, detail: aborted ? "timeout" : undefined };
     } finally {
       clearTimeout(t);
+      try {
+        const { recordOutboundCall } = await import(
+          "@/lib/services/command-center/traffic-service"
+        );
+        // First word of the GraphQL query (e.g. "query Foo {…}" or
+        // "mutation Bar {…}") is descriptive enough to attribute by;
+        // we don't store the variables — they often contain ids.
+        const opName =
+          query.trim().match(/^(query|mutation)\s+(\w+)/i)?.[2] ??
+          query.trim().match(/^(query|mutation)/i)?.[1] ??
+          "graphql";
+        void recordOutboundCall({
+          targetLabel: "railway",
+          endpoint: `railway:graphql:${opName}`,
+          method: "POST",
+          statusCode: statusForTraffic || 0,
+          bytesOut: bodyJson.length,
+          durationMs: Date.now() - startedAt,
+        });
+      } catch {
+        /* observability never blocks */
+      }
     }
   }
 

@@ -187,20 +187,40 @@ export function EcosystemGraph({ graph }: Props) {
         </g>
         {/* Nodes */}
         <g>
-          {graph.nodes.map((n) => {
+          {activeNodes.map((n) => {
             const p = layout.get(n.id);
             if (!p) return null;
             const tone = nodeTone(n);
+            const isExternal =
+              "isExternal" in n && (n as EcosystemNode).isExternal === true;
             return (
               <g key={n.id}>
-                <circle
-                  cx={p.x}
-                  cy={p.y}
-                  r={NODE_R}
-                  fill={tone.fill}
-                  stroke={tone.stroke}
-                  strokeWidth={n.openRiskCount > 0 ? 2.5 : 1}
-                />
+                {isExternal ? (
+                  // External services render as a rounded rect to be
+                  // instantly distinguishable from app circles. No
+                  // health ring (we don't probe their health).
+                  <rect
+                    x={p.x - NODE_R}
+                    y={p.y - NODE_R * 0.7}
+                    width={NODE_R * 2}
+                    height={NODE_R * 1.4}
+                    rx={6}
+                    ry={6}
+                    fill={tone.fill}
+                    stroke={tone.stroke}
+                    strokeWidth={1}
+                    strokeDasharray="3 3"
+                  />
+                ) : (
+                  <circle
+                    cx={p.x}
+                    cy={p.y}
+                    r={NODE_R}
+                    fill={tone.fill}
+                    stroke={tone.stroke}
+                    strokeWidth={n.openRiskCount > 0 ? 2.5 : 1}
+                  />
+                )}
                 <text
                   x={p.x}
                   y={p.y - 4}
@@ -265,6 +285,14 @@ export function EcosystemGraph({ graph }: Props) {
 }
 
 function nodeTone(n: EcosystemNode | RepoNode): { fill: string; stroke: string } {
+  // External services don't have a probed health; tone them muted so
+  // they read as "third party, not part of our health story".
+  if ("isExternal" in n && (n as EcosystemNode).isExternal === true) {
+    return {
+      fill: "hsl(var(--muted) / 0.5)",
+      stroke: "hsl(var(--muted-foreground))",
+    };
+  }
   if (n.latestHealth === "down") {
     return { fill: "hsl(var(--destructive) / 0.25)", stroke: "hsl(var(--destructive))" };
   }
@@ -389,9 +417,12 @@ function projectToRepos(graph: {
   nodes: EcosystemNode[];
   edges: EcosystemEdge[];
 }): RepoProjection {
-  // Group apps by repoFullName.
+  // Group apps by repoFullName. Skip synthetic external nodes — they
+  // aren't repos, they're services Suite calls. Repo view stays
+  // focused on what's in our git tree.
   const byRepo = new Map<string, EcosystemNode[]>();
   for (const a of graph.nodes) {
+    if (a.isExternal) continue;
     if (!a.repoFullName) continue;
     const list = byRepo.get(a.repoFullName) ?? [];
     list.push(a);

@@ -1276,6 +1276,13 @@ model AppCallEvent {
   // source's appKey. For external sources it's "github" / "railway"
   // / "clerk" / "anonymous". Indexed for filterability.
   sourceLabel         String
+  // Slice 6.1: canonical target label, mirror of sourceLabel. For
+  // inbound traffic to Suite this is "identity-command-center" (the
+  // default — the Slice 6 release captured Suite-bound calls only).
+  // For outbound calls Suite makes, this is "github" / "railway" /
+  // "openai" / etc. so the traffic graph and the per-target filter
+  // can attribute symmetrically.
+  targetLabel         String   @default("identity-command-center")
   // The HTTP path that received the call (already redacted of any
   // dynamic ids; we store the route pattern, not the literal URL).
   endpoint            String
@@ -1303,6 +1310,7 @@ model AppCallEvent {
   @@index([targetAppRegistryId, occurredAt(sort: Desc)])
   @@index([sourceAppRegistryId, occurredAt(sort: Desc)])
   @@index([sourceLabel, occurredAt(sort: Desc)])
+  @@index([targetLabel, occurredAt(sort: Desc)])
   @@index([endpoint])
   @@index([statusCode])
 }

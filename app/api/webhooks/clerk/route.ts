@@ -10,11 +10,20 @@ import {
   deleteMembershipFromClerk,
   logWebhookEvent,
 } from "@/lib/services/clerk-sync-service";
+import { withInboundTrafficRecording } from "@/lib/services/command-center/traffic-service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
+  return withInboundTrafficRecording(
+    request,
+    { sourceLabel: "clerk", endpoint: "/api/webhooks/clerk" },
+    () => handleClerkWebhook(request),
+  );
+}
+
+async function handleClerkWebhook(request: NextRequest): Promise<NextResponse> {
   if (!clerkWebhookConfigured()) {
     return NextResponse.json(
       { error: "CLERK_WEBHOOK_SECRET is not configured." },
