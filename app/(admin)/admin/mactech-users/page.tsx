@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { PageHeader } from "@/components/layout/admin-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -86,12 +87,18 @@ export default async function MacTechUsersPage() {
                   return (
                     <TableRow key={p.id}>
                       <TableCell>
-                        <div className="flex items-center gap-3">
+                        <Link
+                          href={`/admin/audit-logs?actorEmail=${encodeURIComponent(
+                            p.email,
+                          )}`}
+                          className="group flex items-center gap-3"
+                          aria-label={`Follow ${p.email} in audit logs`}
+                        >
                           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-xs font-medium">
                             {initialsFor(fullName, p.email)}
                           </div>
                           <div>
-                            <div className="text-sm font-medium">
+                            <div className="text-sm font-medium group-hover:text-primary">
                               {fullName || p.email}
                               {p.id === selfId && (
                                 <Badge variant="outline" className="ml-2 text-[10px]">
@@ -103,7 +110,7 @@ export default async function MacTechUsersPage() {
                               {p.email}
                             </div>
                           </div>
-                        </div>
+                        </Link>
                       </TableCell>
                       <TableCell>
                         <Badge variant="default">
