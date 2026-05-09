@@ -105,9 +105,22 @@ export async function runReconciliation(
           appsUnknown++;
           break;
       }
+      // Sprint 39: page-render probe. Anonymous GET on the
+      // customer-facing page (publicUrl > baseUrl), looks for 5xx
+      // OR Next.js's "Application error · Digest:" SSR sentinel.
+      // Catches the case where /api/health returns ok but the
+      // actual rendered pages 500 due to a missing env var.
+      const pageProbeUrl = app.publicUrl ?? app.baseUrl ?? null;
+      const { probePageRender } = await import(
+        "@/lib/integrations/health/page-render-probe"
+      );
+      const pageProbe = pageProbeUrl
+        ? await probePageRender(pageProbeUrl)
+        : null;
       const riskOutcome = await reconcileRisksForApp({
         app,
         probe: probeResult.probe,
+        pageProbe,
       });
       risksOpened += riskOutcome.opened.length;
       risksResolved += riskOutcome.resolved.length;

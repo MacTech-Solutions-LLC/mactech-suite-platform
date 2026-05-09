@@ -46,6 +46,12 @@ const CROSS_REPO_FIX_RECIPES: Record<
     request: (appKey) =>
       `Use open_repo_pull_request with repoFullName=MacTech-Solutions-LLC/${appKey}. intent: 'Add a public anonymous /api/build-info Next.js route that returns JSON {service, environment, commitSha, commitShortSha, branch, repo, timestamp}. Read from RAILWAY_GIT_COMMIT_SHA and related Railway-injected env vars where available. The route must NOT be behind Clerk auth.' contextHint: 'See package.json + README.md. The MacTech Suite uses /api/build-info to detect production-behind-main drift.'`,
   },
+  application_error: {
+    goal: (appKey) =>
+      `Resolve the application_error risk on the ${appKey} repository.`,
+    request: (appKey) =>
+      `Use open_repo_pull_request with repoFullName=MacTech-Solutions-LLC/${appKey}. intent: 'Fix the SSR application error on this app's homepage. The Suite's page-render probe is detecting Next.js's "Application error · A server-side exception occurred (Digest: …)" fallback rendering anonymously. The Railway deploy logs have the underlying exception (the digest in the page body matches a line in the logs). Most common causes: missing required env vars on Railway (AUTH_SECRET, NEXTAUTH_URL, DATABASE_URL), or a Prisma select referencing a column that no longer exists on the model. Open a small PR with the minimum change to make the page render again.' contextHint: 'Check app/page.tsx, app/layout.tsx, lib/env.ts, and the service files the failing route imports. Match repo conventions; do not refactor surrounding code.'`,
+  },
 };
 
 export interface IntentBuilderProps {

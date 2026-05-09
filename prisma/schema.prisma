@@ -275,6 +275,10 @@ enum RiskCategory {
   missing_build_info
   missing_repo_mapping
   missing_railway_mapping
+  // Sprint 39: anonymous render of a tracked page returns 5xx OR
+  // the Next.js "Application error" sentinel — catches the case
+  // where /api/health is fine but actual pages throw at SSR.
+  application_error
 }
 
 enum IntegrationProvider {
