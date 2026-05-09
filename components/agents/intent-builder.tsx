@@ -48,11 +48,36 @@ const CROSS_REPO_FIX_RECIPES: Record<
   },
 };
 
-export function IntentBuilder() {
+export interface IntentBuilderProps {
+  /** Sprint 22: when the operator arrived via "Clone & retry" on
+   *  a prior run, the agents list page server-fetches that run and
+   *  passes its goal + request as initial values. */
+  initialGoal?: string;
+  initialRequest?: string;
+  /** Optional banner rendered above the form (e.g. "Cloned from
+   *  run <id>"). */
+  banner?: string;
+}
+
+export function IntentBuilder({
+  initialGoal,
+  initialRequest,
+  banner,
+}: IntentBuilderProps = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [intent, setIntent] = useState<IntentEditorValue>(emptyIntentValue());
+  const [intent, setIntent] = useState<IntentEditorValue>(() => {
+    const empty = emptyIntentValue();
+    if (initialGoal || initialRequest) {
+      return {
+        ...empty,
+        goal: initialGoal ?? empty.goal,
+        request: initialRequest ?? empty.request,
+      };
+    }
+    return empty;
+  });
   const [goalValid, setGoalValid] = useState(false);
   const [planning, setPlanning] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -157,6 +182,12 @@ export function IntentBuilder() {
         <Target className="h-4 w-4 text-primary" aria-hidden="true" />
         <div className="text-sm font-semibold">Declare your intent</div>
       </div>
+      {banner ? (
+        <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-foreground">
+          <Sparkles className="mr-1.5 inline h-3 w-3 text-primary" aria-hidden="true" />
+          {banner}
+        </div>
+      ) : null}
       <p className="text-xs text-muted-foreground">
         Slice 5.5 IBE gates: every plan must carry a machine-checkable goal, a
         bounded scope, and a set of indicators (invariants) that must hold. A

@@ -48,6 +48,7 @@ const FILTERS: Array<{ key: string; label: string; statuses: AgentRunStatus[] }>
 
 interface SearchParams {
   status?: string;
+  clone?: string;
 }
 
 export default async function AgentsPage({
@@ -61,6 +62,18 @@ export default async function AgentsPage({
 
   const activeFilter =
     FILTERS.find((f) => f.key === searchParams?.status) ?? FILTERS[0]!;
+
+  // Sprint 22: clone-and-retry. /admin/agents/[id] sends operators
+  // here with ?clone=<runId> when they click "Clone & retry" on a
+  // terminal-state run. We fetch the prior run server-side and hand
+  // its goal + request to IntentBuilder as initial values; the
+  // operator then reviews + clicks Plan to create a fresh run.
+  const cloneSource = searchParams?.clone
+    ? await prisma.agentRun.findUnique({
+        where: { id: searchParams.clone },
+        select: { id: true, requestText: true, intentGoal: true },
+      })
+    : null;
 
   const runs = await prisma.agentRun.findMany({
     where:
@@ -108,7 +121,17 @@ export default async function AgentsPage({
         }
       />
 
-      {canCreate ? <IntentBuilder /> : null}
+      {canCreate ? (
+        <IntentBuilder
+          initialGoal={cloneSource?.intentGoal ?? undefined}
+          initialRequest={cloneSource?.requestText ?? undefined}
+          banner={
+            cloneSource
+              ? `Cloned from run ${cloneSource.id.slice(0, 8)} — review and click Plan to retry.`
+              : undefined
+          }
+        />
+      ) : null}
 
       {canCreate ? <ClaudeToolSpec /> : null}
 
