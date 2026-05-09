@@ -579,6 +579,8 @@ model AppRegistry {
   commitSummaries      CommitSummary[]
   outgoingDependencies AppDependency[]       @relation("DependencySource")
   incomingDependencies AppDependency[]       @relation("DependencyTarget")
+  outgoingCalls        AppCallEvent[]        @relation("CallEventSource")
+  incomingCalls        AppCallEvent[]        @relation("CallEventTarget")
 
   @@index([appKey])
   @@index([slug])
@@ -1248,6 +1250,61 @@ model AppDependency {
   @@index([sourceAppRegistryId])
   @@index([targetAppRegistryId])
   @@index([dependencyType])
+}
+
+// ============================================================================
+// Slice 6 — Inter-app traffic observability.
+// AppDependency captures the DECLARED relationships; AppCallEvent
+// captures OBSERVED ones. Each row is a single inbound HTTP call to a
+// Suite endpoint, attributed to the calling app via API key (or to a
+// non-app source like "github" / "railway" via sourceLabel). Edge
+// width on the ecosystem map and the /admin/ops/traffic log both
+// aggregate from this table.
+// ============================================================================
+
+model AppCallEvent {
+  id                  String   @id @default(cuid())
+  // Receiver — always one of our AppRegistry rows. Nullable so we
+  // can record calls into the suite even before AppRegistry has been
+  // seeded for it (rare but defensive).
+  targetAppRegistryId String?
+  // Caller. Nullable for non-app sources (GitHub webhooks, Railway
+  // webhooks, Clerk webhooks); see sourceLabel for the canonical
+  // string identity in those cases.
+  sourceAppRegistryId String?
+  // Canonical caller label. For app-to-app traffic this matches the
+  // source's appKey. For external sources it's "github" / "railway"
+  // / "clerk" / "anonymous". Indexed for filterability.
+  sourceLabel         String
+  // The HTTP path that received the call (already redacted of any
+  // dynamic ids; we store the route pattern, not the literal URL).
+  endpoint            String
+  method              String
+  statusCode          Int
+  bytesIn             Int      @default(0)
+  bytesOut            Int      @default(0)
+  durationMs          Int?
+  // ApiKey id when the call authenticated with a DB-issued key —
+  // nullable for cron / webhook / unauthenticated calls.
+  apiKeyId            String?
+  // The request id we generated server-side, useful for joining to
+  // AuditLog / SecurityEvent for the same call.
+  requestId           String?
+  // Free-form structured metadata redacted by lib/audit. Kept small
+  // — large payloads belong on AuditLog.
+  metadataJson        Json?
+
+  occurredAt          DateTime @default(now())
+
+  source AppRegistry? @relation("CallEventSource", fields: [sourceAppRegistryId], references: [id], onDelete: SetNull)
+  target AppRegistry? @relation("CallEventTarget", fields: [targetAppRegistryId], references: [id], onDelete: SetNull)
+
+  @@index([occurredAt(sort: Desc)])
+  @@index([targetAppRegistryId, occurredAt(sort: Desc)])
+  @@index([sourceAppRegistryId, occurredAt(sort: Desc)])
+  @@index([sourceLabel, occurredAt(sort: Desc)])
+  @@index([endpoint])
+  @@index([statusCode])
 }
 
 // ============================================================================

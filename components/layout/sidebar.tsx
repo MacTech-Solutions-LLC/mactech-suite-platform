@@ -80,8 +80,8 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     group: "Operations",
     items: [
       { href: "/admin/ops/ecosystem", label: "Ecosystem", icon: Network },
+      { href: "/admin/ops/traffic", label: "Traffic", icon: Activity },
       { href: "#deployments", label: "Railway Deployments", icon: Rocket, disabled: true },
-      { href: "#health", label: "Health Checks", icon: Activity, disabled: true },
       { href: "#incidents", label: "Incidents", icon: AlertOctagon, disabled: true },
       { href: "/admin/ops/risk", label: "Runtime Risk", icon: Siren },
     ],

@@ -7,7 +7,11 @@ import type { EcosystemEdge, EcosystemNode } from "@/lib/services/command-center
 type ViewMode = "apps" | "repos";
 
 interface Props {
-  graph: { nodes: EcosystemNode[]; edges: EcosystemEdge[] };
+  graph: {
+    nodes: EcosystemNode[];
+    edges: EcosystemEdge[];
+    trafficWindowHours?: number;
+  };
 }
 
 interface RepoNode {
@@ -111,18 +115,50 @@ export function EcosystemGraph({ graph }: Props) {
       >
         {/* Edges first so nodes paint on top */}
         <g>
-          {graph.edges.map((e) => {
+          {(view === "apps" ? graph.edges : repoView.edges).map((e) => {
             const a = layout.get(e.sourceId);
             const b = layout.get(e.targetId);
             if (!a || !b) return null;
             const dash = DASH_FOR_TYPE[e.dependencyType] ?? "0";
-            const stroke =
-              e.criticality === "mission_critical"
+            // Observed traffic in apps view comes from the underlying
+            // AppDependency edges; in repos view we need to look up the
+            // collapsed counts.
+            const observed =
+              view === "apps"
+                ? {
+                    calls: (e as EcosystemEdge).observedCalls ?? 0,
+                    errors: (e as EcosystemEdge).observedErrors ?? 0,
+                    bytes: (e as EcosystemEdge).observedBytesIn ?? 0,
+                    lastSeenAt: (e as EcosystemEdge).lastSeenAt ?? null,
+                  }
+                : (repoView.observedByPair.get(`${e.sourceId}::${e.targetId}`) ?? {
+                    calls: 0,
+                    errors: 0,
+                    bytes: 0,
+                    lastSeenAt: null,
+                  });
+            const hasTraffic = observed.calls > 0;
+            const isErroring = observed.errors > 0;
+            // Stroke color: errors > criticality > default. Errors in
+            // observed traffic outrank declared criticality in v1; the
+            // operator wants to see "this edge is broken right now".
+            const stroke = isErroring
+              ? "hsl(var(--destructive))"
+              : e.criticality === "mission_critical"
                 ? "hsl(var(--destructive))"
                 : e.criticality === "high"
                   ? "hsl(var(--warning))"
-                  : "hsl(var(--border))";
-            const width = e.criticality === "mission_critical" ? 2 : e.criticality === "high" ? 1.5 : 1;
+                  : hasTraffic
+                    ? "hsl(var(--success))"
+                    : "hsl(var(--border))";
+            // Stroke width: declared criticality is the floor; observed
+            // traffic on top of that bumps the line up to a max of 3.5.
+            const baseWidth =
+              e.criticality === "mission_critical" ? 2 : e.criticality === "high" ? 1.5 : 1;
+            const trafficBoost = hasTraffic
+              ? Math.min(1.5, Math.log10(observed.calls + 1) * 0.7)
+              : 0;
+            const width = baseWidth + trafficBoost;
             return (
               <line
                 key={e.id}
@@ -133,9 +169,18 @@ export function EcosystemGraph({ graph }: Props) {
                 stroke={stroke}
                 strokeWidth={width}
                 strokeDasharray={dash}
-                opacity={0.7}
+                opacity={hasTraffic ? 0.85 : 0.55}
               >
-                <title>{`${edgeEndpointLabel(nodeById.get(e.sourceId), view)} → ${edgeEndpointLabel(nodeById.get(e.targetId), view)}: ${e.dependencyType}${e.description ? ` (${e.description})` : ""}`}</title>
+                <title>
+                  {edgeTooltip(
+                    nodeById.get(e.sourceId),
+                    nodeById.get(e.targetId),
+                    e,
+                    observed,
+                    view,
+                    graph.trafficWindowHours ?? 24,
+                  )}
+                </title>
               </line>
             );
           })}
@@ -327,6 +372,12 @@ function Swatch({ tone, label }: { tone: "success" | "warning" | "destructive" |
 interface RepoProjection {
   nodes: RepoNode[];
   edges: RepoEdge[];
+  /** Slice 6: observed traffic collapsed by repo pair, keyed
+   *  `${sourceRepo}::${targetRepo}`. */
+  observedByPair: Map<
+    string,
+    { calls: number; errors: number; bytes: number; lastSeenAt: Date | null }
+  >;
 }
 
 /**
@@ -400,19 +451,46 @@ function projectToRepos(graph: {
   }
 
   // Dedupe edges by (sourceRepo, targetRepo, dependencyType). Drop
-  // self-edges and edges whose endpoints don't have a repo.
+  // self-edges and edges whose endpoints don't have a repo. Collapse
+  // observed traffic by (sourceRepo, targetRepo) — multiple
+  // dependency-type rows between the same repo pair share counts.
   const seen = new Set<string>();
   const repoEdges: RepoEdge[] = [];
+  const observedByPair = new Map<
+    string,
+    { calls: number; errors: number; bytes: number; lastSeenAt: Date | null }
+  >();
   for (const e of graph.edges) {
     const src = appIdToRepo.get(e.sourceId);
     const tgt = appIdToRepo.get(e.targetId);
     if (!src || !tgt) continue;
     if (src === tgt) continue;
-    const key = `${src}::${tgt}::${e.dependencyType}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    const pairKey = `${src}::${tgt}`;
+    const calls = e.observedCalls ?? 0;
+    const errors = e.observedErrors ?? 0;
+    const bytes = e.observedBytesIn ?? 0;
+    const lastSeen = e.lastSeenAt ?? null;
+    const existing = observedByPair.get(pairKey);
+    if (existing) {
+      existing.calls += calls;
+      existing.errors += errors;
+      existing.bytes += bytes;
+      if (lastSeen && (!existing.lastSeenAt || lastSeen > existing.lastSeenAt)) {
+        existing.lastSeenAt = lastSeen;
+      }
+    } else {
+      observedByPair.set(pairKey, {
+        calls,
+        errors,
+        bytes,
+        lastSeenAt: lastSeen,
+      });
+    }
+    const edgeKey = `${src}::${tgt}::${e.dependencyType}`;
+    if (seen.has(edgeKey)) continue;
+    seen.add(edgeKey);
     repoEdges.push({
-      id: key,
+      id: edgeKey,
       sourceId: src,
       targetId: tgt,
       dependencyType: e.dependencyType,
@@ -421,7 +499,11 @@ function projectToRepos(graph: {
     });
   }
 
-  return { nodes: repoNodes.sort((a, b) => a.id.localeCompare(b.id)), edges: repoEdges };
+  return {
+    nodes: repoNodes.sort((a, b) => a.id.localeCompare(b.id)),
+    edges: repoEdges,
+    observedByPair,
+  };
 }
 
 function nodeLabel(n: EcosystemNode | RepoNode, view: ViewMode): string {
@@ -455,6 +537,40 @@ function edgeEndpointLabel(n: EcosystemNode | RepoNode | undefined, view: ViewMo
   if (!n) return "?";
   if (view === "apps") return n.appKey;
   return (n as RepoNode).name;
+}
+
+/**
+ * Slice 6: tooltip for an edge — declared dependency line + observed
+ * traffic line if any calls landed in the configured window. Edges
+ * with zero observed calls just show the declared description, same
+ * shape as the slice-5.9 tooltip.
+ */
+function edgeTooltip(
+  source: EcosystemNode | RepoNode | undefined,
+  target: EcosystemNode | RepoNode | undefined,
+  edge: { dependencyType: string; description: string | null },
+  observed: { calls: number; errors: number; bytes: number; lastSeenAt: Date | null },
+  view: ViewMode,
+  windowHours: number,
+): string {
+  const head = `${edgeEndpointLabel(source, view)} → ${edgeEndpointLabel(target, view)}`;
+  const decl = `${edge.dependencyType}${edge.description ? ` (${edge.description})` : ""}`;
+  if (observed.calls === 0) return `${head}: ${decl}`;
+  const errs = observed.errors > 0 ? `, ${observed.errors} error${observed.errors === 1 ? "" : "s"}` : "";
+  const bytes =
+    observed.bytes > 0
+      ? `, ${formatBytes(observed.bytes)} in`
+      : "";
+  const last = observed.lastSeenAt
+    ? `, last ${observed.lastSeenAt.toLocaleTimeString()}`
+    : "";
+  return `${head}: ${decl}\n${observed.calls} call${observed.calls === 1 ? "" : "s"} (${windowHours}h)${errs}${bytes}${last}`;
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n}B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)}KB`;
+  return `${(n / 1024 / 1024).toFixed(1)}MB`;
 }
 
 function ViewToggle({
