@@ -32,6 +32,7 @@ import {
   normalizeDeploymentStatus,
   type RailwayDeploymentSummary,
 } from "@/lib/integrations/railway/client";
+import { getRailwayClientForApp } from "@/lib/integrations/railway/token-routing";
 import type {
   AppRegistry,
   DeploymentDriftStatus,
@@ -67,7 +68,12 @@ export async function syncRailwayResourceInternal(
   app: AppRegistry,
   opts: { triggeredByEmail?: string | null } = {},
 ): Promise<SyncRailwayResourceOutcome | null> {
-  const client = getRailwayClient();
+  // Slice 8.1: per-app token routing. Apps that live outside the
+  // default workspace (e.g. mactech-core lives in the standalone
+  // "MacTech Solutions" project) get their own token via the
+  // routing module. Default falls through to the legacy single-token
+  // behavior.
+  const { client } = getRailwayClientForApp(app.appKey);
   if (!client.configured) return null;
 
   // App must carry the Railway IDs the seed populated.

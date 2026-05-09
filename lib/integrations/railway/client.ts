@@ -83,11 +83,43 @@ export interface RailwayClient {
   ): Promise<RailwayResult<{ data: RailwayDeploymentSummary | null }>>;
 }
 
+/**
+ * Slice 8.1: Railway tokens come in two flavors that authenticate
+ * differently against the same GraphQL endpoint:
+ *   - "workspace" — Bearer header, can list/walk all projects in
+ *     the workspace. Default flavor for the legacy RAILWAY_API_TOKEN.
+ *   - "project"   — Project-Access-Token header, scoped to one
+ *     project + environment. Used for projects that live under a
+ *     different account (e.g. RAILWAY_API_TOKEN_MACTECH covers the
+ *     "MacTech Solutions" project that the workspace token can't
+ *     see).
+ */
+export type RailwayAuthStyle = "workspace" | "project";
+
 export function getRailwayClient(): RailwayClient {
-  const token = env.RAILWAY_API_TOKEN;
-  const enabled = env.ENABLE_RAILWAY_SYNC && Boolean(token);
+  return getRailwayClientFor({
+    token: env.RAILWAY_API_TOKEN,
+    authStyle: "workspace",
+    label: "default",
+  });
+}
+
+export interface RailwayClientArgs {
+  token: string | undefined;
+  authStyle: RailwayAuthStyle;
+  /** Diagnostic label rendered on outbound traffic events. */
+  label: string;
+}
+
+/**
+ * Builds a Railway client for an arbitrary token + auth style. The
+ * railway-sync-service uses this to route per-app to the right token
+ * via lib/integrations/railway/token-routing.
+ */
+export function getRailwayClientFor(args: RailwayClientArgs): RailwayClient {
+  const enabled = env.ENABLE_RAILWAY_SYNC && Boolean(args.token);
   if (!enabled) return makeUnconfiguredClient();
-  return makeRealClient(token!);
+  return makeRealClient(args.token!, args.authStyle, args.label);
 }
 
 function makeUnconfiguredClient(): RailwayClient {
@@ -105,7 +137,21 @@ function makeUnconfiguredClient(): RailwayClient {
   };
 }
 
-function makeRealClient(token: string): RailwayClient {
+function makeRealClient(
+  token: string,
+  authStyle: RailwayAuthStyle = "workspace",
+  // Diagnostic label rendered on outbound traffic events so multi-token
+  // ops are distinguishable on /admin/ops/traffic. Default keeps slice-6.1
+  // behavior identical for the legacy single-token path.
+  trafficLabelSuffix: string = "default",
+): RailwayClient {
+  // Workspace tokens authenticate via Bearer; project tokens via the
+  // Project-Access-Token header. Same endpoint, same query shape.
+  const authHeaders: Record<string, string> =
+    authStyle === "project"
+      ? { "Project-Access-Token": token }
+      : { Authorization: `Bearer ${token}` };
+
   async function gql<T>(
     query: string,
     variables: Record<string, unknown> = {},
@@ -120,7 +166,7 @@ function makeRealClient(token: string): RailwayClient {
       const resp = await fetch(ENDPOINT, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...authHeaders,
           "Content-Type": "application/json",
           Accept: "application/json",
           "User-Agent": "MacTechCommandCenter/1.0",
@@ -174,7 +220,7 @@ function makeRealClient(token: string): RailwayClient {
           "graphql";
         void recordOutboundCall({
           targetLabel: "railway",
-          endpoint: `railway:graphql:${opName}`,
+          endpoint: `railway:graphql:${opName}:${trafficLabelSuffix}`,
           method: "POST",
           statusCode: statusForTraffic || 0,
           bytesOut: bodyJson.length,
