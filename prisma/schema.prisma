@@ -1540,15 +1540,41 @@ model AgentArtifact {
 // unchanged: IBE goal/scope/invariant validation, refusal-by-default,
 // approval gate for write capabilities, synthetic requester identity
 // (`cron:<triggerId>`) that cannot collide with a Clerk admin id.
+/// Slice 9: triggers come in two flavors.
+///   - cron      — fires on a cron schedule (slice 5.8 default).
+///   - threshold — evaluated on every cron tick; fires only on the
+///                 rising edge of a metric crossing its configured
+///                 line (with a cooldown to avoid blast loops).
+enum AgentTriggerKind {
+  cron
+  threshold
+}
+
+/// Slice 9: comparison operator for threshold triggers. Match the
+/// cron-parser style of common operators so the form UI is obvious.
+enum ThresholdOperator {
+  gt   // metric > value (fire when above)
+  gte  // metric >= value
+  lt   // metric < value (fire when below)
+  lte  // metric <= value
+  eq   // metric == value
+  ne   // metric != value
+}
+
 model AgentTrigger {
   id             String   @id @default(cuid())
   name           String
   description    String?  @db.Text
   enabled        Boolean  @default(true)
+  /// Slice 9: discriminator. cron triggers run on cronExpression;
+  /// threshold triggers run on every tick and fire on rising-edge
+  /// of (metric op value).
+  kind           AgentTriggerKind @default(cron)
   // Standard 5- or 6-field cron expression (parsed by cron-parser).
   // Validated at create/update time; stored verbatim so an operator
-  // can edit it without round-tripping through a parser.
-  cronExpression String
+  // can edit it without round-tripping through a parser. Nullable
+  // for threshold triggers.
+  cronExpression String?
   // IANA timezone name; defaults to UTC so cron evaluates deterministically.
   timezone       String   @default("UTC")
   // The Intent + free-text request that fires on each tick. Identical
@@ -1558,8 +1584,31 @@ model AgentTrigger {
   intentJson     Json
   autoExecute    Boolean  @default(true)
 
+  // ── Slice 9: threshold trigger fields ─────────────────────────────
+  /// Code-defined metric key; lib/agents/threshold-metrics.ts knows how
+  /// to evaluate each. Examples: "open_risks_critical_count",
+  /// "deployment_drift_count", "failed_workflow_count_24h".
+  thresholdMetric    String?
+  thresholdOperator  ThresholdOperator?
+  /// Stored as Float for max flexibility — most metrics are counts
+  /// but rates/percentages live in the same shape.
+  thresholdValue     Float?
+  /// Last evaluated value of the metric. Used by the UI to render
+  /// "currently at N" without re-querying.
+  thresholdLastValue Float?
+  /// True when the last evaluation found the condition true. Used to
+  /// detect rising-edge transitions (fire only on false → true).
+  thresholdConditionMet Boolean @default(false)
+  /// Minutes between fires for the same trigger even if the condition
+  /// remains true. Defaults to 60min so a stuck-high metric doesn't
+  /// blast the team every cron tick.
+  cooldownMinutes    Int      @default(60)
+
   // Scheduling state, advanced by the cron tick handler.
   lastFiredAt    DateTime?
+  /// For cron triggers: the next planned fire time (computed by
+  /// cron-parser). For threshold triggers: null (they evaluate every
+  /// tick instead).
   nextFireAt     DateTime?
   // Most-recent fire outcome, kept to surface in the management UI
   // without joining AgentRun.
@@ -1577,6 +1626,7 @@ model AgentTrigger {
   @@index([enabled])
   @@index([nextFireAt])
   @@index([createdByClerkUserId])
+  @@index([kind, enabled])
 }
 
 model AgentApproval {

@@ -21,18 +21,32 @@ import { writeAuditLog } from "@/lib/audit";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
 import { parseCronExpression, nextFireTime } from "./scheduler";
+import { getThresholdMetric } from "./threshold-metrics";
 import type { Intent } from "./intent/types";
-import type { AgentTrigger, Prisma } from "@prisma/client";
+import type {
+  AgentTrigger,
+  AgentTriggerKind,
+  Prisma,
+  ThresholdOperator,
+} from "@prisma/client";
 
 export interface SaveTriggerInput {
   name: string;
   description?: string;
-  cronExpression: string;
+  /** Slice 9: cron (default) or threshold. */
+  kind?: AgentTriggerKind;
+  /** Required when kind=cron. Ignored when kind=threshold. */
+  cronExpression?: string;
   timezone?: string;
   request: string;
   intent: Intent;
   autoExecute?: boolean;
   enabled?: boolean;
+  // ── Slice 9: required when kind=threshold ──────────────────────────
+  thresholdMetric?: string;
+  thresholdOperator?: ThresholdOperator;
+  thresholdValue?: number;
+  cooldownMinutes?: number;
 }
 
 export class TriggerValidationError extends Error {
@@ -42,7 +56,8 @@ export class TriggerValidationError extends Error {
       | "name_required"
       | "cron_invalid"
       | "request_required"
-      | "intent_required",
+      | "intent_required"
+      | "threshold_invalid",
   ) {
     super(message);
     this.name = "TriggerValidationError";
@@ -65,20 +80,32 @@ export async function createTrigger(input: SaveTriggerInput): Promise<AgentTrigg
   const ctx = await requirePlatformPermission(PLATFORM_PERMISSIONS.AGENTS_CREATE);
   validateInput(input);
 
+  const kind = input.kind ?? "cron";
   const tz = input.timezone ?? "UTC";
-  const next = nextFireTime(input.cronExpression, tz);
+  // Cron triggers compute their next fire time up front. Threshold
+  // triggers evaluate on every tick, so nextFireAt stays null.
+  const next =
+    kind === "cron" && input.cronExpression
+      ? nextFireTime(input.cronExpression, tz)
+      : null;
 
   const trigger = await prisma.agentTrigger.create({
     data: {
       name: input.name.trim(),
       description: input.description?.trim() ?? null,
       enabled: input.enabled ?? true,
-      cronExpression: input.cronExpression.trim(),
+      kind,
+      cronExpression: kind === "cron" ? (input.cronExpression?.trim() ?? null) : null,
       timezone: tz,
       request: input.request.trim(),
       intentJson: input.intent as unknown as Prisma.InputJsonValue,
       autoExecute: input.autoExecute ?? true,
       nextFireAt: next,
+      thresholdMetric: kind === "threshold" ? (input.thresholdMetric ?? null) : null,
+      thresholdOperator:
+        kind === "threshold" ? (input.thresholdOperator ?? null) : null,
+      thresholdValue: kind === "threshold" ? (input.thresholdValue ?? null) : null,
+      cooldownMinutes: input.cooldownMinutes ?? 60,
       createdByClerkUserId: ctx.clerkUserId,
       createdByEmail: ctx.userProfile.email,
     },
@@ -87,16 +114,24 @@ export async function createTrigger(input: SaveTriggerInput): Promise<AgentTrigg
   await writeAuditLog({
     eventType: "agent.trigger.created",
     eventCategory: "system",
-    action: `agent: trigger created — '${trigger.name}' (${trigger.cronExpression} ${trigger.timezone})`,
+    action:
+      kind === "cron"
+        ? `agent: trigger created — '${trigger.name}' (cron ${trigger.cronExpression} ${trigger.timezone})`
+        : `agent: trigger created — '${trigger.name}' (threshold ${trigger.thresholdMetric} ${trigger.thresholdOperator} ${trigger.thresholdValue})`,
     actorClerkUserId: ctx.clerkUserId,
     actorEmail: ctx.userProfile.email,
     resourceType: "agent_trigger",
     resourceId: trigger.id,
     metadata: {
+      kind,
       cronExpression: trigger.cronExpression,
       timezone: trigger.timezone,
       autoExecute: trigger.autoExecute,
       nextFireAt: trigger.nextFireAt?.toISOString() ?? null,
+      thresholdMetric: trigger.thresholdMetric,
+      thresholdOperator: trigger.thresholdOperator,
+      thresholdValue: trigger.thresholdValue,
+      cooldownMinutes: trigger.cooldownMinutes,
     },
   });
   return trigger;
@@ -112,8 +147,12 @@ export async function updateTrigger(
   const existing = await prisma.agentTrigger.findUnique({ where: { id } });
   if (!existing) throw new TriggerValidationError("trigger not found", "name_required");
 
+  const kind = input.kind ?? existing.kind;
   const tz = input.timezone ?? existing.timezone;
-  const next = nextFireTime(input.cronExpression, tz);
+  const next =
+    kind === "cron" && input.cronExpression
+      ? nextFireTime(input.cronExpression, tz)
+      : null;
 
   const trigger = await prisma.agentTrigger.update({
     where: { id },
@@ -121,12 +160,21 @@ export async function updateTrigger(
       name: input.name.trim(),
       description: input.description?.trim() ?? null,
       enabled: input.enabled ?? existing.enabled,
-      cronExpression: input.cronExpression.trim(),
+      kind,
+      cronExpression: kind === "cron" ? (input.cronExpression?.trim() ?? null) : null,
       timezone: tz,
       request: input.request.trim(),
       intentJson: input.intent as unknown as Prisma.InputJsonValue,
       autoExecute: input.autoExecute ?? existing.autoExecute,
       nextFireAt: next,
+      thresholdMetric: kind === "threshold" ? (input.thresholdMetric ?? null) : null,
+      thresholdOperator:
+        kind === "threshold" ? (input.thresholdOperator ?? null) : null,
+      thresholdValue: kind === "threshold" ? (input.thresholdValue ?? null) : null,
+      cooldownMinutes: input.cooldownMinutes ?? existing.cooldownMinutes,
+      // Reset rising-edge state on edit so a stuck-true condition can
+      // fire fresh under the new threshold.
+      thresholdConditionMet: false,
       // Reset the failure counter when the operator edits — they have
       // made a deliberate change, give it a fresh chance.
       consecutiveFailures: 0,
@@ -136,16 +184,21 @@ export async function updateTrigger(
   await writeAuditLog({
     eventType: "agent.trigger.updated",
     eventCategory: "system",
-    action: `agent: trigger updated — '${trigger.name}'`,
+    action: `agent: trigger updated — '${trigger.name}' (kind=${kind})`,
     actorClerkUserId: ctx.clerkUserId,
     actorEmail: ctx.userProfile.email,
     resourceType: "agent_trigger",
     resourceId: trigger.id,
     metadata: {
+      kind,
       cronExpression: trigger.cronExpression,
       timezone: trigger.timezone,
       autoExecute: trigger.autoExecute,
       enabled: trigger.enabled,
+      thresholdMetric: trigger.thresholdMetric,
+      thresholdOperator: trigger.thresholdOperator,
+      thresholdValue: trigger.thresholdValue,
+      cooldownMinutes: trigger.cooldownMinutes,
     },
   });
   return trigger;
@@ -176,7 +229,12 @@ export async function setTriggerEnabled(id: string, enabled: boolean): Promise<A
 
   // When re-enabling, recompute nextFireAt off the current time so a
   // long-disabled trigger doesn't fire instantly with stale schedule.
-  const next = enabled ? nextFireTime(existing.cronExpression, existing.timezone) : null;
+  // Threshold triggers don't have a cronExpression — they evaluate
+  // every tick instead, so nextFireAt stays null for them.
+  const next =
+    enabled && existing.kind === "cron" && existing.cronExpression
+      ? nextFireTime(existing.cronExpression, existing.timezone)
+      : null;
   const trigger = await prisma.agentTrigger.update({
     where: { id },
     data: { enabled, nextFireAt: next, consecutiveFailures: enabled ? 0 : existing.consecutiveFailures },
@@ -206,8 +264,48 @@ function validateInput(input: SaveTriggerInput): void {
       "intent_required",
     );
   }
-  const parsed = parseCronExpression(input.cronExpression, input.timezone ?? "UTC");
-  if (!parsed.ok) {
-    throw new TriggerValidationError(`cron: ${parsed.error}`, "cron_invalid");
+  const kind = input.kind ?? "cron";
+  if (kind === "cron") {
+    if (!input.cronExpression) {
+      throw new TriggerValidationError(
+        "cronExpression is required when kind=cron",
+        "cron_invalid",
+      );
+    }
+    const parsed = parseCronExpression(input.cronExpression, input.timezone ?? "UTC");
+    if (!parsed.ok) {
+      throw new TriggerValidationError(`cron: ${parsed.error}`, "cron_invalid");
+    }
+  } else if (kind === "threshold") {
+    if (!input.thresholdMetric) {
+      throw new TriggerValidationError(
+        "thresholdMetric is required when kind=threshold",
+        "threshold_invalid",
+      );
+    }
+    if (!getThresholdMetric(input.thresholdMetric)) {
+      throw new TriggerValidationError(
+        `unknown thresholdMetric '${input.thresholdMetric}'`,
+        "threshold_invalid",
+      );
+    }
+    if (!input.thresholdOperator) {
+      throw new TriggerValidationError(
+        "thresholdOperator is required when kind=threshold",
+        "threshold_invalid",
+      );
+    }
+    if (input.thresholdValue == null || !Number.isFinite(input.thresholdValue)) {
+      throw new TriggerValidationError(
+        "thresholdValue is required and must be a finite number when kind=threshold",
+        "threshold_invalid",
+      );
+    }
+    if (input.cooldownMinutes != null && input.cooldownMinutes < 0) {
+      throw new TriggerValidationError(
+        "cooldownMinutes cannot be negative",
+        "threshold_invalid",
+      );
+    }
   }
 }

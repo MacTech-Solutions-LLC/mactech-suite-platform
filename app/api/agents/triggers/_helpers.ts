@@ -12,16 +12,71 @@ import {
   type SaveTriggerInput,
 } from "@/lib/agents/triggers-service";
 import type { Intent } from "@/lib/agents/intent/types";
-import type { AgentRiskTolerance } from "@prisma/client";
+import type {
+  AgentRiskTolerance,
+  AgentTriggerKind,
+  ThresholdOperator,
+} from "@prisma/client";
+
+const THRESHOLD_OPERATORS: ThresholdOperator[] = [
+  "gt",
+  "gte",
+  "lt",
+  "lte",
+  "eq",
+  "ne",
+];
 
 export function parseSaveInput(body: Record<string, unknown>): SaveTriggerInput | null {
   const name = typeof body.name === "string" ? body.name : "";
-  const cronExpression = typeof body.cronExpression === "string" ? body.cronExpression : "";
   const request = typeof body.request === "string" ? body.request : "";
   const intent = parseIntent(body.intent);
-  if (!name || !cronExpression || !request || !intent) return null;
+  if (!name || !request || !intent) return null;
+
+  // Slice 9: kind discriminator. Default to cron for backward compat
+  // with any existing client that doesn't send it.
+  const kindRaw = body.kind;
+  const kind: AgentTriggerKind =
+    kindRaw === "threshold" ? "threshold" : "cron";
+
+  const cronExpression =
+    typeof body.cronExpression === "string" ? body.cronExpression : undefined;
+
+  // Discriminated validation: cron triggers need cronExpression;
+  // threshold triggers need metric/operator/value.
+  if (kind === "cron" && !cronExpression) return null;
+
+  const thresholdMetric =
+    typeof body.thresholdMetric === "string" ? body.thresholdMetric : undefined;
+  const thresholdOperatorRaw = body.thresholdOperator;
+  const thresholdOperator =
+    typeof thresholdOperatorRaw === "string" &&
+    THRESHOLD_OPERATORS.includes(thresholdOperatorRaw as ThresholdOperator)
+      ? (thresholdOperatorRaw as ThresholdOperator)
+      : undefined;
+  const thresholdValueRaw = body.thresholdValue;
+  const thresholdValue =
+    typeof thresholdValueRaw === "number" && Number.isFinite(thresholdValueRaw)
+      ? thresholdValueRaw
+      : undefined;
+  const cooldownMinutesRaw = body.cooldownMinutes;
+  const cooldownMinutes =
+    typeof cooldownMinutesRaw === "number" &&
+    Number.isFinite(cooldownMinutesRaw) &&
+    cooldownMinutesRaw >= 0
+      ? Math.floor(cooldownMinutesRaw)
+      : undefined;
+
+  if (
+    kind === "threshold" &&
+    (!thresholdMetric || !thresholdOperator || thresholdValue == null)
+  ) {
+    return null;
+  }
+
   return {
     name,
+    kind,
     cronExpression,
     request,
     intent,
@@ -29,6 +84,10 @@ export function parseSaveInput(body: Record<string, unknown>): SaveTriggerInput 
     timezone: typeof body.timezone === "string" ? body.timezone : undefined,
     autoExecute: typeof body.autoExecute === "boolean" ? body.autoExecute : undefined,
     enabled: typeof body.enabled === "boolean" ? body.enabled : undefined,
+    thresholdMetric,
+    thresholdOperator,
+    thresholdValue,
+    cooldownMinutes,
   };
 }
 

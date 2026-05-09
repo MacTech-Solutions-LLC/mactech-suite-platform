@@ -136,16 +136,43 @@ export default async function TriggersPage() {
                         </div>
                       ) : null}
                       <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
-                        <span className="font-mono">{t.cronExpression}</span>
-                        <span>· tz {t.timezone}</span>
+                        {t.kind === "cron" ? (
+                          <>
+                            <Badge variant="muted">cron</Badge>
+                            <span className="font-mono">
+                              {t.cronExpression ?? "?"}
+                            </span>
+                            <span>· tz {t.timezone}</span>
+                            <span>
+                              · next:{" "}
+                              {t.nextFireAt
+                                ? new Date(t.nextFireAt).toLocaleString()
+                                : "—"}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <Badge variant="default">threshold</Badge>
+                            <span className="font-mono">
+                              {t.thresholdMetric ?? "?"} {t.thresholdOperator ?? "?"}{" "}
+                              {t.thresholdValue ?? "?"}
+                            </span>
+                            <span>
+                              · last value:{" "}
+                              <span className="font-mono">
+                                {t.thresholdLastValue != null
+                                  ? t.thresholdLastValue
+                                  : "(not yet evaluated)"}
+                              </span>
+                            </span>
+                            {t.thresholdConditionMet ? (
+                              <Badge variant="warning">condition true</Badge>
+                            ) : null}
+                            <span>· cooldown {t.cooldownMinutes}m</span>
+                          </>
+                        )}
                         <span>
-                          · next:{" "}
-                          {t.nextFireAt
-                            ? new Date(t.nextFireAt).toLocaleString()
-                            : "—"}
-                        </span>
-                        <span>
-                          · last:{" "}
+                          · last fired:{" "}
                           {t.lastFiredAt
                             ? new Date(t.lastFiredAt).toLocaleString()
                             : "never"}
