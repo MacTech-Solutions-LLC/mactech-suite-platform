@@ -159,7 +159,11 @@ export function EcosystemGraph({ graph }: Props) {
               ? Math.min(1.5, Math.log10(observed.calls + 1) * 0.7)
               : 0;
             const width = baseWidth + trafficBoost;
-            return (
+            const eHref = edgeHref(
+              nodeById.get(e.sourceId),
+              nodeById.get(e.targetId),
+            );
+            const lineEl = (
               <line
                 key={e.id}
                 x1={a.x}
@@ -170,6 +174,7 @@ export function EcosystemGraph({ graph }: Props) {
                 strokeWidth={width}
                 strokeDasharray={dash}
                 opacity={hasTraffic ? 0.85 : 0.55}
+                style={eHref ? { cursor: "pointer" } : undefined}
               >
                 <title>
                   {edgeTooltip(
@@ -182,6 +187,16 @@ export function EcosystemGraph({ graph }: Props) {
                   )}
                 </title>
               </line>
+            );
+            // Sprint 30: clicking an edge drills into traffic
+            // filtered by that pair. SVG hit-testing on a thin
+            // line is finicky; the title still fires for hover.
+            return eHref ? (
+              <a key={e.id} href={eHref} aria-label="Drill into edge traffic">
+                {lineEl}
+              </a>
+            ) : (
+              lineEl
             );
           })}
         </g>
@@ -254,12 +269,15 @@ export function EcosystemGraph({ graph }: Props) {
                   </g>
                 ) : null}
                 <title>{nodeTitle(n, view)}</title>
-                {n.publicUrl ? (
+                {/* Sprint 30: clickable nodes drill into the per-app
+                    investigate page (or repo commits in repo view).
+                    External services link to traffic filtered by
+                    target label so the operator can see what's
+                    actually flowing. */}
+                {nodeHref(n, view) ? (
                   <a
-                    href={n.publicUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={`Open ${n.name}`}
+                    href={nodeHref(n, view)!}
+                    aria-label={`Drill into ${n.name}`}
                   >
                     <rect
                       x={p.x - NODE_R}
@@ -267,6 +285,7 @@ export function EcosystemGraph({ graph }: Props) {
                       width={NODE_R * 2}
                       height={NODE_R * 2}
                       fill="transparent"
+                      style={{ cursor: "pointer" }}
                     />
                   </a>
                 ) : null}
@@ -282,6 +301,66 @@ export function EcosystemGraph({ graph }: Props) {
       </div>
     </div>
   );
+}
+
+/**
+ * Sprint 30: where does clicking this node take you?
+ *
+ *   - Apps view, internal app           → /admin/apps/<appKey>
+ *   - Apps view, external service       → /admin/ops/traffic filtered
+ *                                          by toLabel (the service slug)
+ *   - Repos view, repo with apps        → /admin/repositories/commits
+ *                                          filtered by appId of the
+ *                                          first app it backs (the
+ *                                          per-app page is richer
+ *                                          than the repo list).
+ *   - Repos view, external service      → no drill (matches apps view)
+ */
+function nodeHref(n: EcosystemNode | RepoNode, view: ViewMode): string | null {
+  const isExternal =
+    "isExternal" in n && (n as EcosystemNode).isExternal === true;
+  if (isExternal) {
+    // External services: filter traffic to the synthetic label.
+    // EcosystemNode.appKey holds the canonical label for externals
+    // (e.g. "github", "openai") in the service projection.
+    return `/admin/ops/traffic?toLabel=${encodeURIComponent((n as EcosystemNode).appKey)}`;
+  }
+  if (view === "apps") {
+    return `/admin/apps/${(n as EcosystemNode).appKey}`;
+  }
+  // Repos view: send to the commit feed for the first backing app, if
+  // any. RepoNode carries appKeys[]; if there are none, no drill.
+  const repoNode = n as RepoNode;
+  if (repoNode.appKeys.length > 0) {
+    return `/admin/apps/${repoNode.appKeys[0]}`;
+  }
+  return null;
+}
+
+/**
+ * Sprint 30: where does clicking this edge take you?
+ *
+ *   - app → app: /admin/ops/traffic?from=<src.appKey>&to=<dst.id>
+ *   - app → external: /admin/ops/traffic?from=<src.appKey>&toLabel=<dst.appKey>
+ *   - external → app: /admin/ops/traffic?from=<src.appKey>&to=<dst.id>
+ */
+function edgeHref(
+  source: EcosystemNode | RepoNode | undefined,
+  target: EcosystemNode | RepoNode | undefined,
+): string | null {
+  if (!source || !target) return null;
+  const params = new URLSearchParams();
+  // sourceLabel filter accepts either an internal appKey or an
+  // external label like "github" — both go into ?from=.
+  params.set("from", source.appKey);
+  const targetIsExternal =
+    "isExternal" in target && (target as EcosystemNode).isExternal === true;
+  if (targetIsExternal) {
+    params.set("toLabel", (target as EcosystemNode).appKey);
+  } else {
+    params.set("to", (target as EcosystemNode).id);
+  }
+  return `/admin/ops/traffic?${params.toString()}`;
 }
 
 function nodeTone(n: EcosystemNode | RepoNode): { fill: string; stroke: string } {
