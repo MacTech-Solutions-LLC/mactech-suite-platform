@@ -81,6 +81,19 @@ export interface RailwayClient {
     serviceId: string,
     environmentId: string,
   ): Promise<RailwayResult<{ data: RailwayDeploymentSummary | null }>>;
+  /** Build + deploy logs for one deployment. Sprint 36 — used by the
+   *  Suite's diagnosis service to surface the failure summary inline
+   *  on the live "Recently crashed" cards. */
+  getDeploymentLogs(
+    deploymentId: string,
+    limit?: number,
+  ): Promise<RailwayResult<{ data: RailwayLogLine[] }>>;
+}
+
+export interface RailwayLogLine {
+  message: string;
+  severity: string | null;
+  timestamp: string | null;
 }
 
 /**
@@ -134,6 +147,7 @@ function makeUnconfiguredClient(): RailwayClient {
     getProject: fail as RailwayClient["getProject"],
     listDeployments: fail as RailwayClient["listDeployments"],
     getLatestDeployment: fail as RailwayClient["getLatestDeployment"],
+    getDeploymentLogs: fail as RailwayClient["getDeploymentLogs"],
   };
 }
 
@@ -335,6 +349,53 @@ function makeRealClient(
       const list = await this.listDeployments(serviceId, environmentId, 1);
       if (!list.ok) return list;
       return { ok: true, data: list.data[0] ?? null };
+    },
+
+    async getDeploymentLogs(deploymentId, limit = 200) {
+      // Try buildLogs first — that's where compile/install failures
+      // surface, which is the common failure mode. If buildLogs is
+      // empty (a deploy that built fine but crashed at runtime),
+      // fall through to deploymentLogs for the runtime tail.
+      const buildR = await gql<{
+        buildLogs: Array<{
+          message: string;
+          severity: string | null;
+          timestamp: string | null;
+        }>;
+      }>(
+        `query($deploymentId: String!, $limit: Int!) {
+          buildLogs(deploymentId: $deploymentId, limit: $limit) {
+            message
+            severity
+            timestamp
+          }
+        }`,
+        { deploymentId, limit },
+      );
+      if (buildR.ok && buildR.data.buildLogs?.length) {
+        return { ok: true, data: buildR.data.buildLogs };
+      }
+      const deployR = await gql<{
+        deploymentLogs: Array<{
+          message: string;
+          severity: string | null;
+          timestamp: string | null;
+        }>;
+      }>(
+        `query($deploymentId: String!, $limit: Int!) {
+          deploymentLogs(deploymentId: $deploymentId, limit: $limit) {
+            message
+            severity
+            timestamp
+          }
+        }`,
+        { deploymentId, limit },
+      );
+      if (!deployR.ok) {
+        // Surface buildR failure first if we got one, else deployR.
+        return buildR.ok ? deployR : buildR;
+      }
+      return { ok: true, data: deployR.data.deploymentLogs ?? [] };
     },
   };
 }
