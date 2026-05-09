@@ -1,9 +1,13 @@
 /**
- * /admin/agents — AgentOps console (Slice 5).
+ * /admin/agents — AgentOps console (Slice 5, polished by Sprint 20).
  *
  * Lists every AgentRun the operator can see, with a plan-creation form
  * up top. Read-only-only plans run on click; approval-required plans
  * are routed to /admin/agents/[id] for review by a different admin.
+ *
+ * Sprint 20 polish: filter chips by status, quick approve-and-execute
+ * inline button on awaiting_approval rows (avoids the click-into-detail
+ * round-trip when an admin just wants to approve obvious queue).
  *
  * The agent runtime itself (planner + capability registry + lifecycle
  * orchestrator) lives under lib/agents/. See docs/AGENT_OPS.md for
@@ -11,7 +15,7 @@
  */
 
 import Link from "next/link";
-import { Sparkles, Bot, Target } from "lucide-react";
+import { Sparkles, Bot, Target, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/layout/admin-shell";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/db/prisma";
@@ -23,15 +27,46 @@ import { listAllInvariants } from "@/lib/agents/intent/invariants";
 import { IntentBuilder } from "@/components/agents/intent-builder";
 import { ClaudeToolSpec } from "@/components/agents/claude-tool-spec";
 import { RunStatusBadge } from "@/components/agents/run-status-badge";
+import { QuickApproveButton } from "@/components/agents/quick-approve-button";
 import { AgentEmptyState } from "@/components/agents/empty-state";
+import type { AgentRunStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-export default async function AgentsPage() {
+const FILTERS: Array<{ key: string; label: string; statuses: AgentRunStatus[] }> = [
+  { key: "all", label: "All", statuses: [] },
+  { key: "awaiting", label: "Awaiting approval", statuses: ["awaiting_approval"] },
+  { key: "active", label: "Active", statuses: ["planned", "approved", "running"] },
+  { key: "completed", label: "Completed", statuses: ["completed"] },
+  {
+    key: "needs_attention",
+    label: "Refused / Failed",
+    statuses: ["refused", "failed", "rejected"],
+  },
+  { key: "cancelled", label: "Cancelled", statuses: ["cancelled"] },
+];
+
+interface SearchParams {
+  status?: string;
+}
+
+export default async function AgentsPage({
+  searchParams,
+}: {
+  searchParams?: SearchParams;
+}) {
   const ctx = await requirePlatformPermission(PLATFORM_PERMISSIONS.AGENTS_VIEW);
   const canCreate = ctx.permissions.includes(PLATFORM_PERMISSIONS.AGENTS_CREATE);
+  const canApprove = ctx.permissions.includes(PLATFORM_PERMISSIONS.AGENTS_APPROVE);
+
+  const activeFilter =
+    FILTERS.find((f) => f.key === searchParams?.status) ?? FILTERS[0]!;
 
   const runs = await prisma.agentRun.findMany({
+    where:
+      activeFilter.statuses.length === 0
+        ? undefined
+        : { status: { in: activeFilter.statuses } },
     orderBy: { createdAt: "desc" },
     take: 50,
   });
@@ -40,6 +75,21 @@ export default async function AgentsPage() {
   const readOnly = caps.filter((c) => c.kind === "read_only").length;
   const approval = caps.filter((c) => c.kind === "approval_required").length;
   const invariantCount = listAllInvariants().length;
+
+  // Lightweight per-filter counts so the chips show the queue depth.
+  const counts = await prisma.agentRun.groupBy({
+    by: ["status"],
+    _count: { _all: true },
+  });
+  const countByStatus = new Map<AgentRunStatus, number>(
+    counts.map((c) => [c.status, c._count._all]),
+  );
+  function chipCount(f: typeof FILTERS[number]): number {
+    if (f.statuses.length === 0) {
+      return Array.from(countByStatus.values()).reduce((n, v) => n + v, 0);
+    }
+    return f.statuses.reduce((n, s) => n + (countByStatus.get(s) ?? 0), 0);
+  }
 
   return (
     <div className="space-y-6">
@@ -63,20 +113,59 @@ export default async function AgentsPage() {
       {canCreate ? <ClaudeToolSpec /> : null}
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted-foreground">
-          Recent runs ({runs.length})
-        </h2>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+            {activeFilter.key === "all"
+              ? `Recent runs (${runs.length})`
+              : `${activeFilter.label} (${runs.length})`}
+          </h2>
+          <div className="ml-auto flex flex-wrap gap-1.5">
+            {FILTERS.map((f) => {
+              const active = f.key === activeFilter.key;
+              const n = chipCount(f);
+              return (
+                <Link
+                  key={f.key}
+                  href={
+                    f.key === "all"
+                      ? "/admin/agents"
+                      : `/admin/agents?status=${f.key}`
+                  }
+                  className={
+                    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] transition-colors " +
+                    (active
+                      ? "border-primary/40 bg-primary/15 text-foreground"
+                      : "border-border bg-card text-muted-foreground hover:border-border/80 hover:text-foreground")
+                  }
+                >
+                  <span>{f.label}</span>
+                  <span className="font-mono tabular-nums opacity-70">{n}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
         {runs.length === 0 ? (
           <AgentEmptyState
             icon={Sparkles}
-            title="No agent runs yet"
+            title={
+              activeFilter.key === "all"
+                ? "No agent runs yet"
+                : `No runs match "${activeFilter.label}"`
+            }
             body={
-              canCreate
-                ? "Declare an Intent above and click Plan to create your first run."
-                : "Once an admin plans a run, you'll see it here."
+              activeFilter.key === "all"
+                ? canCreate
+                  ? "Declare an Intent above and click Plan to create your first run."
+                  : "Once an admin plans a run, you'll see it here."
+                : "Try a different filter or scroll the All view."
             }
             action={
-              canCreate ? (
+              activeFilter.key !== "all" ? (
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/admin/agents">Show all runs</Link>
+                </Button>
+              ) : canCreate ? (
                 <Button asChild size="sm" variant="outline">
                   <a href="#intent-builder">
                     <Target className="mr-1 h-3 w-3" aria-hidden="true" />
@@ -88,39 +177,53 @@ export default async function AgentsPage() {
           />
         ) : (
           <ul className="divide-y divide-border rounded-lg border border-border bg-card/40">
-            {runs.map((r) => (
-              <li key={r.id} className="p-3 text-sm">
-                <Link
-                  href={`/admin/agents/${r.id}`}
-                  className="flex items-start justify-between gap-3 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <RunStatusBadge status={r.status} />
-                      <span className="font-mono text-[10px] text-muted-foreground">
-                        {r.id.slice(0, 8)}
-                      </span>
-                      {r.deterministicPlan ? (
-                        <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                          deterministic
+            {runs.map((r) => {
+              const isRequester = r.requestedByClerkUserId === ctx.clerkUserId;
+              const showQuickApprove =
+                canApprove && r.status === "awaiting_approval";
+              return (
+                <li key={r.id} className="p-3 text-sm">
+                  <div className="flex items-start gap-3">
+                    <Link
+                      href={`/admin/agents/${r.id}`}
+                      className="group min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <RunStatusBadge status={r.status} />
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          {r.id.slice(0, 8)}
                         </span>
+                        {r.deterministicPlan ? (
+                          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                            deterministic
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-1 line-clamp-2 text-foreground group-hover:text-primary">
+                        {r.requestText}
+                      </div>
+                      <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
+                        <span>{r.requestedByEmail}</span>
+                        <span>· {r.plannedStepCount} step{r.plannedStepCount === 1 ? "" : "s"}</span>
+                        <span>· {new Date(r.createdAt).toLocaleString()}</span>
+                      </div>
+                    </Link>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {showQuickApprove ? (
+                        <QuickApproveButton runId={r.id} isRequester={isRequester} />
                       ) : null}
-                      {r.requiresApproval ? (
-                        <span className="text-[10px] uppercase tracking-widest text-warning">
-                          needs approval
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="mt-1 line-clamp-2 text-foreground">{r.requestText}</div>
-                    <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
-                      <span>{r.requestedByEmail}</span>
-                      <span>· {r.plannedStepCount} step{r.plannedStepCount === 1 ? "" : "s"}</span>
-                      <span>· {new Date(r.createdAt).toLocaleString()}</span>
+                      <Link
+                        href={`/admin/agents/${r.id}`}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+                        aria-label="Open run detail"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Link>
                     </div>
                   </div>
-                </Link>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
