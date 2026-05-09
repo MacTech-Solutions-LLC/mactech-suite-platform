@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import {
   updateSecurityEventStatusSchema,
@@ -38,5 +39,6 @@ export async function updateSecurityEventStatus(
     metadata: { from: previous.status, to: input.status, note: input.note },
   });
 
+  revalidatePath("/admin/security-events");
   return updated;
 }
