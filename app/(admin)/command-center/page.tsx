@@ -13,6 +13,8 @@ import { OverviewTiles } from "@/components/command-center/overview-tiles";
 import { AppStatusTable } from "@/components/command-center/app-status-table";
 import { RiskFeed } from "@/components/command-center/risk-feed";
 import { SyncNowButton } from "@/components/command-center/sync-now-button";
+import { TodayDigestCard } from "@/components/command-center/today-digest";
+import { AskAIPanel } from "@/components/ai/ask-ai-panel";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
 import {
@@ -20,6 +22,8 @@ import {
   getCommandCenterStatus,
   getOpenRiskFlags,
 } from "@/lib/services/command-center/command-center-service";
+import { getTodayDigest } from "@/lib/services/command-center/today-digest-service";
+import { emailReady } from "@/lib/services/command-center/ai-ask-service";
 
 export const dynamic = "force-dynamic";
 
@@ -30,11 +34,13 @@ export default async function CommandCenterPage() {
   const canManage = ctx.permissions.includes(
     PLATFORM_PERMISSIONS.COMMAND_CENTER_MANAGE,
   );
+  const canEmail = ctx.permissions.includes(PLATFORM_PERMISSIONS.AGENTS_CREATE);
 
-  const [status, snapshots, risks] = await Promise.all([
+  const [status, snapshots, risks, digest] = await Promise.all([
     getCommandCenterStatus(),
     getAppOperationalSnapshots(),
     getOpenRiskFlags(20),
+    getTodayDigest(),
   ]);
 
   return (
@@ -49,6 +55,24 @@ export default async function CommandCenterPage() {
           </div>
         }
       />
+
+      <section>
+        <TodayDigestCard digest={digest} />
+      </section>
+
+      <section>
+        <AskAIPanel
+          contextKey="today_digest"
+          canEmail={canEmail}
+          emailConfigured={emailReady()}
+          presets={[
+            "What is the most important thing for me to look at first this morning?",
+            "Summarize the last 24h in three bullets a non-technical exec could read.",
+            "Draft a status email to leadership covering today's deploys, risks, and incidents.",
+            "Are there any patterns across the failed workflows, deploys, and risks that suggest a single root cause?",
+          ]}
+        />
+      </section>
 
       <section>
         <OverviewTiles status={status} />
@@ -86,11 +110,12 @@ export default async function CommandCenterPage() {
           <span className="text-sm font-medium">About the Command Center</span>
         </div>
         <p className="mt-2 max-w-3xl">
-          Command Center is the flagship capability of MacTech Suite. It correlates the App
-          Registry, runtime health, operational risk, and audit trail into a single executive-readable
-          surface. Slice 1 (this release) covers the App Registry + health probing + risk evaluation.
-          Repository intelligence (commit feed, drift detection, workflow runs) and deployment
-          intelligence (Railway state, build-info correlation) ship in subsequent slices.
+          Command Center is the flagship operational surface of MacTech Suite. It correlates
+          the App Registry, runtime health, deployment drift, repository intelligence, agent
+          activity, and traffic across the ecosystem into one executive-readable page. The
+          &ldquo;Today&rdquo; digest at the top is your morning page: critical right-now state plus
+          24h activity across every signal. Ask AI grounded on this digest, or scroll to the
+          per-app and per-risk action surfaces below.
         </p>
       </section>
     </div>
