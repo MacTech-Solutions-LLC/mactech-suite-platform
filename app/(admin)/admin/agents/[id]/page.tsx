@@ -18,6 +18,7 @@ import {
   Clock,
   User,
   ListOrdered,
+  Sparkles,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/admin-shell";
 import { Badge } from "@/components/ui/badge";
@@ -162,13 +163,28 @@ export default async function AgentRunPage({
         </section>
       ) : null}
 
-      <RunActions
-        runId={run.id}
-        status={run.status}
-        canApprove={canApprove}
-        canExecute={canCreate || canApprove}
-        isRequester={isRequester}
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <RunActions
+          runId={run.id}
+          status={run.status}
+          canApprove={canApprove}
+          canExecute={canCreate || canApprove}
+          isRequester={isRequester}
+        />
+        {canCreate &&
+        ["refused", "failed", "rejected", "cancelled", "completed"].includes(
+          run.status,
+        ) ? (
+          <Link
+            href={`/admin/agents?clone=${run.id}#intent-builder`}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs hover:bg-secondary"
+            aria-label="Clone this run's intent into a new draft"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Clone & retry
+          </Link>
+        ) : null}
+      </div>
 
       <section>
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-widest text-muted-foreground">
