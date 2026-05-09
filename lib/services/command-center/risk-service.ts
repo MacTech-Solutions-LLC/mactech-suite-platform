@@ -24,11 +24,17 @@ import {
   type DeploymentSnapshotInput,
 } from "@/lib/integrations/risk/deployment-evaluator";
 import type { HealthProbeResult } from "@/lib/integrations/health/checker";
+import type { PageRenderProbeResult } from "@/lib/integrations/health/page-render-probe";
 import type { AppRegistry, OperationalRiskFlag, Prisma, RiskCategory } from "@prisma/client";
 
 export interface ReconcileRisksInput {
   app: AppRegistry;
   probe: HealthProbeResult | null;
+  /** Sprint 39: page-render probe result. When supplied, the
+   *  evaluator emits an application_error risk if the homepage
+   *  returns 5xx or the Next.js error sentinel; when null we leave
+   *  any existing application_error flag in place. */
+  pageProbe?: PageRenderProbeResult | null;
 }
 
 export interface ReconcileRisksOutcome {
@@ -44,13 +50,16 @@ const SLICE_1_OWNED_CATEGORIES: RiskCategory[] = [
   "health_down",
   "degraded",
   "missing_health_endpoint",
+  // Sprint 39: page-render probe also auto-resolves when the page
+  // is healthy again on the next reconciliation tick.
+  "application_error",
 ];
 
 export async function reconcileRisksForApp(
   input: ReconcileRisksInput,
 ): Promise<ReconcileRisksOutcome> {
-  const { app, probe } = input;
-  const derived = evaluateRisks(app, probe);
+  const { app, probe, pageProbe } = input;
+  const derived = evaluateRisks(app, probe, pageProbe ?? null);
   const desiredByCat = new Map<RiskCategory, DerivedRisk>(
     derived.map((d) => [d.category, d]),
   );

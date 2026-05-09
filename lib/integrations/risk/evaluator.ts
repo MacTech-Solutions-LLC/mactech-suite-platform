@@ -21,6 +21,7 @@
 
 import type { AppRegistry, RiskCategory, RiskSeverity } from "@prisma/client";
 import type { HealthProbeResult } from "@/lib/integrations/health/checker";
+import type { PageRenderProbeResult } from "@/lib/integrations/health/page-render-probe";
 
 export interface DerivedRisk {
   category: RiskCategory;
@@ -30,8 +31,42 @@ export interface DerivedRisk {
   metadata: Record<string, unknown>;
 }
 
-export function evaluateRisks(app: AppRegistry, probe: HealthProbeResult | null): DerivedRisk[] {
+export function evaluateRisks(
+  app: AppRegistry,
+  probe: HealthProbeResult | null,
+  pageProbe?: PageRenderProbeResult | null,
+): DerivedRisk[] {
   const out: DerivedRisk[] = [];
+
+  // Sprint 39: page-render probe → application_error flag. We emit
+  // this independently of the /api/health probe — a healthy
+  // /api/health combined with a 500ing homepage is exactly the
+  // scenario this catches.
+  if (pageProbe) {
+    if (pageProbe.outcome === "5xx" || pageProbe.outcome === "application_error") {
+      out.push({
+        category: "application_error",
+        severity: bumpForCriticality(app.criticality, "high"),
+        title:
+          pageProbe.outcome === "application_error"
+            ? `${app.name} page renders the Next.js application-error fallback`
+            : `${app.name} page returns ${pageProbe.statusCode ?? "5xx"}`,
+        description:
+          pageProbe.outcome === "application_error"
+            ? `Anonymous GET on ${pageProbe.url} returned HTTP ${pageProbe.statusCode ?? "?"} with an SSR-error sentinel in the body${pageProbe.digest ? ` (digest ${pageProbe.digest})` : ""}. Check Railway deploy logs for the matching server-side exception.`
+            : `Anonymous GET on ${pageProbe.url} returned HTTP ${pageProbe.statusCode ?? "?"}${pageProbe.digest ? ` (digest ${pageProbe.digest})` : ""}.`,
+        metadata: {
+          app_key: app.appKey,
+          page_url: pageProbe.url,
+          status_code: pageProbe.statusCode,
+          digest: pageProbe.digest,
+          body_head: pageProbe.bodyHead,
+          latency_ms: pageProbe.latencyMs,
+          outcome: pageProbe.outcome,
+        },
+      });
+    }
+  }
 
   // Severity scaling: missing endpoint on a low-criticality dev app is
   // info; missing on a mission-critical production app is high.

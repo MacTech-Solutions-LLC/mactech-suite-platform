@@ -65,6 +65,12 @@ const AGENT_FIXABLE: Record<string, { intent: string; contextHint?: string }> = 
     contextHint:
       "See package.json + README.md. The MacTech Suite uses /api/build-info to detect production-behind-main drift.",
   },
+  application_error: {
+    intent:
+      "Fix the SSR application error on this app's homepage. The Suite's page-render probe sees Next.js's 'Application error · A server-side exception occurred (Digest: …)' fallback page rendering anonymously. The deploy logs in Railway have the underlying exception; the most common causes are missing required env vars (AUTH_SECRET, NEXTAUTH_URL, DATABASE_URL) or a Prisma query referencing a column that doesn't exist on the model. Open a small PR with the minimum change to make the page render again.",
+    contextHint:
+      "Check Railway deploy logs for the matching server-side exception (the digest in the page body matches a line in the logs). Then look at app/page.tsx, app/layout.tsx, lib/env.ts, and any service file the failing route imports.",
+  },
 };
 
 export function RiskRowActions({
