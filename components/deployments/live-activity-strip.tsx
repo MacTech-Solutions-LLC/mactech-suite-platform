@@ -270,12 +270,15 @@ function RowLink({
 
 function ExternalRailwayLink({ row }: { row: LiveDeployRow }) {
   if (!row.railwayDashboardUrl) return null;
+  // Server component → can't carry an onClick handler. The native
+  // click on this inner <a target="_blank"> opens its own tab; the
+  // outer RowLink doesn't fire because the inner anchor handles
+  // the event.
   return (
     <a
       href={row.railwayDashboardUrl}
       target="_blank"
       rel="noopener noreferrer"
-      onClick={(e) => e.stopPropagation()}
       className="shrink-0 text-muted-foreground hover:text-foreground"
       aria-label="Open in Railway"
       title="Open in Railway"
