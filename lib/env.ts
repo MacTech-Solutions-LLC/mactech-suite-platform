@@ -62,6 +62,28 @@ const RawEnvSchema = z.object({
    *  scheduler hits the endpoint (Railway cron, GitHub Actions, etc.).
    *  Without this, the cron endpoint refuses every call. */
   CRON_SECRET: z.string().optional(),
+  /** Slice 8: Resend API key for outbound team emails (AskAIPanel
+   *  + email_team_summary capability). Without it, the email client
+   *  no-ops gracefully — the AI narrative still renders in the UI,
+   *  but no email is sent. Set RESEND_API_KEY=re_... to activate. */
+  RESEND_API_KEY: z.string().optional(),
+  /** Slice 8: comma-separated default email recipients for "send to
+   *  team" toggles. Defaults to the MacTech ops trio if unset. */
+  TEAM_EMAILS: z
+    .string()
+    .default("patrick@mactechsolutionsllc.com,brian@mactechsolutionsllc.com,james@mactechsolutionsllc.com")
+    .transform((v) =>
+      v
+        .split(",")
+        .map((e) => e.trim())
+        .filter((e) => e.length > 0),
+    ),
+  /** Slice 8: From address on outbound team emails. Defaults to a
+   *  no-reply on the MacTech domain; override if Resend rejects it
+   *  for unverified domain. */
+  EMAIL_FROM: z
+    .string()
+    .default("MacTech Suite <suite@mactechsolutionsllc.com>"),
   GITHUB_TOKEN: z.string().optional(),
   GITHUB_WEBHOOK_SECRET: z.string().optional(),
   RAILWAY_API_TOKEN: z.string().optional(),

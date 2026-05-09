@@ -20,6 +20,8 @@ import {
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
 import { getOpenRiskFlags } from "@/lib/services/command-center/command-center-service";
+import { AskAIPanel } from "@/components/ai/ask-ai-panel";
+import { emailReady } from "@/lib/services/command-center/ai-ask-service";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +35,8 @@ export default async function RiskPage({
 }: {
   searchParams?: SearchParams;
 }) {
-  await requirePlatformPermission(PLATFORM_PERMISSIONS.RISK_VIEW);
+  const ctx = await requirePlatformPermission(PLATFORM_PERMISSIONS.RISK_VIEW);
+  const canEmail = ctx.permissions.includes(PLATFORM_PERMISSIONS.AGENTS_CREATE);
   const all = await getOpenRiskFlags(200);
 
   const filtered = all.filter((r) => {
@@ -75,6 +78,18 @@ export default async function RiskPage({
           />
         ))}
       </div>
+
+      <AskAIPanel
+        contextKey="open_risks"
+        canEmail={canEmail}
+        emailConfigured={emailReady()}
+        presets={[
+          "Group the open risks by app and explain which one needs attention first.",
+          "Are there any risks suggesting a coordinated incident? Look for clusters in time + category.",
+          "Draft a one-paragraph status email to leadership covering the top 3 open risks.",
+          "Which mission_critical apps have the most exposure right now and why?",
+        ]}
+      />
 
       <div className="overflow-hidden rounded-lg border border-border">
         <Table>

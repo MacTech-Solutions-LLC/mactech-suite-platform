@@ -10,14 +10,17 @@ import { Activity } from "lucide-react";
 import { PageHeader } from "@/components/layout/admin-shell";
 import { Button } from "@/components/ui/button";
 import { EcosystemGraph } from "@/components/ecosystem/ecosystem-graph";
+import { AskAIPanel } from "@/components/ai/ask-ai-panel";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
 import { getEcosystemGraph } from "@/lib/services/command-center/ecosystem-graph-service";
+import { emailReady } from "@/lib/services/command-center/ai-ask-service";
 
 export const dynamic = "force-dynamic";
 
 export default async function EcosystemPage() {
-  await requirePlatformPermission(PLATFORM_PERMISSIONS.OPS_VIEW);
+  const ctx = await requirePlatformPermission(PLATFORM_PERMISSIONS.OPS_VIEW);
+  const canEmail = ctx.permissions.includes(PLATFORM_PERMISSIONS.AGENTS_CREATE);
   const graph = await getEcosystemGraph({ trafficWindowHours: 24 });
   const totalObservedCalls = graph.edges.reduce((n, e) => n + (e.observedCalls ?? 0), 0);
   return (
@@ -33,6 +36,17 @@ export default async function EcosystemPage() {
             </Link>
           </Button>
         }
+      />
+      <AskAIPanel
+        contextKey="ecosystem"
+        canEmail={canEmail}
+        emailConfigured={emailReady()}
+        presets={[
+          "Which apps look fragile right now (low health, high open-risk count, lots of dependents)?",
+          "Walk the dependency graph from identity-command-center outward and explain blast radius.",
+          "Draft a leadership-readable status of the entire MacTech ecosystem.",
+          "Are there any apps with dependencies that look brittle or under-documented?",
+        ]}
       />
       <EcosystemGraph graph={graph} />
     </div>
