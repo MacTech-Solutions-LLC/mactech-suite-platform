@@ -36,6 +36,7 @@ const ALLOWED_CONTEXTS: ContextKey[] = [
   "ecosystem",
   "deployment_drift",
   "workflow_failures",
+  "today_digest",
 ];
 
 export async function POST(request: NextRequest) {

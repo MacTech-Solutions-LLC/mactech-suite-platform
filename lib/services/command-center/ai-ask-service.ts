@@ -36,7 +36,8 @@ export type ContextKey =
   | "open_risks"
   | "ecosystem"
   | "deployment_drift"
-  | "workflow_failures";
+  | "workflow_failures"
+  | "today_digest";
 
 export interface AskInput {
   contextKey: ContextKey;
@@ -172,7 +173,100 @@ async function assembleContext(
       return assembleDeploymentDrift(opts);
     case "workflow_failures":
       return assembleWorkflowFailures(opts);
+    case "today_digest":
+      return assembleTodayDigest(opts);
   }
+}
+
+async function assembleTodayDigest(opts: { budget: number }): Promise<ContextAssembly> {
+  const { getTodayDigest } = await import("./today-digest-service");
+  const d = await getTodayDigest();
+  const lines: string[] = [];
+  lines.push(`Last ${d.windowHours}h across the MacTech ecosystem.`);
+  lines.push("");
+  lines.push("CRITICAL RIGHT NOW");
+  lines.push(
+    `- ${d.criticalNow.openCriticalRisks} open critical-severity risk(s)`,
+  );
+  lines.push(`- ${d.criticalNow.appsCurrentlyDown} app(s) reporting health=down`);
+  lines.push(
+    `- ${d.criticalNow.failedDeployments24h} failed/crashed deploy(s) (24h)`,
+  );
+  lines.push(
+    `- ${d.criticalNow.refusedAgentRuns24h} agent run(s) refused by IBE (24h)`,
+  );
+  lines.push(`- ${d.criticalNow.awaitingApproval} agent run(s) awaiting approval`);
+  lines.push("");
+  if (d.deploys.length > 0) {
+    lines.push(`DEPLOYS (${d.deploys.length})`);
+    for (const x of d.deploys) {
+      lines.push(
+        `- ${x.appName ?? x.appKey ?? "?"} | ${x.railwayStatus} | drift=${x.productionDriftStatus} | ${x.liveCommitShortSha ?? "?"} | ${x.checkedAt.toISOString().slice(0, 16)}`,
+      );
+    }
+    lines.push("");
+  }
+  if (d.commits.length > 0) {
+    lines.push(`COMMITS (${d.commits.length})`);
+    for (const c of d.commits) {
+      const flags = c.riskFlags.length > 0 ? ` [risk: ${c.riskFlags.join(",")}]` : "";
+      lines.push(
+        `- ${c.repoFullName} ${c.shortSha} | ${c.authorName ?? "?"} | ${c.message.split("\n")[0]}${flags}`,
+      );
+    }
+    lines.push("");
+  }
+  if (d.failedWorkflows.length > 0) {
+    lines.push(`FAILED WORKFLOWS (${d.failedWorkflows.length})`);
+    for (const w of d.failedWorkflows) {
+      lines.push(`- ${w.repoFullName} | ${w.name} | ${w.conclusion}`);
+    }
+    lines.push("");
+  }
+  if (d.risksOpened.length > 0) {
+    lines.push(`RISKS OPENED (${d.risksOpened.length})`);
+    for (const r of d.risksOpened) {
+      lines.push(
+        `- [${r.severity}] ${r.appName ?? r.appKey ?? "?"} / ${r.category} — ${r.title}`,
+      );
+    }
+    lines.push("");
+  }
+  if (d.risksResolved.length > 0) {
+    lines.push(`RISKS RESOLVED (${d.risksResolved.length})`);
+    for (const r of d.risksResolved) {
+      lines.push(
+        `- [${r.severity}] ${r.appName ?? r.appKey ?? "?"} / ${r.category} — ${r.title}`,
+      );
+    }
+    lines.push("");
+  }
+  if (d.agentRuns.length > 0) {
+    lines.push(`AGENT RUNS (${d.agentRuns.length})`);
+    for (const a of d.agentRuns) {
+      const trigger = a.triggeredByApiKeyName
+        ? `via ${a.triggeredByApiKeyName}`
+        : `by ${a.requestedByEmail}`;
+      lines.push(
+        `- ${a.status.toUpperCase()} | ${a.plannedStepCount} step(s) | ${trigger} | ${a.requestText.slice(0, 80)}`,
+      );
+    }
+    lines.push("");
+  }
+  if (d.trafficErrors.length > 0) {
+    lines.push(`TRAFFIC ERRORS (top ${d.trafficErrors.length} pairs)`);
+    for (const t of d.trafficErrors) {
+      const pct = t.callCount > 0 ? Math.round((t.errorCount / t.callCount) * 100) : 0;
+      lines.push(
+        `- ${t.sourceLabel} → ${t.targetLabel} | ${t.errorCount}/${t.callCount} errors (${pct}%)`,
+      );
+    }
+    lines.push("");
+  }
+  return {
+    text: capLines(lines, opts.budget),
+    label: "today's ecosystem digest",
+  };
 }
 
 async function assembleCommitIntelligence(opts: {
@@ -456,6 +550,8 @@ function labelForKey(key: ContextKey): string {
       return "Deployment Drift";
     case "workflow_failures":
       return "Workflow Failures";
+    case "today_digest":
+      return "Today";
   }
 }
 
@@ -471,6 +567,8 @@ function routeForKey(key: ContextKey): string {
       return "admin/repositories/workflow-runs";
     case "workflow_failures":
       return "admin/repositories/workflow-runs";
+    case "today_digest":
+      return "command-center";
   }
 }
 

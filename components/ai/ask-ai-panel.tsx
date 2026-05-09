@@ -344,5 +344,7 @@ function labelFromKey(key: ContextKey): string {
       return "Deployment Drift";
     case "workflow_failures":
       return "Workflow Failures";
+    case "today_digest":
+      return "Today";
   }
 }
