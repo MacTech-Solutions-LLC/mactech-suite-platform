@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { WorkflowStatusPill } from "./workflow-status-pill";
+import { WorkflowRowMenu } from "./workflow-row-menu";
 import {
   Table,
   TableBody,
@@ -22,7 +23,13 @@ type RunWithRepo = Prisma.GitWorkflowRunGetPayload<{
   };
 }>;
 
-export function WorkflowRunTable({ runs }: { runs: RunWithRepo[] }) {
+export function WorkflowRunTable({
+  runs,
+  failedOnly = false,
+}: {
+  runs: RunWithRepo[];
+  failedOnly?: boolean;
+}) {
   if (runs.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
@@ -41,6 +48,7 @@ export function WorkflowRunTable({ runs }: { runs: RunWithRepo[] }) {
             <TableHead>Status</TableHead>
             <TableHead>Started</TableHead>
             <TableHead className="text-right">Duration</TableHead>
+            <TableHead className="w-8"><span className="sr-only">Actions</span></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -86,6 +94,17 @@ export function WorkflowRunTable({ runs }: { runs: RunWithRepo[] }) {
               </TableCell>
               <TableCell className="text-right font-mono text-xs text-muted-foreground">
                 {r.durationMs !== null ? `${Math.round(r.durationMs / 1000)}s` : "—"}
+              </TableCell>
+              <TableCell className="w-8 text-right">
+                <WorkflowRowMenu
+                  workflowName={r.name}
+                  repoFullName={r.repo.fullName}
+                  branch={r.branch}
+                  conclusion={r.conclusion}
+                  status={r.status}
+                  htmlUrl={r.htmlUrl}
+                  alreadyFailedOnly={failedOnly}
+                />
               </TableCell>
             </TableRow>
           ))}
