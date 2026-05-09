@@ -6,6 +6,7 @@
  * COMMAND_CENTER_MANAGE permission.
  */
 
+import Link from "next/link";
 import { Compass } from "lucide-react";
 import { PageHeader } from "@/components/layout/admin-shell";
 import { LastSyncedStamp } from "@/components/ui/last-synced-stamp";
@@ -116,6 +117,25 @@ export default async function CommandCenterPage() {
           &ldquo;Today&rdquo; digest at the top is your morning page: critical right-now state plus
           24h activity across every signal. Ask AI grounded on this digest, or scroll to the
           per-app and per-risk action surfaces below.
+        </p>
+        <p className="mt-2 max-w-3xl">
+          Need a customer-facing surface? The{" "}
+          <Link
+            href="/admin/public-status"
+            className="text-primary underline-offset-2 hover:underline"
+          >
+            public status page
+          </Link>{" "}
+          renders a sanitized view of opt-in apps at{" "}
+          <Link
+            href="/status"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline-offset-2 hover:underline"
+          >
+            /status
+          </Link>
+          .
         </p>
       </section>
     </div>
