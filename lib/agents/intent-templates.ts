@@ -94,4 +94,17 @@ export const INTENT_TEMPLATES: IntentTemplate[] = [
     cron: "0 14 * * 5",
     tz: "UTC",
   },
+  // ── Slice 13: cross-repo patch agent ──────────────────────────────
+  {
+    label: "Add /api/health endpoint to an app",
+    goal: "Add a public /api/health endpoint to an allowlisted MacTech app that returns {status:'ok'} JSON without auth.",
+    request:
+      "Use open_repo_pull_request to add a public anonymous /api/health route to repo MacTech-Solutions-LLC/<APP>. The endpoint must return JSON {status:'ok',service:'<app>',timestamp:<ISO>} and must NOT be behind Clerk middleware. Set contextPaths to package.json, README.md, middleware.ts. Set intent: 'Add a public anonymous /api/health Next.js route that returns JSON status ok plus service name plus ISO timestamp. Match this repo's existing app/ vs pages/ convention.' Replace <APP> with one of: capture, codex, cleard, training. Submit one PR per app.",
+  },
+  {
+    label: "Cross-repo patch (free form)",
+    goal: "Open a PR in an allowlisted MacTech repo using the cross-repo patch agent.",
+    request:
+      "Use open_repo_pull_request with repoFullName=MacTech-Solutions-LLC/<repo> and a clear plain-English intent describing the change. List context paths the planner should read for repo conventions (e.g. package.json, README.md). The agent never auto-merges; a human reviews on GitHub.",
+  },
 ];
