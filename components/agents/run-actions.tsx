@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Loader2, Play, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { humanizeAgentError } from "@/lib/agents/error-copy";
 
 export interface RunActionsProps {
   runId: string;
@@ -139,9 +140,18 @@ export function RunActions(props: RunActionsProps) {
         </div>
       ) : null}
 
-      {error ? (
-        <div className="text-xs text-destructive font-mono">{error}</div>
-      ) : null}
+      {error ? (() => {
+        const copy = humanizeAgentError(error);
+        if (!copy) return null;
+        return (
+          <div role="alert" className="text-xs text-destructive">
+            {copy.headline}{" "}
+            <span className="ml-1 font-mono text-[10px] opacity-70">
+              ({copy.slug})
+            </span>
+          </div>
+        );
+      })() : null}
     </div>
   );
 }

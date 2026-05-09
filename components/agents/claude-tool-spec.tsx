@@ -14,6 +14,7 @@
 
 import { useState } from "react";
 import { Copy, KeyRound, Check } from "lucide-react";
+import { Chip } from "@/components/ui/chip";
 
 const TOOL_SPEC_PYTHON = `# Anthropic Claude tool-use registration (Python SDK):
 TOOL = {
@@ -109,43 +110,43 @@ export function ClaudeToolSpec() {
         auto-execute; writes still bounce to a human approver.
       </p>
       <div className="flex items-center gap-2">
-        <button
-          type="button"
+        <Chip
+          variant="tab"
+          size="xs"
+          pressed={tab === "curl"}
           onClick={() => setTab("curl")}
-          className={`rounded-md px-2 py-0.5 text-[11px] uppercase tracking-widest ${
-            tab === "curl"
-              ? "bg-secondary text-foreground"
-              : "text-muted-foreground hover:bg-secondary/40"
-          }`}
+          ariaLabel="Show curl example"
+          className="uppercase tracking-widest"
         >
           curl
-        </button>
-        <button
-          type="button"
+        </Chip>
+        <Chip
+          variant="tab"
+          size="xs"
+          pressed={tab === "python"}
           onClick={() => setTab("python")}
-          className={`rounded-md px-2 py-0.5 text-[11px] uppercase tracking-widest ${
-            tab === "python"
-              ? "bg-secondary text-foreground"
-              : "text-muted-foreground hover:bg-secondary/40"
-          }`}
+          ariaLabel="Show Claude tool-use Python example"
+          className="uppercase tracking-widest"
         >
           claude tool-use (python)
-        </button>
-        <button
-          type="button"
+        </Chip>
+        <Chip
+          variant="ghost"
+          size="xs"
           onClick={copy}
-          className="ml-auto inline-flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-[11px] hover:bg-secondary/40"
+          ariaLabel={copied ? "Copied to clipboard" : "Copy snippet to clipboard"}
+          className="ml-auto"
         >
           {copied ? (
             <>
-              <Check className="h-3 w-3 text-success" /> Copied
+              <Check className="h-3 w-3 text-success" aria-hidden="true" /> Copied
             </>
           ) : (
             <>
-              <Copy className="h-3 w-3" /> Copy
+              <Copy className="h-3 w-3" aria-hidden="true" /> Copy
             </>
           )}
-        </button>
+        </Chip>
       </div>
       <pre className="max-h-72 overflow-auto rounded-md border border-border bg-background p-2 font-mono text-[11px] leading-snug">
         {tab === "curl" ? CURL_EXAMPLE : TOOL_SPEC_PYTHON}
