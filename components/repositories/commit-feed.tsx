@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ExternalLink, GitCommit, Plus, Minus, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CommitRowMenu } from "./commit-row-menu";
 import type { Prisma } from "@prisma/client";
 
 type CommitWithRepo = Prisma.GitCommitEventGetPayload<{
@@ -118,9 +119,21 @@ export function CommitFeed({ commits }: { commits: CommitWithRepo[] }) {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-foreground"
+                aria-label="Open commit on GitHub"
               >
                 <ExternalLink className="h-3 w-3" />
               </Link>
+              <CommitRowMenu
+                shortSha={c.shortSha}
+                message={c.message}
+                repoFullName={c.repo.fullName}
+                repoId={c.gitRepositoryId}
+                appLinks={c.repo.appLinks.map((l) => ({
+                  id: l.app.id,
+                  appKey: l.app.appKey,
+                }))}
+                flags={flags}
+              />
             </div>
           </li>
         );
