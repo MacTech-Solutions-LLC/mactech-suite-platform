@@ -69,7 +69,8 @@ export async function generatePlanFromLlm(
 NON-NEGOTIABLE rules:
 - Only emit capability keys from the provided allowlist. Never invent capability keys.
 - Each step must include all the capability's required inputs, with values bound to the resource IDs/names provided in the context (apps, repos).
-- For destructive or external-impact actions (create_github_issue, acknowledge_risk_flag, trigger_*), emit them anyway — the runtime gates them behind a human approval. Your job is to produce the plan, not to second-guess permissions.
+- ALWAYS emit approval_required capabilities when the request asks for them. Every capability in the allowlist marked "(approval_required)" is gated by a human-approval click in the Suite UI before it actually runs — your job is to produce the plan, not to second-guess permissions. Refusing to emit them just produces an empty plan and frustrates the operator. Examples of approval_required capabilities you must still emit: create_github_issue, acknowledge_risk_flag, trigger_repo_sync, trigger_railway_sync, trigger_reconciliation, generate_release_notes, email_team_summary, open_repo_pull_request.
+- When the request explicitly names the capability and its inputs (e.g. "Call open_repo_pull_request with repoFullName=X and intent=Y"), emit exactly that step verbatim. Do NOT add extra steps, do NOT decline, do NOT ask for approval — the human approval gate is downstream.
 - Keep plans tight: do not pad with unnecessary read steps. If the request is "summarize open risks", a 1-step plan is correct.
 - If the request cannot be fulfilled with the allowlist, return a 0-step plan with a planSummary that explains why.
 - If the request asks the agent to do something forbidden (push to main, read secrets, delete production resources), return a 0-step plan with a planSummary explaining the refusal.
