@@ -12,7 +12,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AppRegistryForm } from "@/components/forms/app-registry-form";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Search } from "lucide-react";
+import Link from "next/link";
 import { prisma } from "@/lib/db/prisma";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
@@ -55,10 +56,21 @@ export default async function AppRegistryPage() {
                 apps.map((app) => (
                   <TableRow key={app.id}>
                     <TableCell>
-                      <div className="font-medium">{app.name}</div>
-                      <div className="text-xs text-muted-foreground font-mono">
-                        {app.appKey}
-                      </div>
+                      <Link
+                        href={`/admin/apps/${app.appKey}`}
+                        className="group inline-flex items-center gap-1 hover:underline"
+                      >
+                        <div>
+                          <div className="font-medium">{app.name}</div>
+                          <div className="text-xs text-muted-foreground font-mono">
+                            {app.appKey}
+                          </div>
+                        </div>
+                        <Search
+                          className="ml-1 h-3 w-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                          aria-hidden="true"
+                        />
+                      </Link>
                     </TableCell>
                     <TableCell>
                       <Badge variant="muted">{app.category}</Badge>
