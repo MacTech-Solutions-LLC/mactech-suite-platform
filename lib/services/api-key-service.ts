@@ -77,6 +77,79 @@ export async function createApiKey(rawInput: CreateApiKeyInput) {
   };
 }
 
+/**
+ * Sprint 32: rotate an API key. Issues a fresh key with the same
+ * name (suffixed with " (rotated)" if not already), description,
+ * scopes, appKey, and expiresAt; revokes the old one. Returns the
+ * new plaintext exactly once — caller stores or copies immediately.
+ *
+ * The two writes are not in a transaction because Prisma transactions
+ * over revoke + create with hashing have a small race window during
+ * which both keys are valid. That's the desired property: the caller
+ * has time to swap in the new key before the old one stops working.
+ */
+export async function rotateApiKey(id: string) {
+  const ctx = await requirePlatformPermission(PLATFORM_PERMISSIONS.SETTINGS_MANAGE);
+
+  const previous = await prisma.apiKey.findUnique({ where: { id } });
+  if (!previous) throw new Error("API key not found.");
+  if (previous.status === "revoked") {
+    throw new Error("Cannot rotate a revoked key — issue a new key instead.");
+  }
+
+  const { plaintext, hash, prefix } = generateKey();
+  const newName = previous.name.includes("(rotated")
+    ? previous.name
+    : `${previous.name} (rotated ${new Date().toISOString().slice(0, 10)})`;
+
+  const next = await prisma.apiKey.create({
+    data: {
+      name: newName,
+      description: previous.description,
+      scopes: previous.scopes,
+      appKey: previous.appKey,
+      expiresAt: previous.expiresAt,
+      keyHash: hash,
+      keyPrefix: prefix,
+      createdById: ctx.userProfile.id,
+      status: "active",
+    },
+  });
+
+  await prisma.apiKey.update({
+    where: { id },
+    data: { status: "revoked" },
+  });
+
+  await writeAuditLog({
+    eventType: "api_key.rotated",
+    eventCategory: "system",
+    severity: "warning",
+    action: `Rotated API key '${previous.name}' (${previous.keyPrefix}…) → new key (${next.keyPrefix}…)`,
+    actorClerkUserId: ctx.clerkUserId,
+    actorEmail: ctx.userProfile.email,
+    actorUserProfileId: ctx.userProfile.id,
+    resourceType: "ApiKey",
+    resourceId: next.id,
+    metadata: {
+      previousId: previous.id,
+      previousPrefix: previous.keyPrefix,
+      newPrefix: next.keyPrefix,
+      scopes: previous.scopes,
+    },
+  });
+
+  return {
+    id: next.id,
+    name: next.name,
+    plaintext,
+    prefix: next.keyPrefix,
+    scopes: next.scopes,
+    expiresAt: next.expiresAt,
+    previousId: previous.id,
+  };
+}
+
 export async function revokeApiKey(id: string) {
   const ctx = await requirePlatformPermission(PLATFORM_PERMISSIONS.SETTINGS_MANAGE);
   const row = await prisma.apiKey.update({
