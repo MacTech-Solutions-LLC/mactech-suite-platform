@@ -65,6 +65,17 @@ ${
 
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), 30_000);
+  const startedAt = Date.now();
+  const reqBody = JSON.stringify({
+    model: "gpt-4o-mini",
+    temperature: 0.2,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+  });
+  let statusForTraffic = 0;
   try {
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -72,17 +83,10 @@ ${
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-      }),
+      body: reqBody,
       signal: controller.signal,
     });
+    statusForTraffic = resp.status;
     if (!resp.ok) {
       console.warn(`[ai-summary] non-ok response ${resp.status}`);
       return null;
@@ -111,5 +115,20 @@ ${
     return null;
   } finally {
     clearTimeout(t);
+    try {
+      const { recordOutboundCall } = await import(
+        "@/lib/services/command-center/traffic-service"
+      );
+      void recordOutboundCall({
+        targetLabel: "openai",
+        endpoint: "openai:/v1/chat/completions:summary",
+        method: "POST",
+        statusCode: statusForTraffic || 0,
+        bytesOut: reqBody.length,
+        durationMs: Date.now() - startedAt,
+      });
+    } catch {
+      /* observability never blocks */
+    }
   }
 }

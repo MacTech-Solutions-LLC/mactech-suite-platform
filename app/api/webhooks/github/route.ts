@@ -28,6 +28,7 @@ import { writeAuditLog, redactMetadata } from "@/lib/audit";
 import { prisma } from "@/lib/db/prisma";
 import { verifyGitHubSignature } from "@/lib/integrations/github/webhook-signature";
 import { classifyChangedFiles } from "@/lib/integrations/github/risk-paths";
+import { withInboundTrafficRecording } from "@/lib/services/command-center/traffic-service";
 import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,14 @@ const SUPPORTED_EVENTS = new Set([
 ]);
 
 export async function POST(request: NextRequest) {
+  return withInboundTrafficRecording(
+    request,
+    { sourceLabel: "github", endpoint: "/api/webhooks/github" },
+    () => handleGitHubWebhook(request),
+  );
+}
+
+async function handleGitHubWebhook(request: NextRequest): Promise<NextResponse> {
   const signature = request.headers.get("x-hub-signature-256");
   const event = request.headers.get("x-github-event") ?? "";
   const delivery = request.headers.get("x-github-delivery") ?? "";

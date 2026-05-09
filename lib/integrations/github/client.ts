@@ -181,6 +181,8 @@ function makeRealClient(token: string): GitHubClient {
     const url = `${API_BASE}${path}`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 8000);
+    const startedAt = Date.now();
+    let statusForTraffic = 0;
     try {
       const resp = await fetch(url, {
         method: "GET",
@@ -193,6 +195,7 @@ function makeRealClient(token: string): GitHubClient {
         signal: controller.signal,
         cache: "no-store",
       });
+      statusForTraffic = resp.status;
       if (resp.status === 401) {
         return { ok: false, reason: "unauthorized", status: 401 };
       }
@@ -221,6 +224,24 @@ function makeRealClient(token: string): GitHubClient {
       return { ok: false, reason: "transient", status: 0 };
     } finally {
       clearTimeout(timeout);
+      // Slice 6.1 outbound traffic instrumentation. Lazy-imported so a
+      // service-layer cycle (lib/agents/llm.ts also imports the
+      // traffic service) cannot turn into a load-order issue. Same
+      // try/never-throw contract as recordAppCall.
+      try {
+        const { recordOutboundCall } = await import(
+          "@/lib/services/command-center/traffic-service"
+        );
+        void recordOutboundCall({
+          targetLabel: "github",
+          endpoint: `github:${path.split("?")[0]}`,
+          method: "GET",
+          statusCode: statusForTraffic || 0,
+          durationMs: Date.now() - startedAt,
+        });
+      } catch {
+        /* observability never blocks */
+      }
     }
   }
 
@@ -370,6 +391,13 @@ function makeRealClient(token: string): GitHubClient {
       const url = `${API_BASE}/repos/${owner}/${repo}/issues`;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 12_000);
+      const startedAt = Date.now();
+      const bodyJson = JSON.stringify({
+        title: input.title,
+        body: input.body,
+        labels: input.labels ?? undefined,
+      });
+      let statusForTraffic = 0;
       try {
         const resp = await fetch(url, {
           method: "POST",
@@ -380,14 +408,11 @@ function makeRealClient(token: string): GitHubClient {
             "User-Agent": "MacTechCommandCenter/1.0",
             "X-GitHub-Api-Version": "2022-11-28",
           },
-          body: JSON.stringify({
-            title: input.title,
-            body: input.body,
-            labels: input.labels ?? undefined,
-          }),
+          body: bodyJson,
           signal: controller.signal,
           cache: "no-store",
         });
+        statusForTraffic = resp.status;
         if (resp.status === 401) return { ok: false, reason: "unauthorized", status: 401 };
         if (resp.status === 404) return { ok: false, reason: "not_found", status: 404 };
         if (resp.status === 403) return { ok: false, reason: "abuse_detected", status: 403 };
@@ -399,6 +424,21 @@ function makeRealClient(token: string): GitHubClient {
         return { ok: false, reason: "transient", status: 0 };
       } finally {
         clearTimeout(timeout);
+        try {
+          const { recordOutboundCall } = await import(
+            "@/lib/services/command-center/traffic-service"
+          );
+          void recordOutboundCall({
+            targetLabel: "github",
+            endpoint: `github:/repos/${owner}/${repo}/issues`,
+            method: "POST",
+            statusCode: statusForTraffic || 0,
+            bytesOut: bodyJson.length,
+            durationMs: Date.now() - startedAt,
+          });
+        } catch {
+          /* observability never blocks */
+        }
       }
     },
   };

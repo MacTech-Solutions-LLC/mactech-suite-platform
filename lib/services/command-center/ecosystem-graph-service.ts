@@ -35,6 +35,10 @@ export interface EcosystemNode {
    *  Slice 5.9 added this so the graph can re-project to a repo-level
    *  view client-side without re-fetching. */
   repoFullName: string | null;
+  /** Slice 6.1: synthetic external-service node (github / railway /
+   *  openai) injected only when there's observed traffic to/from
+   *  Suite. Real AppRegistry nodes have this false. */
+  isExternal: boolean;
 }
 
 export interface EcosystemEdge {
@@ -109,6 +113,7 @@ export async function getEcosystemGraph(
     hasRailwayMapping: a.railwayResources.length > 0,
     hasRepoMapping: linkedAppIds.has(a.id) || Boolean(a.repoFullName),
     repoFullName: a.repoFullName,
+    isExternal: false,
   }));
 
   const deps = await prisma.appDependency.findMany({
@@ -158,7 +163,111 @@ export async function getEcosystemGraph(
     };
   });
 
+  // ── Slice 6.1: synthetic external-service nodes ──────────────────
+  // For traffic rows where source or target is an external service
+  // (no AppRegistry id, sourceLabel/targetLabel = "github" / "railway"
+  // / "openai" / "clerk"), inject a node and a synthetic edge so the
+  // map closes the loop. Skip when there's no observed traffic to a
+  // given external service — the map stays clean for fresh installs.
+  const EXTERNAL_LABELS = new Set(["github", "railway", "openai", "clerk"]);
+  const EXTERNAL_PUBLIC_URL: Record<string, string> = {
+    github: "https://github.com",
+    railway: "https://railway.com",
+    openai: "https://api.openai.com",
+    clerk: "https://clerk.com",
+  };
+  const externalLabelsWithTraffic = new Set<string>();
+  const externalEdgeAggregates = new Map<
+    string,
+    { calls: number; bytesIn: number; errors: number; lastSeenAt: Date }
+  >();
+  for (const t of trafficRows) {
+    const isOutbound =
+      EXTERNAL_LABELS.has(t.targetLabel) && !t.targetAppRegistryId;
+    const isInbound =
+      EXTERNAL_LABELS.has(t.sourceLabel) && !t.sourceAppRegistryId;
+    if (!isOutbound && !isInbound) continue;
+    const externalLabel = isOutbound ? t.targetLabel : t.sourceLabel;
+    externalLabelsWithTraffic.add(externalLabel);
+    // Edge endpoints: in outbound the suite is the source; in inbound
+    // the external is the source. Use synthetic ids of the form
+    // `external:<label>` so they don't collide with cuids.
+    const externalNodeId = `external:${externalLabel}`;
+    const sourceId = isOutbound
+      ? t.sourceAppRegistryId ?? null
+      : externalNodeId;
+    const targetId = isOutbound
+      ? externalNodeId
+      : t.targetAppRegistryId ?? null;
+    if (!sourceId || !targetId) continue;
+    const key = `${sourceId}::${targetId}`;
+    const existing = externalEdgeAggregates.get(key);
+    if (existing) {
+      existing.calls += t.callCount;
+      existing.bytesIn += t.bytesIn;
+      existing.errors += t.errorCount;
+      if (t.lastSeenAt > existing.lastSeenAt) existing.lastSeenAt = t.lastSeenAt;
+    } else {
+      externalEdgeAggregates.set(key, {
+        calls: t.callCount,
+        bytesIn: t.bytesIn,
+        errors: t.errorCount,
+        lastSeenAt: t.lastSeenAt,
+      });
+    }
+  }
+  for (const label of Array.from(externalLabelsWithTraffic)) {
+    nodes.push({
+      id: `external:${label}`,
+      appKey: label,
+      name: externalDisplayName(label),
+      category: "external",
+      criticality: "medium",
+      lifecycle: "external",
+      visibility: "public",
+      publicUrl: EXTERNAL_PUBLIC_URL[label] ?? null,
+      latestHealth: null,
+      openRiskCount: 0,
+      hasRailwayMapping: false,
+      hasRepoMapping: false,
+      repoFullName: null,
+      isExternal: true,
+    });
+  }
+  for (const [key, agg] of Array.from(externalEdgeAggregates.entries())) {
+    const [sourceId, targetId] = key.split("::");
+    edges.push({
+      id: `external:${key}`,
+      sourceId,
+      targetId,
+      // No declared dependency for external edges — pick a generic
+      // "api_calls" type that the existing legend already covers.
+      dependencyType: "api_calls",
+      description: `Observed ${agg.calls} call${agg.calls === 1 ? "" : "s"} in last ${trafficWindowHours}h`,
+      criticality: agg.errors > 0 ? "high" : "medium",
+      observedCalls: agg.calls,
+      observedBytesIn: agg.bytesIn,
+      observedErrors: agg.errors,
+      lastSeenAt: agg.lastSeenAt,
+    });
+  }
+
   return { nodes, edges, trafficWindowHours };
+}
+
+function externalDisplayName(label: string): string {
+  switch (label) {
+    case "github":
+      return "GitHub";
+    case "railway":
+      return "Railway";
+    case "openai":
+      return "OpenAI";
+    case "clerk":
+      return "Clerk";
+    default:
+      return label;
+  }
 }
 
 // ─── AppDependency CRUD (used by seed; UI defers to a future PR) ─────

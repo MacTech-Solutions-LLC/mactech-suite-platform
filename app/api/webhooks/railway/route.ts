@@ -21,12 +21,21 @@ import { writeAuditLog, redactMetadata } from "@/lib/audit";
 import { prisma } from "@/lib/db/prisma";
 import { verifyRailwaySignature } from "@/lib/integrations/railway/webhook-verify";
 import { normalizeDeploymentStatus } from "@/lib/integrations/railway/client";
+import { withInboundTrafficRecording } from "@/lib/services/command-center/traffic-service";
 import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
+  return withInboundTrafficRecording(
+    request,
+    { sourceLabel: "railway", endpoint: "/api/webhooks/railway" },
+    () => handleRailwayWebhook(request),
+  );
+}
+
+async function handleRailwayWebhook(request: NextRequest): Promise<NextResponse> {
   const signature = request.headers.get("x-railway-signature");
   const querySecret = request.nextUrl.searchParams.get("secret");
   const remoteIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;

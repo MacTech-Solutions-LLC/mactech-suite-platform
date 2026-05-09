@@ -37,10 +37,14 @@ interface SearchParams {
   to?: string;
   /** appKey (source) — filter to a specific source. */
   from?: string;
+  /** target label (e.g. "github", "openai") — filter outbound calls. */
+  toLabel?: string;
   /** time window in hours; default 24. */
   windowH?: string;
   errorsOnly?: string;
 }
+
+const EXTERNAL_LABELS = ["github", "railway", "openai", "clerk"] as const;
 
 export default async function TrafficPage({
   searchParams,
@@ -56,16 +60,20 @@ export default async function TrafficPage({
   // textual sourceLabel to also catch non-app sources like "github".
   const targetAppId = searchParams?.to ?? undefined;
   const sourceLabel = searchParams?.from ?? undefined;
+  const targetLabel = searchParams?.toLabel ?? undefined;
   const errorsOnly = searchParams?.errorsOnly === "1";
 
   const [pairs, recent, apps] = await Promise.all([
     getTrafficSummaryByPair({
       since,
       targetAppRegistryId: targetAppId,
+      targetLabel,
+      sourceLabel,
     }),
     listRecentCallEvents({
       since,
       sourceLabel,
+      targetLabel,
       targetAppRegistryId: targetAppId,
       errorsOnly,
       take: 250,
@@ -99,6 +107,7 @@ export default async function TrafficPage({
         windowHours={windowHours}
         targetAppId={targetAppId}
         sourceLabel={sourceLabel}
+        targetLabel={targetLabel}
         errorsOnly={errorsOnly}
         apps={apps}
       />
@@ -128,14 +137,19 @@ export default async function TrafficPage({
                   ? appsById.get(p.targetAppRegistryId)
                   : null;
                 const errPct = p.callCount > 0 ? (p.errorCount / p.callCount) * 100 : 0;
-                const key = `${p.sourceLabel}-${p.targetAppRegistryId ?? "none"}`;
+                const key = `${p.sourceLabel}-${p.targetLabel}-${p.targetAppRegistryId ?? "none"}-${p.sourceAppRegistryId ?? "none"}`;
+                // Display name falls through: AppRegistry name if we
+                // have it; otherwise the canonical label (which is
+                // also the name for external services like "github").
+                const sourceName = src?.name ?? p.sourceLabel;
+                const targetName = tgt?.name ?? p.targetLabel;
                 return (
                   <li key={key} className="flex items-center justify-between gap-3 p-3 text-sm">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">{src?.name ?? p.sourceLabel}</span>
+                        <span className="font-medium">{sourceName}</span>
                         <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                        <span className="font-medium">{tgt?.name ?? "?"}</span>
+                        <span className="font-medium">{targetName}</span>
                         {p.errorCount > 0 ? (
                           <Badge variant="destructive">{p.errorCount} err</Badge>
                         ) : null}
@@ -168,10 +182,10 @@ export default async function TrafficPage({
               <thead className="bg-card/40 text-[10px] uppercase tracking-widest text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2 text-left">When</th>
-                  <th className="px-3 py-2 text-left">Source</th>
+                  <th className="px-3 py-2 text-left">Source → Target</th>
                   <th className="px-3 py-2 text-left">Endpoint</th>
                   <th className="px-3 py-2 text-left">Status</th>
-                  <th className="px-3 py-2 text-right">Bytes in</th>
+                  <th className="px-3 py-2 text-right">Bytes</th>
                   <th className="px-3 py-2 text-right">Duration</th>
                 </tr>
               </thead>
@@ -181,8 +195,13 @@ export default async function TrafficPage({
                     <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground">
                       {r.occurredAt.toLocaleString()}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 text-[11px]">
                       <span className="font-medium">{r.sourceLabel}</span>
+                      <ArrowRight
+                        className="mx-1 inline h-3 w-3 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                      <span className="font-medium">{r.targetLabel}</span>
                     </td>
                     <td className="px-3 py-2 font-mono text-[11px]">
                       <span className="text-muted-foreground">{r.method}</span> {r.endpoint}
@@ -230,6 +249,7 @@ function FilterBar(props: {
   windowHours: number;
   targetAppId: string | undefined;
   sourceLabel: string | undefined;
+  targetLabel: string | undefined;
   errorsOnly: boolean;
   apps: Array<{ id: string; appKey: string; name: string }>;
 }) {
@@ -239,6 +259,7 @@ function FilterBar(props: {
     const merged: SearchParams = {
       to: props.targetAppId,
       from: props.sourceLabel,
+      toLabel: props.targetLabel,
       windowH: String(props.windowHours),
       errorsOnly: props.errorsOnly ? "1" : undefined,
       ...next,
@@ -295,6 +316,32 @@ function FilterBar(props: {
         </Link>
       ))}
 
+      <span className="ml-2 text-muted-foreground">target service:</span>
+      <Link
+        href={buildHref({ toLabel: undefined })}
+        className={chipClass(!props.targetLabel)}
+        aria-pressed={!props.targetLabel}
+      >
+        any
+      </Link>
+      <Link
+        href={buildHref({ toLabel: "identity-command-center" })}
+        className={chipClass(props.targetLabel === "identity-command-center")}
+        aria-pressed={props.targetLabel === "identity-command-center"}
+      >
+        suite (inbound)
+      </Link>
+      {EXTERNAL_LABELS.map((label) => (
+        <Link
+          key={label}
+          href={buildHref({ toLabel: label })}
+          className={chipClass(props.targetLabel === label)}
+          aria-pressed={props.targetLabel === label}
+        >
+          {label}
+        </Link>
+      ))}
+
       <Link
         href={buildHref({ errorsOnly: props.errorsOnly ? undefined : "1" })}
         className={`ml-2 ${chipClass(props.errorsOnly)}`}
@@ -313,7 +360,7 @@ function FilterBar(props: {
         )}
       </Link>
 
-      {(props.targetAppId || props.sourceLabel || props.errorsOnly) ? (
+      {(props.targetAppId || props.sourceLabel || props.targetLabel || props.errorsOnly) ? (
         <Button asChild size="sm" variant="ghost">
           <Link href="/admin/ops/traffic">clear</Link>
         </Button>

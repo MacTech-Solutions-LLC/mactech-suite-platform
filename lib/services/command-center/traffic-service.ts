@@ -28,6 +28,13 @@ export interface RecordCallInput {
    * sources use "github" / "railway" / "clerk" / "anonymous".
    */
   sourceLabel: string;
+  /**
+   * Canonical target label. Slice 6.1 — defaults to
+   * "identity-command-center" (the inbound case). For outbound calls
+   * Suite makes, set to "github" / "railway" / "openai" so the
+   * traffic graph attributes the call to the right external service.
+   */
+  targetLabel?: string;
   /** Route pattern, NOT the literal URL. e.g. "/api/audit/ingest". */
   endpoint: string;
   method: string;
@@ -53,6 +60,7 @@ export async function recordAppCall(input: RecordCallInput): Promise<void> {
         targetAppRegistryId: input.targetAppRegistryId ?? null,
         sourceAppRegistryId: input.sourceAppRegistryId ?? null,
         sourceLabel: input.sourceLabel,
+        targetLabel: input.targetLabel ?? "identity-command-center",
         endpoint: input.endpoint,
         method: input.method,
         statusCode: input.statusCode,
@@ -85,6 +93,7 @@ export interface PairTrafficSummary {
   sourceAppRegistryId: string | null;
   targetAppRegistryId: string | null;
   sourceLabel: string;
+  targetLabel: string;
   callCount: number;
   bytesIn: number;
   bytesOut: number;
@@ -105,18 +114,27 @@ export async function getTrafficSummaryByPair(opts: {
   sourceAppRegistryId?: string;
   /** Filter to one specific target app (optional). */
   targetAppRegistryId?: string;
+  /** Filter to one specific target label, e.g. "github". */
+  targetLabel?: string;
+  /** Filter to one specific source label, e.g. "training". */
+  sourceLabel?: string;
 }): Promise<PairTrafficSummary[]> {
+  const baseWhere = {
+    occurredAt: { gte: opts.since },
+    ...(opts.sourceAppRegistryId ? { sourceAppRegistryId: opts.sourceAppRegistryId } : {}),
+    ...(opts.targetAppRegistryId ? { targetAppRegistryId: opts.targetAppRegistryId } : {}),
+    ...(opts.targetLabel ? { targetLabel: opts.targetLabel } : {}),
+    ...(opts.sourceLabel ? { sourceLabel: opts.sourceLabel } : {}),
+  };
+
   const rows = await prisma.appCallEvent.groupBy({
-    by: ["sourceAppRegistryId", "targetAppRegistryId", "sourceLabel"],
-    where: {
-      occurredAt: { gte: opts.since },
-      ...(opts.sourceAppRegistryId
-        ? { sourceAppRegistryId: opts.sourceAppRegistryId }
-        : {}),
-      ...(opts.targetAppRegistryId
-        ? { targetAppRegistryId: opts.targetAppRegistryId }
-        : {}),
-    },
+    by: [
+      "sourceAppRegistryId",
+      "targetAppRegistryId",
+      "sourceLabel",
+      "targetLabel",
+    ],
+    where: baseWhere,
     _count: { _all: true },
     _sum: { bytesIn: true, bytesOut: true },
     _max: { occurredAt: true },
@@ -125,31 +143,28 @@ export async function getTrafficSummaryByPair(opts: {
   // Error counts in a separate pass so we don't lose accuracy on the
   // primary aggregate. Same group-by, filtered to non-2xx.
   const errorRows = await prisma.appCallEvent.groupBy({
-    by: ["sourceAppRegistryId", "targetAppRegistryId", "sourceLabel"],
-    where: {
-      occurredAt: { gte: opts.since },
-      statusCode: { gte: 400 },
-      ...(opts.sourceAppRegistryId
-        ? { sourceAppRegistryId: opts.sourceAppRegistryId }
-        : {}),
-      ...(opts.targetAppRegistryId
-        ? { targetAppRegistryId: opts.targetAppRegistryId }
-        : {}),
-    },
+    by: [
+      "sourceAppRegistryId",
+      "targetAppRegistryId",
+      "sourceLabel",
+      "targetLabel",
+    ],
+    where: { ...baseWhere, statusCode: { gte: 400 } },
     _count: { _all: true },
   });
   const errorByKey = new Map<string, number>();
   for (const e of errorRows) {
-    const key = `${e.sourceAppRegistryId ?? "_"}|${e.targetAppRegistryId ?? "_"}|${e.sourceLabel}`;
+    const key = `${e.sourceAppRegistryId ?? "_"}|${e.targetAppRegistryId ?? "_"}|${e.sourceLabel}|${e.targetLabel}`;
     errorByKey.set(key, e._count._all);
   }
 
   return rows.map((r) => {
-    const key = `${r.sourceAppRegistryId ?? "_"}|${r.targetAppRegistryId ?? "_"}|${r.sourceLabel}`;
+    const key = `${r.sourceAppRegistryId ?? "_"}|${r.targetAppRegistryId ?? "_"}|${r.sourceLabel}|${r.targetLabel}`;
     return {
       sourceAppRegistryId: r.sourceAppRegistryId,
       targetAppRegistryId: r.targetAppRegistryId,
       sourceLabel: r.sourceLabel,
+      targetLabel: r.targetLabel,
       callCount: r._count._all,
       bytesIn: r._sum.bytesIn ?? 0,
       bytesOut: r._sum.bytesOut ?? 0,
@@ -183,6 +198,7 @@ export interface CallEventRow {
   id: string;
   occurredAt: Date;
   sourceLabel: string;
+  targetLabel: string;
   sourceAppRegistryId: string | null;
   targetAppRegistryId: string | null;
   endpoint: string;
@@ -200,6 +216,7 @@ export interface CallEventRow {
 export async function listRecentCallEvents(opts: {
   since?: Date;
   sourceLabel?: string;
+  targetLabel?: string;
   targetAppRegistryId?: string;
   sourceAppRegistryId?: string;
   endpoint?: string;
@@ -211,6 +228,7 @@ export async function listRecentCallEvents(opts: {
     where: {
       ...(opts.since ? { occurredAt: { gte: opts.since } } : {}),
       ...(opts.sourceLabel ? { sourceLabel: opts.sourceLabel } : {}),
+      ...(opts.targetLabel ? { targetLabel: opts.targetLabel } : {}),
       ...(opts.sourceAppRegistryId
         ? { sourceAppRegistryId: opts.sourceAppRegistryId }
         : {}),
@@ -227,6 +245,7 @@ export async function listRecentCallEvents(opts: {
     id: r.id,
     occurredAt: r.occurredAt,
     sourceLabel: r.sourceLabel,
+    targetLabel: r.targetLabel,
     sourceAppRegistryId: r.sourceAppRegistryId,
     targetAppRegistryId: r.targetAppRegistryId,
     endpoint: r.endpoint,
@@ -236,6 +255,104 @@ export async function listRecentCallEvents(opts: {
     bytesOut: r.bytesOut,
     durationMs: r.durationMs,
   }));
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Outbound helper — Slice 6.1.
+// ───────────────────────────────────────────────────────────────────────
+
+/**
+ * Wrap an inbound-webhook handler so any return path (success, early
+ * 4xx, thrown 5xx) records a single AppCallEvent row at the end.
+ * Status comes from the NextResponse the handler returns, or 500 on
+ * an uncaught throw. Bytes-in and duration are sampled at entry.
+ *
+ * Usage in a route file:
+ *   export async function POST(request: NextRequest) {
+ *     return withInboundTrafficRecording(
+ *       request,
+ *       { sourceLabel: "github", endpoint: "/api/webhooks/github" },
+ *       async () => { ... existing handler body ... },
+ *     );
+ *   }
+ */
+import type { NextRequest, NextResponse } from "next/server";
+
+export async function withInboundTrafficRecording(
+  request: NextRequest,
+  opts: {
+    sourceLabel: string;
+    /** Defaults to "identity-command-center" (Suite is the receiver). */
+    targetLabel?: string;
+    /** Route pattern, e.g. "/api/webhooks/github". */
+    endpoint: string;
+  },
+  handler: () => Promise<NextResponse>,
+): Promise<NextResponse> {
+  const startedAt = Date.now();
+  const bytesIn = approxRequestBytes(request);
+  let statusCode = 500;
+  try {
+    const resp = await handler();
+    statusCode = resp.status;
+    return resp;
+  } finally {
+    const targetId = await suiteAppRegistryId();
+    void recordAppCall({
+      sourceLabel: opts.sourceLabel,
+      targetLabel: opts.targetLabel ?? "identity-command-center",
+      sourceAppRegistryId: null,
+      targetAppRegistryId: targetId,
+      endpoint: opts.endpoint,
+      method: request.method,
+      statusCode,
+      bytesIn,
+      durationMs: Date.now() - startedAt,
+    });
+  }
+}
+
+/**
+ * Record an outbound call Suite made to a third-party service. Sets
+ * sourceLabel = "identity-command-center", target = the named external
+ * service (e.g. "github" / "railway" / "openai"). Pre-resolves Suite's
+ * AppRegistry id so the source side of the row is fully attributed.
+ *
+ * Use cases:
+ *   - lib/integrations/github/client.ts fetchJson + createIssue
+ *   - lib/integrations/railway/client.ts GraphQL fetch
+ *   - lib/integrations/ai/summary-client.ts OpenAI call
+ *   - lib/agents/llm.ts planner OpenAI call
+ *
+ * Same fire-and-forget contract as recordAppCall: never throws,
+ * never blocks.
+ */
+export async function recordOutboundCall(input: {
+  /** External service name. Lowercase, single word. */
+  targetLabel: string;
+  /** RPC name or path on the target. e.g. "/repos/.../hooks". */
+  endpoint: string;
+  method: string;
+  statusCode: number;
+  bytesIn?: number;
+  bytesOut?: number;
+  durationMs?: number;
+  metadata?: Prisma.InputJsonValue | null;
+}): Promise<void> {
+  const sourceId = await suiteAppRegistryId();
+  void recordAppCall({
+    sourceAppRegistryId: sourceId,
+    sourceLabel: "identity-command-center",
+    targetAppRegistryId: null,
+    targetLabel: input.targetLabel,
+    endpoint: input.endpoint,
+    method: input.method,
+    statusCode: input.statusCode,
+    bytesIn: input.bytesIn,
+    bytesOut: input.bytesOut,
+    durationMs: input.durationMs,
+    metadata: input.metadata ?? null,
+  });
 }
 
 // ───────────────────────────────────────────────────────────────────────
