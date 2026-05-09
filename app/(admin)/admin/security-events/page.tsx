@@ -21,6 +21,7 @@ import {
 import { SeverityBadge } from "@/components/ui/severity-badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { SecurityEventDetailButton } from "@/components/drawers/security-event-detail-drawer";
+import { SecurityEventRowActions } from "@/components/security-events/security-event-row-actions";
 import { formatDateTime } from "@/lib/utils";
 import { prisma } from "@/lib/db/prisma";
 import { requirePlatformPermission } from "@/lib/authz";
@@ -174,19 +175,25 @@ export default async function SecurityEventsPage({
                       <StatusBadge status={event.status} />
                     </TableCell>
                     <TableCell>
-                      <SecurityEventDetailButton
-                        row={{
-                          id: event.id,
-                          timestamp: event.timestamp,
-                          eventType: event.eventType,
-                          severity: event.severity,
-                          status: event.status,
-                          description: event.description,
-                          sourceAppKey: event.sourceAppKey,
-                          metadataJson: event.metadataJson,
-                          customerOrganization: event.customerOrganization,
-                        }}
-                      />
+                      <div className="flex items-center justify-end gap-2">
+                        <SecurityEventRowActions
+                          eventId={event.id}
+                          status={event.status}
+                        />
+                        <SecurityEventDetailButton
+                          row={{
+                            id: event.id,
+                            timestamp: event.timestamp,
+                            eventType: event.eventType,
+                            severity: event.severity,
+                            status: event.status,
+                            description: event.description,
+                            sourceAppKey: event.sourceAppKey,
+                            metadataJson: event.metadataJson,
+                            customerOrganization: event.customerOrganization,
+                          }}
+                        />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
