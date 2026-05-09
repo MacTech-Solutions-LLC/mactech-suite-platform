@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ExternalLink, Code2 } from "lucide-react";
 import { DriftBadge } from "./drift-badge";
 import { WorkflowStatusPill } from "./workflow-status-pill";
+import { RepoSyncButton } from "./repo-sync-button";
 import { LastSyncedStamp } from "@/components/ui/last-synced-stamp";
 import {
   Table,
@@ -35,6 +36,7 @@ export function RepoStatusTable({ rows }: { rows: RepositorySnapshotRow[] }) {
             <TableHead>Drift</TableHead>
             <TableHead>Latest workflow</TableHead>
             <TableHead className="text-right">Last sync</TableHead>
+            <TableHead className="w-32 text-right">Action</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -114,6 +116,9 @@ export function RepoStatusTable({ rows }: { rows: RepositorySnapshotRow[] }) {
                 </TableCell>
                 <TableCell className="text-right">
                   <LastSyncedStamp at={r.lastSyncedAt ?? undefined} prefix="synced" />
+                </TableCell>
+                <TableCell className="text-right">
+                  <RepoSyncButton fullName={r.fullName} />
                 </TableCell>
               </TableRow>
             );
