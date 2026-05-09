@@ -49,13 +49,22 @@ export interface FileClaudeFixResult {
   message?: string;
 }
 
-export async function fileClaudeFixIssueForCrash(
-  snapshotId: string,
-): Promise<FileClaudeFixResult> {
-  const ctx = await requirePlatformPermission(
-    PLATFORM_PERMISSIONS.REPOSITORIES_MANAGE,
-  );
+interface ActorContext {
+  clerkUserId: string | null;
+  email: string;
+  userProfileId: string | null;
+}
 
+/**
+ * Sprint 41: bare implementation accepting an actor context. The
+ * operator-facing server action below wraps with a permission check;
+ * the autonomous reconciliation path (sprint 41) calls this directly
+ * with a synthetic system actor (env-flag gated upstream).
+ */
+export async function fileClaudeFixIssueForCrashWithActor(
+  snapshotId: string,
+  actor: ActorContext,
+): Promise<FileClaudeFixResult> {
   const diag = await getDeploymentDiagnosis(snapshotId);
   if (!diag.ok) {
     return {
@@ -133,9 +142,9 @@ export async function fileClaudeFixIssueForCrash(
       eventCategory: "system",
       severity: "warning",
       action: `agent: file @claude fix issue failed for ${repoFullName} (${result.reason})`,
-      actorClerkUserId: ctx.clerkUserId,
-      actorEmail: ctx.userProfile.email,
-      actorUserProfileId: ctx.userProfile.id,
+      actorClerkUserId: actor.clerkUserId,
+      actorEmail: actor.email,
+      actorUserProfileId: actor.userProfileId,
       resourceType: "github_issue",
       resourceId: repoFullName,
       metadata: {
@@ -157,9 +166,9 @@ export async function fileClaudeFixIssueForCrash(
     eventCategory: "system",
     severity: "info",
     action: `agent: filed @claude fix issue #${result.data.number} for ${repoFullName} (${snap.railwayStatus} on ${snap.liveCommitShortSha ?? "?"})`,
-    actorClerkUserId: ctx.clerkUserId,
-    actorEmail: ctx.userProfile.email,
-    actorUserProfileId: ctx.userProfile.id,
+    actorClerkUserId: actor.clerkUserId,
+    actorEmail: actor.email,
+    actorUserProfileId: actor.userProfileId,
     resourceType: "github_issue",
     resourceId: `${repoFullName}#${result.data.number}`,
     metadata: {
@@ -180,6 +189,24 @@ export async function fileClaudeFixIssueForCrash(
     issueNumber: result.data.number,
     issueUrl: result.data.htmlUrl,
   };
+}
+
+/**
+ * Operator-facing server action — wraps the system implementation
+ * with a REPOSITORIES_MANAGE permission check. Used by the Diagnose
+ * dialog's "File @claude fix issue" button.
+ */
+export async function fileClaudeFixIssueForCrash(
+  snapshotId: string,
+): Promise<FileClaudeFixResult> {
+  const ctx = await requirePlatformPermission(
+    PLATFORM_PERMISSIONS.REPOSITORIES_MANAGE,
+  );
+  return fileClaudeFixIssueForCrashWithActor(snapshotId, {
+    clerkUserId: ctx.clerkUserId,
+    email: ctx.userProfile.email,
+    userProfileId: ctx.userProfile.id,
+  });
 }
 
 function renderIssueBody(args: {

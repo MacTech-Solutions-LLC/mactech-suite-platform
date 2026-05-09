@@ -194,7 +194,7 @@ async function persistDeploymentWebhook(
 
   const status = normalizeDeploymentStatus(statusRaw);
 
-  await prisma.deploymentSnapshot.upsert({
+  const upserted = await prisma.deploymentSnapshot.upsert({
     where: { railwayDeploymentId: deploymentId },
     create: {
       appRegistryId,
@@ -218,4 +218,19 @@ async function persistDeploymentWebhook(
       metadataJson: meta as Prisma.InputJsonValue,
     },
   });
+
+  // Sprint 41: autonomous crash auto-fix. Triggers within seconds
+  // of Railway sending the failed/crashed event — much faster than
+  // waiting for the next reconciliation tick. The service itself
+  // is no-op'd by the AUTO_FILE_CRASH_FIXES env flag + cooldown.
+  if (status === "failed" || status === "crashed") {
+    try {
+      const { maybeAutoFileFixForSnapshot } = await import(
+        "@/lib/services/command-center/crash-auto-fix-service"
+      );
+      await maybeAutoFileFixForSnapshot(upserted.id, "railway_webhook");
+    } catch (err) {
+      console.warn("[railway-webhook] auto-fix attempt failed:", err);
+    }
+  }
 }

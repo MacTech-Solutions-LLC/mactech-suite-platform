@@ -118,6 +118,16 @@ const RawEnvSchema = z.object({
     .union([z.literal("true"), z.literal("false")])
     .optional()
     .transform((v) => v === "true"),
+  /** Sprint 41: opt-in autonomous crash-fix loop. When true, the
+   *  reconciliation orchestrator + Railway webhook handler auto-
+   *  file @claude fix issues whenever a tracked deploy crashes or
+   *  the page-render probe sees an SSR application_error sentinel.
+   *  Default OFF — flipping this turns the Suite into a live
+   *  closed-loop self-healing system. */
+  AUTO_FILE_CRASH_FIXES: z
+    .union([z.literal("true"), z.literal("false")])
+    .optional()
+    .transform((v) => v === "true"),
 });
 
 const parsed = RawEnvSchema.safeParse(process.env);
