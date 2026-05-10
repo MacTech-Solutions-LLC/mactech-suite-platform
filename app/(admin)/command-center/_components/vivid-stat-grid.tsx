@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import type { CommandCenterStatus } from "@/lib/services/command-center/command-center-service";
 import type { TodayDigest } from "@/lib/services/command-center/today-digest-service";
-import { VividStatCard } from "./vivid-stat-card";
+import { VividStatCard } from "@/components/vivid/vivid-stat-card";
 import { bucket24hCounts } from "./bucket-24h";
 
 interface Props {

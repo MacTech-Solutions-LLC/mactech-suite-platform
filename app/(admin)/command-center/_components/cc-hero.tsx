@@ -14,8 +14,8 @@
  */
 
 import { ArrowUpRight } from "lucide-react";
-import { KineticText } from "./kinetic-text";
-import { MagneticLink } from "./magnetic-button";
+import { KineticText } from "@/components/vivid/kinetic-text";
+import { MagneticLink } from "@/components/vivid/magnetic-button";
 
 export interface CCHeroProps {
   eyebrow: string;

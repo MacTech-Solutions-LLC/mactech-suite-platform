@@ -1,21 +1,22 @@
 /**
- * /admin/apps/[appKey] — investigate page (Slice 7).
+ * /admin/apps/[appKey] — investigate page (Slice 7; sprint 50 Vivid pass).
  *
  * The single triage surface for one app: identity + health + deploys
  * + commits + workflow runs + risks + agent runs + dependencies +
  * traffic + open PRs/issues. All sourced via getAppDetail() so the
  * page is one server fetch start to finish.
  *
- * Links to specialty pages for each section so the operator can drill
- * deeper, but the answer to "what's going on with this app" is right
- * here.
+ * Sprint 50: Vivid skin (own layout.tsx with gradient + spotlight,
+ * VividCard for each section, DeployProgressStrip for the latest
+ * Railway deploy). Other admin routes are unchanged — the Vivid
+ * scope is now dashboard + per-app triage, nothing else.
  */
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   Activity,
-  AlertTriangle,
+  ArrowLeft,
   ArrowRight,
   Bot,
   Check,
@@ -27,27 +28,19 @@ import {
   MessageSquare,
   Network,
   Rocket,
-  ShieldCheck,
   Siren,
   XCircle,
 } from "lucide-react";
-import { PageHeader } from "@/components/layout/admin-shell";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
 import { getAppDetail } from "@/lib/services/command-center/app-detail-service";
+import { VividCard, VividSectionHeader } from "@/components/vivid/vivid-card";
+import { MagneticLink } from "@/components/vivid/magnetic-button";
+import { DeployProgressStrip } from "./_components/deploy-progress-strip";
 
 export const dynamic = "force-dynamic";
 
-type BadgeVariant =
-  | "default"
-  | "secondary"
-  | "destructive"
-  | "success"
-  | "warning"
-  | "outline"
-  | "muted";
+type BadgeVariant = "destructive" | "success" | "warning" | "muted" | "violet" | "cyan";
 
 export default async function AppInvestigatePage({
   params,
@@ -65,89 +58,107 @@ export default async function AppInvestigatePage({
     (r) => r.severity === "critical",
   );
 
+  const healthTone: BadgeVariant =
+    latestHealth?.status === "up"
+      ? "success"
+      : latestHealth?.status === "degraded"
+        ? "warning"
+        : latestHealth?.status === "down"
+          ? "destructive"
+          : "muted";
+
   return (
     <div className="space-y-6">
       <Link
         href="/admin/app-registry"
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-1.5 font-mt-mono text-[10px] uppercase tracking-[0.18em] text-mt-text-3 hover:text-mt-text-2"
       >
-        ← Back to app registry
+        <ArrowLeft className="h-3 w-3" aria-hidden />
+        Back to app registry
       </Link>
 
-      <PageHeader
-        title={a.name}
-        description={a.description ?? `App key: ${a.appKey}`}
-        actions={
-          <div className="flex items-center gap-2">
-            <Badge variant="outline">{a.criticality.replace(/_/g, " ")}</Badge>
-            <Badge variant={a.status === "active" ? "success" : "muted"}>
-              {a.status}
-            </Badge>
+      {/* Vivid hero */}
+      <header className="relative">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 font-mt-mono text-[10px] uppercase tracking-[0.18em] text-mt-text-3">
+              <span>App · {a.appKey}</span>
+              <span className="opacity-50">·</span>
+              <span>{a.criticality.replace(/_/g, "-")}</span>
+              <span className="opacity-50">·</span>
+              <span>{a.status}</span>
+            </div>
+            <h1 className="mt-2 font-mt-display text-3xl font-semibold leading-tight tracking-tight text-mt-text md:text-4xl">
+              {a.name}
+            </h1>
+            {a.description ? (
+              <p className="mt-1 max-w-2xl text-pretty text-sm text-mt-text-2">
+                {a.description}
+              </p>
+            ) : null}
           </div>
-        }
-      />
 
-      {/* Quick links */}
-      <div className="flex flex-wrap gap-2">
-        {a.publicUrl ? (
-          <Button asChild size="sm" variant="outline">
-            <a href={a.publicUrl} target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="mr-1 h-3 w-3" aria-hidden="true" />
-              {a.publicUrl}
-            </a>
-          </Button>
-        ) : null}
-        {a.repoFullName ? (
-          <Button asChild size="sm" variant="outline">
-            <a
-              href={`https://github.com/${a.repoFullName}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <GitBranch className="mr-1 h-3 w-3" aria-hidden="true" />
-              {a.repoFullName}
-            </a>
-          </Button>
-        ) : null}
-        {a.healthUrl ? (
-          <Button asChild size="sm" variant="ghost">
-            <a href={a.healthUrl} target="_blank" rel="noopener noreferrer">
-              <Activity className="mr-1 h-3 w-3" aria-hidden="true" />
-              Health endpoint
-            </a>
-          </Button>
-        ) : null}
-        <Button asChild size="sm" variant="ghost">
-          <Link href={`/admin/ops/traffic?to=${a.id}`}>
-            <Network className="mr-1 h-3 w-3" aria-hidden="true" />
-            Traffic →
-          </Link>
-        </Button>
-      </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {a.publicUrl ? (
+              <MagneticLink
+                href={a.publicUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-mt-2 border border-mt-cyan/30 bg-mt-cyan/10 px-3 py-1.5 font-mt-mono text-[10px] uppercase tracking-[0.18em] text-mt-cyan hover:bg-mt-cyan/15"
+              >
+                <ExternalLink className="h-3 w-3" aria-hidden />
+                {labelHost(a.publicUrl)}
+              </MagneticLink>
+            ) : null}
+            {a.repoFullName ? (
+              <MagneticLink
+                href={`https://github.com/${a.repoFullName}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-mt-2 border border-mt-violet/30 bg-mt-violet/10 px-3 py-1.5 font-mt-mono text-[10px] uppercase tracking-[0.18em] text-mt-violet hover:bg-mt-violet/15"
+              >
+                <GitBranch className="h-3 w-3" aria-hidden />
+                {a.repoFullName}
+              </MagneticLink>
+            ) : null}
+          </div>
+        </div>
+
+        <div
+          aria-hidden
+          className="mt-6 h-px w-full"
+          style={{
+            backgroundImage:
+              "linear-gradient(90deg, transparent 0%, rgba(0,229,255,0.45) 18%, rgba(124,92,255,0.45) 50%, rgba(255,91,208,0.45) 82%, transparent 100%)",
+          }}
+        />
+      </header>
+
+      {/* Deploy progress strip — Vivid centerpiece of the triage view. */}
+      {latestDeploy ? (
+        <DeployProgressStrip
+          status={latestDeploy.railwayStatus}
+          shortSha={latestDeploy.liveCommitShortSha}
+          checkedAt={latestDeploy.checkedAt}
+          railwayDeploymentId={latestDeploy.railwayDeploymentId}
+        />
+      ) : null}
 
       {/* Posture tiles */}
       <div className="grid gap-3 md:grid-cols-4">
-        <Tile
-          icon={Activity}
+        <PostureTile
+          Icon={Activity}
           label="Health"
           value={latestHealth?.status ?? "unknown"}
-          tone={
-            latestHealth?.status === "up"
-              ? "success"
-              : latestHealth?.status === "degraded"
-                ? "warning"
-                : latestHealth?.status === "down"
-                  ? "destructive"
-                  : "muted"
-          }
+          tone={healthTone}
           subtle={
             detail.health.lastUpAt
               ? `last up ${detail.health.lastUpAt.toLocaleString()}`
               : "no successful probe yet"
           }
         />
-        <Tile
-          icon={Rocket}
+        <PostureTile
+          Icon={Rocket}
           label="Latest deploy"
           value={latestDeploy?.railwayStatus ?? "no data"}
           tone={
@@ -160,12 +171,12 @@ export default async function AppInvestigatePage({
           }
           subtle={
             latestDeploy?.liveCommitShortSha
-              ? `commit ${latestDeploy.liveCommitShortSha} · ${latestDeploy.checkedAt.toLocaleString()}`
+              ? `${latestDeploy.liveCommitShortSha} · ${latestDeploy.checkedAt.toLocaleString()}`
               : "no deployments synced"
           }
         />
-        <Tile
-          icon={Siren}
+        <PostureTile
+          Icon={Siren}
           label="Open risks"
           value={`${detail.openRisks.length}`}
           tone={
@@ -183,15 +194,15 @@ export default async function AppInvestigatePage({
                 : "none critical"
           }
         />
-        <Tile
-          icon={GitPullRequest}
+        <PostureTile
+          Icon={GitPullRequest}
           label="Open PRs / issues"
           value={
             detail.github.configured
               ? `${detail.github.openPRs.length} / ${detail.github.openIssues.length}`
               : "—"
           }
-          tone="default"
+          tone="violet"
           subtle={
             !detail.github.configured
               ? a.repoFullName
@@ -199,7 +210,7 @@ export default async function AppInvestigatePage({
                 : "no repo linked"
               : detail.github.warnings.length > 0
                 ? `warning: ${detail.github.warnings.join(", ")}`
-                : `from github.com`
+                : "from github.com"
           }
         />
       </div>
@@ -209,24 +220,24 @@ export default async function AppInvestigatePage({
         <Section
           title={`Open risks (${detail.openRisks.length})`}
           icon={Siren}
-          tone={openCriticalRisks.length > 0 ? "destructive" : "warning"}
+          tone={openCriticalRisks.length > 0 ? "rose" : "amber"}
           actionHref={`/admin/ops/risk?appId=${a.id}`}
           actionLabel="Triage"
         >
-          <ul className="divide-y divide-border rounded-lg border border-border bg-card/40">
+          <ul className="divide-y divide-mt-hairline rounded-mt-2 border border-mt-hairline bg-mt-surface-1">
             {detail.openRisks.map((r) => (
               <li key={r.id} className="p-3 text-sm">
                 <div className="flex items-center gap-2">
                   <SeverityChip severity={r.severity} />
                   <span className="font-medium">{r.title}</span>
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <span className="font-mt-mono text-[10px] uppercase tracking-[0.18em] text-mt-text-3">
                     {r.category}
                   </span>
                 </div>
                 {r.description ? (
-                  <div className="mt-0.5 text-xs text-muted-foreground">{r.description}</div>
+                  <div className="mt-0.5 text-xs text-mt-text-3">{r.description}</div>
                 ) : null}
-                <div className="mt-1 text-[11px] text-muted-foreground">
+                <div className="mt-1 text-[11px] text-mt-text-3">
                   detected {r.detectedAt.toLocaleString()}
                   {r.acknowledgedBy ? ` · acked by ${r.acknowledgedBy}` : ""}
                 </div>
@@ -247,7 +258,7 @@ export default async function AppInvestigatePage({
             actionLabel="GitHub"
             external
           >
-            <ul className="divide-y divide-border rounded-lg border border-border bg-card/40">
+            <ul className="divide-y divide-mt-hairline rounded-mt-2 border border-mt-hairline bg-mt-surface-1">
               {detail.github.openPRs.slice(0, 8).map((pr) => (
                 <li key={pr.number} className="p-3 text-sm">
                   <a
@@ -257,13 +268,13 @@ export default async function AppInvestigatePage({
                     className="block hover:underline"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-[11px] text-muted-foreground">
+                      <span className="font-mt-mono text-[11px] text-mt-text-3">
                         #{pr.number}
                       </span>
-                      {pr.draft ? <Badge variant="muted">draft</Badge> : null}
-                      <span className="line-clamp-1 font-medium">{pr.title}</span>
+                      {pr.draft ? <MutedChip>draft</MutedChip> : null}
+                      <span className="line-clamp-1 font-medium text-mt-text">{pr.title}</span>
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                    <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-mt-text-3">
                       <span>by {pr.authorLogin ?? "unknown"}</span>
                       <span>· {pr.baseBranch} ← {pr.headBranch}</span>
                       <span>· updated {new Date(pr.updatedAt).toLocaleDateString()}</span>
@@ -288,20 +299,20 @@ export default async function AppInvestigatePage({
             actionHref={`/admin/ops/ecosystem`}
             actionLabel="Ecosystem"
           >
-            <ul className="divide-y divide-border rounded-lg border border-border bg-card/40">
+            <ul className="divide-y divide-mt-hairline rounded-mt-2 border border-mt-hairline bg-mt-surface-1">
               {detail.deployments.slice(0, 8).map((d) => (
                 <li key={d.id} className="p-3 text-sm">
                   <div className="flex items-center gap-2">
                     <DeployStatusChip status={d.railwayStatus} />
-                    <span className="font-mono text-[11px]">
+                    <span className="font-mt-mono text-[11px] text-mt-text-2">
                       {d.liveCommitShortSha ?? "?"}
                     </span>
                     {d.productionDriftStatus !== "in_sync" &&
                     d.productionDriftStatus !== "unknown" ? (
-                      <Badge variant="warning">{d.productionDriftStatus}</Badge>
+                      <WarnChip>{d.productionDriftStatus}</WarnChip>
                     ) : null}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                  <div className="mt-0.5 text-[11px] text-mt-text-3">
                     {d.checkedAt.toLocaleString()}
                     {d.commitsBehind != null && d.commitsBehind > 0
                       ? ` · ${d.commitsBehind} commits behind main`
@@ -321,7 +332,7 @@ export default async function AppInvestigatePage({
             actionHref={`/admin/repositories/commits`}
             actionLabel="All commits"
           >
-            <ul className="divide-y divide-border rounded-lg border border-border bg-card/40">
+            <ul className="divide-y divide-mt-hairline rounded-mt-2 border border-mt-hairline bg-mt-surface-1">
               {detail.recentCommits.slice(0, 10).map((c) => {
                 const flags = Array.isArray(c.riskFlagsJson)
                   ? (c.riskFlagsJson as string[])
@@ -335,23 +346,21 @@ export default async function AppInvestigatePage({
                       className="block hover:underline"
                     >
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-[11px] text-muted-foreground">
+                        <span className="font-mt-mono text-[11px] text-mt-text-3">
                           {c.shortSha}
                         </span>
-                        <span className="line-clamp-1 font-medium">
+                        <span className="line-clamp-1 font-medium text-mt-text">
                           {c.message.split("\n")[0]}
                         </span>
                       </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-mt-text-3">
                         <span>{c.authorName ?? "unknown"}</span>
                         {c.committedAt ? (
                           <span>· {new Date(c.committedAt).toLocaleString()}</span>
                         ) : null}
                         {flags.length > 0
                           ? flags.slice(0, 4).map((f) => (
-                              <Badge key={f} variant="warning">
-                                {f}
-                              </Badge>
+                              <WarnChip key={f}>{f}</WarnChip>
                             ))
                           : null}
                       </div>
@@ -371,14 +380,14 @@ export default async function AppInvestigatePage({
             actionHref={`/admin/repositories/workflow-runs`}
             actionLabel="All runs"
           >
-            <ul className="divide-y divide-border rounded-lg border border-border bg-card/40">
+            <ul className="divide-y divide-mt-hairline rounded-mt-2 border border-mt-hairline bg-mt-surface-1">
               {detail.workflowRuns.slice(0, 8).map((w) => (
                 <li key={w.id} className="p-3 text-sm">
                   <div className="flex items-center gap-2">
                     <WorkflowConclusionChip conclusion={w.conclusion} status={w.status} />
                     <span className="font-medium">{w.name}</span>
                   </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                  <div className="mt-0.5 text-[11px] text-mt-text-3">
                     {w.startedAt ? new Date(w.startedAt).toLocaleString() : "—"}
                     {w.htmlUrl ? (
                       <>
@@ -408,7 +417,7 @@ export default async function AppInvestigatePage({
             actionHref={`/admin/ops/traffic?to=${a.id}`}
             actionLabel="Full log"
           >
-            <ul className="divide-y divide-border rounded-lg border border-border bg-card/40">
+            <ul className="divide-y divide-mt-hairline rounded-mt-2 border border-mt-hairline bg-mt-surface-1">
               {detail.traffic.inbound.slice(0, 8).map((t, i) => (
                 <li
                   key={`in-${t.sourceLabel}-${i}`}
@@ -417,12 +426,12 @@ export default async function AppInvestigatePage({
                   <div>
                     <span className="font-medium">{t.sourceLabel}</span>
                     <ArrowRight
-                      className="mx-1 inline h-3 w-3 text-muted-foreground"
+                      className="mx-1 inline h-3 w-3 text-mt-text-3"
                       aria-hidden="true"
                     />
-                    <span className="text-muted-foreground">{a.name}</span>
+                    <span className="text-mt-text-3">{a.name}</span>
                   </div>
-                  <div className="text-right text-[11px] text-muted-foreground">
+                  <div className="text-right text-[11px] text-mt-text-3">
                     <div>
                       {t.callCount} call{t.callCount === 1 ? "" : "s"}
                       {t.errorCount > 0 ? (
@@ -445,21 +454,21 @@ export default async function AppInvestigatePage({
             actionHref={`/admin/ops/traffic?from=${a.appKey}`}
             actionLabel="Full log"
           >
-            <ul className="divide-y divide-border rounded-lg border border-border bg-card/40">
+            <ul className="divide-y divide-mt-hairline rounded-mt-2 border border-mt-hairline bg-mt-surface-1">
               {detail.traffic.outbound.slice(0, 8).map((t, i) => (
                 <li
                   key={`out-${t.targetLabel}-${i}`}
                   className="flex items-center justify-between gap-3 p-3 text-sm"
                 >
                   <div>
-                    <span className="text-muted-foreground">{a.name}</span>
+                    <span className="text-mt-text-3">{a.name}</span>
                     <ArrowRight
-                      className="mx-1 inline h-3 w-3 text-muted-foreground"
+                      className="mx-1 inline h-3 w-3 text-mt-text-3"
                       aria-hidden="true"
                     />
                     <span className="font-medium">{t.targetLabel}</span>
                   </div>
-                  <div className="text-right text-[11px] text-muted-foreground">
+                  <div className="text-right text-[11px] text-mt-text-3">
                     <div>
                       {t.callCount} call{t.callCount === 1 ? "" : "s"}
                       {t.errorCount > 0 ? (
@@ -486,7 +495,7 @@ export default async function AppInvestigatePage({
             <div className="grid gap-3">
               {detail.dependencies.outgoing.length > 0 ? (
                 <div>
-                  <div className="mb-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <div className="mb-1 text-[10px] uppercase tracking-widest text-mt-text-3">
                     {a.appKey} depends on:
                   </div>
                   <ul className="space-y-0.5">
@@ -497,7 +506,7 @@ export default async function AppInvestigatePage({
                           className="hover:underline"
                         >
                           <span className="font-medium">{d.target.name}</span>
-                          <span className="ml-2 font-mono text-[10px] text-muted-foreground">
+                          <span className="ml-2 font-mono text-[10px] text-mt-text-3">
                             {d.dependencyType}
                           </span>
                         </Link>
@@ -508,7 +517,7 @@ export default async function AppInvestigatePage({
               ) : null}
               {detail.dependencies.incoming.length > 0 ? (
                 <div>
-                  <div className="mb-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <div className="mb-1 text-[10px] uppercase tracking-widest text-mt-text-3">
                     Depends on {a.appKey}:
                   </div>
                   <ul className="space-y-0.5">
@@ -519,7 +528,7 @@ export default async function AppInvestigatePage({
                           className="hover:underline"
                         >
                           <span className="font-medium">{d.source.name}</span>
-                          <span className="ml-2 font-mono text-[10px] text-muted-foreground">
+                          <span className="ml-2 font-mono text-[10px] text-mt-text-3">
                             {d.dependencyType}
                           </span>
                         </Link>
@@ -540,15 +549,15 @@ export default async function AppInvestigatePage({
             actionHref="/admin/agents"
             actionLabel="All runs"
           >
-            <ul className="divide-y divide-border rounded-lg border border-border bg-card/40">
+            <ul className="divide-y divide-mt-hairline rounded-mt-2 border border-mt-hairline bg-mt-surface-1">
               {detail.recentAgentRuns.map((r) => (
                 <li key={r.id} className="p-3 text-sm">
                   <Link href={`/admin/agents/${r.id}`} className="block hover:underline">
                     <div className="flex items-center gap-2">
                       <RunStatusChip status={r.status} />
-                      <span className="line-clamp-1 font-medium">{r.requestText}</span>
+                      <span className="line-clamp-1 font-medium text-mt-text">{r.requestText}</span>
                     </div>
-                    <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    <div className="mt-0.5 text-[11px] text-mt-text-3">
                       {r.requestedByEmail} · {r.plannedStepCount} step
                       {r.plannedStepCount === 1 ? "" : "s"} ·{" "}
                       {r.createdAt.toLocaleString()}
@@ -569,7 +578,7 @@ export default async function AppInvestigatePage({
             actionLabel="GitHub"
             external
           >
-            <ul className="divide-y divide-border rounded-lg border border-border bg-card/40">
+            <ul className="divide-y divide-mt-hairline rounded-mt-2 border border-mt-hairline bg-mt-surface-1">
               {detail.github.openIssues.slice(0, 8).map((issue) => (
                 <li key={issue.number} className="p-3 text-sm">
                   <a
@@ -579,18 +588,16 @@ export default async function AppInvestigatePage({
                     className="block hover:underline"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-[11px] text-muted-foreground">
+                      <span className="font-mt-mono text-[11px] text-mt-text-3">
                         #{issue.number}
                       </span>
-                      <span className="line-clamp-1 font-medium">{issue.title}</span>
+                      <span className="line-clamp-1 font-medium text-mt-text">{issue.title}</span>
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-mt-text-3">
                       <span>by {issue.authorLogin ?? "unknown"}</span>
                       <span>· updated {new Date(issue.updatedAt).toLocaleDateString()}</span>
                       {issue.labels.slice(0, 3).map((l) => (
-                        <Badge key={l} variant="muted">
-                          {l}
-                        </Badge>
+                        <MutedChip key={l}>{l}</MutedChip>
                       ))}
                     </div>
                   </a>
@@ -604,32 +611,45 @@ export default async function AppInvestigatePage({
   );
 }
 
-function Tile(props: {
-  icon: typeof Activity;
+// ── Helpers ────────────────────────────────────────────────────────
+
+const TONE_TEXT: Record<BadgeVariant, string> = {
+  success: "text-mt-lime",
+  warning: "text-mt-amber",
+  destructive: "text-mt-rose",
+  cyan: "text-mt-cyan",
+  violet: "text-mt-violet",
+  muted: "text-mt-text-3",
+};
+
+const TONE_CHIP: Record<BadgeVariant, string> = {
+  success: "border-mt-lime/30 bg-mt-lime/10 text-mt-lime",
+  warning: "border-mt-amber/30 bg-mt-amber/10 text-mt-amber",
+  destructive: "border-mt-rose/30 bg-mt-rose/10 text-mt-rose",
+  cyan: "border-mt-cyan/30 bg-mt-cyan/10 text-mt-cyan",
+  violet: "border-mt-violet/30 bg-mt-violet/10 text-mt-violet",
+  muted: "border-mt-hairline bg-mt-surface-1 text-mt-text-3",
+};
+
+function PostureTile(props: {
+  Icon: typeof Activity;
   label: string;
   value: string;
   subtle?: string;
   tone: BadgeVariant;
 }) {
-  const Icon = props.icon;
-  const toneClass = {
-    success: "text-success",
-    warning: "text-warning",
-    destructive: "text-destructive",
-    default: "text-primary",
-    secondary: "text-foreground",
-    muted: "text-muted-foreground",
-    outline: "text-foreground",
-  }[props.tone] as string;
+  const Icon = props.Icon;
   return (
-    <div className="rounded-lg border border-border bg-card/40 p-3">
-      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-        <Icon className="h-3 w-3" aria-hidden="true" />
+    <div className="rounded-mt-3 border border-mt-hairline bg-mt-surface-1 p-3 backdrop-blur-mt-glass">
+      <div className="flex items-center gap-1.5 font-mt-mono text-[10px] uppercase tracking-[0.18em] text-mt-text-3">
+        <Icon className="h-3 w-3" aria-hidden />
         {props.label}
       </div>
-      <div className={`mt-1 text-base font-semibold ${toneClass}`}>{props.value}</div>
+      <div className={`mt-1.5 font-mt-display text-base font-semibold ${TONE_TEXT[props.tone]}`}>
+        {props.value}
+      </div>
       {props.subtle ? (
-        <div className="text-[11px] text-muted-foreground">{props.subtle}</div>
+        <div className="mt-0.5 text-[11px] text-mt-text-3">{props.subtle}</div>
       ) : null}
     </div>
   );
@@ -638,7 +658,7 @@ function Tile(props: {
 function Section(props: {
   title: string;
   icon: typeof Activity;
-  tone?: "default" | "warning" | "destructive";
+  tone?: "default" | "cyan" | "violet" | "magenta" | "amber" | "rose";
   actionHref: string;
   actionLabel: string;
   external?: boolean;
@@ -646,64 +666,75 @@ function Section(props: {
 }) {
   const Icon = props.icon;
   return (
-    <section
-      className={`rounded-lg border ${
-        props.tone === "destructive"
-          ? "border-destructive/40 bg-destructive/5"
-          : props.tone === "warning"
-            ? "border-warning/40 bg-warning/5"
-            : "border-border bg-transparent"
-      } p-3`}
-    >
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-widest text-muted-foreground">
-          <Icon className="h-3 w-3" aria-hidden="true" />
-          {props.title}
-        </h2>
-        <Button asChild size="sm" variant="ghost">
+    <VividCard tone={props.tone ?? "default"}>
+      <div className="mb-4 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="flex items-center gap-1.5 font-mt-display text-base font-semibold tracking-tight text-mt-text md:text-lg">
+            <Icon className="h-3.5 w-3.5 text-mt-text-3" aria-hidden />
+            {props.title}
+          </h2>
+        </div>
+        <div className="shrink-0 font-mt-mono text-[10px] uppercase tracking-[0.18em] text-mt-text-3">
           {props.external ? (
-            <a href={props.actionHref} target="_blank" rel="noopener noreferrer">
+            <a
+              href={props.actionHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 hover:text-mt-cyan"
+            >
               {props.actionLabel}
-              <ExternalLink className="ml-1 h-3 w-3" aria-hidden="true" />
+              <ExternalLink className="h-3 w-3" aria-hidden />
             </a>
           ) : (
-            <Link href={props.actionHref}>
-              {props.actionLabel} <ArrowRight className="ml-1 h-3 w-3" aria-hidden="true" />
+            <Link
+              href={props.actionHref}
+              className="inline-flex items-center gap-1 hover:text-mt-cyan"
+            >
+              {props.actionLabel}
+              <ArrowRight className="h-3 w-3" aria-hidden />
             </Link>
           )}
-        </Button>
+        </div>
       </div>
       {props.children}
-    </section>
+    </VividCard>
   );
 }
 
 function SeverityChip({ severity }: { severity: string }) {
-  const variant: BadgeVariant = (() => {
-    switch (severity) {
-      case "critical":
-        return "destructive";
-      case "high":
-        return "warning";
-      case "medium":
-        return "secondary";
-      default:
-        return "muted";
-    }
-  })();
-  return <Badge variant={variant}>{severity}</Badge>;
+  const tone: BadgeVariant =
+    severity === "critical"
+      ? "destructive"
+      : severity === "high"
+        ? "warning"
+        : severity === "medium"
+          ? "violet"
+          : "muted";
+  return (
+    <span
+      className={`inline-flex items-center rounded-mt-1 border px-1.5 py-0.5 font-mt-mono text-[9px] uppercase tracking-[0.16em] ${TONE_CHIP[tone]}`}
+    >
+      {severity}
+    </span>
+  );
 }
 
 function DeployStatusChip({ status }: { status: string }) {
-  const variant: BadgeVariant =
+  const tone: BadgeVariant =
     status === "success"
       ? "success"
       : status === "failed" || status === "crashed"
         ? "destructive"
         : status === "deploying" || status === "building"
-          ? "default"
+          ? "cyan"
           : "muted";
-  return <Badge variant={variant}>{status}</Badge>;
+  return (
+    <span
+      className={`inline-flex items-center rounded-mt-1 border px-1.5 py-0.5 font-mt-mono text-[9px] uppercase tracking-[0.16em] ${TONE_CHIP[tone]}`}
+    >
+      {status}
+    </span>
+  );
 }
 
 function WorkflowConclusionChip({
@@ -713,34 +744,93 @@ function WorkflowConclusionChip({
   conclusion: string | null;
   status: string;
 }) {
-  if (conclusion === "success") return <Badge variant="success"><Check className="mr-0.5 inline h-3 w-3" />success</Badge>;
+  if (conclusion === "success") {
+    return (
+      <span
+        className={`inline-flex items-center gap-1 rounded-mt-1 border px-1.5 py-0.5 font-mt-mono text-[9px] uppercase tracking-[0.16em] ${TONE_CHIP.success}`}
+      >
+        <Check className="h-3 w-3" aria-hidden />
+        success
+      </span>
+    );
+  }
   if (
     conclusion === "failure" ||
     conclusion === "timed_out" ||
     conclusion === "startup_failure"
-  )
-    return <Badge variant="destructive"><XCircle className="mr-0.5 inline h-3 w-3" />{conclusion}</Badge>;
-  if (conclusion) return <Badge variant="muted">{conclusion}</Badge>;
-  return <Badge variant="default">{status}</Badge>;
+  ) {
+    return (
+      <span
+        className={`inline-flex items-center gap-1 rounded-mt-1 border px-1.5 py-0.5 font-mt-mono text-[9px] uppercase tracking-[0.16em] ${TONE_CHIP.destructive}`}
+      >
+        <XCircle className="h-3 w-3" aria-hidden />
+        {conclusion}
+      </span>
+    );
+  }
+  if (conclusion) {
+    return (
+      <span
+        className={`inline-flex items-center rounded-mt-1 border px-1.5 py-0.5 font-mt-mono text-[9px] uppercase tracking-[0.16em] ${TONE_CHIP.muted}`}
+      >
+        {conclusion}
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`inline-flex items-center rounded-mt-1 border px-1.5 py-0.5 font-mt-mono text-[9px] uppercase tracking-[0.16em] ${TONE_CHIP.cyan}`}
+    >
+      {status}
+    </span>
+  );
 }
 
 function RunStatusChip({ status }: { status: string }) {
-  const variant: BadgeVariant = (() => {
-    switch (status) {
-      case "completed":
-        return "success";
-      case "failed":
-      case "rejected":
-      case "cancelled":
-        return "destructive";
-      case "refused":
-      case "awaiting_approval":
-        return "warning";
-      default:
-        return "secondary";
-    }
-  })();
-  return <Badge variant={variant}>{status.replace(/_/g, " ")}</Badge>;
+  const tone: BadgeVariant =
+    status === "completed"
+      ? "success"
+      : status === "failed" || status === "rejected" || status === "cancelled"
+        ? "destructive"
+        : status === "refused" || status === "awaiting_approval"
+          ? "warning"
+          : "violet";
+  return (
+    <span
+      className={`inline-flex items-center rounded-mt-1 border px-1.5 py-0.5 font-mt-mono text-[9px] uppercase tracking-[0.16em] ${TONE_CHIP[tone]}`}
+    >
+      {status.replace(/_/g, " ")}
+    </span>
+  );
+}
+
+function MutedChip({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-mt-1 border px-1.5 py-0.5 font-mt-mono text-[9px] uppercase tracking-[0.16em] ${TONE_CHIP.muted}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function WarnChip({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-mt-1 border px-1.5 py-0.5 font-mt-mono text-[9px] uppercase tracking-[0.16em] ${TONE_CHIP.warning}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function labelHost(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.host;
+  } catch {
+    return url;
+  }
 }
 
 function formatBytes(n: number): string {
