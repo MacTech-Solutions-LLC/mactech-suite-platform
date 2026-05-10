@@ -1,6 +1,23 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
+import { Instrument_Serif } from "next/font/google";
 import "./globals.css";
+
+// Sprint 44 — fonts for the Vivid /command-center scope. Geist ships
+// as a separate package (Vercel) — the `next/font/google` registry
+// doesn't expose it under Next 14. Instrument_Serif comes from Google
+// Fonts. All three register here in the root layout so Next self-
+// hosts them, but they're only applied via `font-mt-*` classes inside
+// command-center components — other admin routes ignore them.
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  weight: "400",
+  style: ["normal", "italic"],
+  variable: "--font-instrument-serif",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "MacTech Identity Command Center",
@@ -62,7 +79,11 @@ export default function RootLayout({
         },
       }}
     >
-      <html lang="en" className="dark" suppressHydrationWarning>
+      <html
+        lang="en"
+        className={`dark ${GeistSans.variable} ${GeistMono.variable} ${instrumentSerif.variable}`}
+        suppressHydrationWarning
+      >
         <body className="min-h-screen bg-background font-sans antialiased">
           {children}
         </body>
