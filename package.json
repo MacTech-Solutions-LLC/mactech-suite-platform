@@ -22,6 +22,7 @@
   "dependencies": {
     "@clerk/nextjs": "^5.7.6",
     "@mactech-solutions-llc/design-tokens": "^0.1.0",
+    "@mactech-solutions-llc/onboard": "^0.2.0",
     "@prisma/client": "^5.0.0",
     "@radix-ui/react-checkbox": "^1.3.3",
     "@radix-ui/react-dialog": "^1.1.15",

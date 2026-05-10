@@ -39,6 +39,14 @@ export const PLATFORM_PERMISSIONS = {
   // operational risk across every MacTech app.
   COMMAND_CENTER_VIEW: "platform:command_center:view",
   COMMAND_CENTER_MANAGE: "platform:command_center:manage",
+  // Sprint 53 — Design Surface (/admin/design).
+  // DESIGN_VIEW lets a user see the design-system adoption state of
+  // every app in the suite. Grants by default to mactech_admin /
+  // design-lead / product-owner. Pure read; mutations live behind
+  // DESIGN_MANAGE (theme preview is preview-only in v0.5.1; PR
+  // generation arrives in v0.5.2+).
+  DESIGN_VIEW: "platform:design:view",
+  DESIGN_MANAGE: "platform:design:manage",
   OPS_VIEW: "platform:ops:view",
   OPS_MANAGE: "platform:ops:manage",
   REPOSITORIES_VIEW: "platform:repositories:view",
@@ -121,6 +129,8 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, PlatformPermission[
     PLATFORM_PERMISSIONS.APP_REGISTRY_MANAGE,
     PLATFORM_PERMISSIONS.COMMAND_CENTER_VIEW,
     PLATFORM_PERMISSIONS.COMMAND_CENTER_MANAGE,
+    PLATFORM_PERMISSIONS.DESIGN_VIEW,
+    PLATFORM_PERMISSIONS.DESIGN_MANAGE,
     PLATFORM_PERMISSIONS.OPS_VIEW,
     PLATFORM_PERMISSIONS.OPS_MANAGE,
     PLATFORM_PERMISSIONS.REPOSITORIES_VIEW,
