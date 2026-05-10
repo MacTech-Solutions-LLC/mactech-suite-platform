@@ -62,27 +62,47 @@ Defined in `tailwind.config.ts` under `theme.extend`. Merged with the existing c
 
 This is `<VividCard tone="default">`. Tonal variants (`cyan`, `violet`, `magenta`, `amber`, `rose`) add a colored hairline + a faint inner radial gradient anchored to a corner.
 
-## 5. Components shipped (Sprint 44)
+## 5. Components
+
+### Sprint 44 — foundation
 
 | File | Role |
 | --- | --- |
 | `_components/cursor-spotlight.tsx` | Fixed-position 600×600 cyan→violet radial that follows the cursor via CSS variable + transform. `mix-blend-mode: screen`. Disabled under `prefers-reduced-motion` and on coarse pointers. |
 | `_components/kinetic-text.tsx` | Splits a string into per-character spans and staggers their entrance with `animation-delay`. Reduced-motion collapses to a static span. |
-| `_components/cc-hero.tsx` | Replaces `<PageHeader>` for this route. Brand mark + eyebrow + kinetic display title with an italic *Instrument Serif* gradient em-phrase + tagline. Bottom hairline uses a horizontal cyan→violet→magenta gradient. |
+| `_components/cc-hero.tsx` | Replaces `<PageHeader>` for this route. Brand mark + eyebrow + kinetic display title with italic *Instrument Serif* gradient em-phrase + tagline + magnetic CTA pills. Bottom hairline uses a horizontal cyan→violet→magenta gradient. |
 | `_components/vivid-card.tsx` | `VividCard` (glass recipe) + `VividSectionHeader` (eyebrow + title + meta). |
-| `layout.tsx` | Scoped sub-layout — radial gradient aurora, 32px grid texture, mounts `<CursorSpotlight />`. |
+| `layout.tsx` | Scoped sub-layout — radial gradient aurora, 32px grid texture, mounts `<CursorSpotlight />` + `<ParticleTrail />` + `<ShortcutsOverlay />`. |
+
+### Sprints 45–49 — full system
+
+| File | Role |
+| --- | --- |
+| `_components/kinetic-number.tsx` | `requestAnimationFrame` count-up to a target value, eased with `mt-out`. Re-runs when `value` changes. Reduced-motion: jumps. |
+| `_components/sparkline.tsx` | Server-renderable mini SVG sparkline — area + line + last-point dot. No JS. |
+| `_components/bucket-24h.ts` | Buckets a flat list of timestamped events into 24 hourly slots ending now. Used by both stat-card sparklines and the brushable chart. |
+| `_components/vivid-stat-card.tsx` | Glass tile with kinetic number + uppercase eyebrow + sub-line + optional sparkline. Six tonal variants (default/cyan/violet/amber/rose/muted) wrapped inside a `<TiltCard>`. |
+| `_components/vivid-stat-grid.tsx` | Server-rendered 8-tile grid: Apps, Up, Degraded, Down, Open Risks, Critical, Deploys 24h, Agent runs 24h. Replaces `OverviewTiles` on this route. |
+| `_components/brushable-activity.tsx` | `recharts` stacked area over 24 hourly buckets — deploys (cyan), agent runs (violet), risks opened (rose), failed workflows (amber). Drag the bottom brush to scope the headline totals. |
+| `_components/ecosystem-map.tsx` | Server-rendered SVG constellation — every active App on a ring around a "MacTech Suite" core. Inner ring = mission-critical / high; outer = medium / low. Node fill = criticality color, stroke = latest health color, pulse ring on degraded/down. Click any node to jump to its admin page. |
+| `_components/tilt-card.tsx` | 3D tilt parallax wrapper. Up to ±8° rotation in each axis tracking cursor, plus a soft cursor-tracked spotlight overlay (`mix-blend-mode: soft-light`). Reduced-motion + coarse pointer: static. |
+| `_components/magnetic-button.tsx` | `MagneticButton` + `MagneticLink`. Translate up to ±10px toward the cursor when within a 120px radius, easing out with `mt-spring`. Reduced-motion + coarse pointer: static. |
+| `_components/particle-trail.tsx` | Full-window canvas. Emits 1–3 cyan/violet/magenta particles per `mousemove` frame; particles drift up + fade over ~500ms. Pool capped at 64; pauses on tab hide. Reduced-motion + coarse pointer: not rendered. |
+| `_components/shortcuts-overlay.tsx` | Lazy-mounted Vivid-skinned dialog. Press `?` to open; `g` then `c/a/s` jumps to /command-center, /admin/agents, /status. Ignores keystrokes inside inputs. |
 
 ## 6. Page structure
 
-`app/(admin)/command-center/page.tsx`:
+`app/(admin)/command-center/page.tsx` (top → bottom):
 
-1. **CCHero** — kinetic title + tagline + last-synced/sync action.
-2. **FixUnhealthyBanner** + **AwaitingApprovalStrip** — pre-existing operator strips, now sitting on the Vivid canvas.
+1. **CCHero** — kinetic title + tagline + magnetic public-status / AgentOps pills + last-synced / sync action.
+2. **FixUnhealthyBanner** + **AwaitingApprovalStrip** — pre-existing operator strips, now on the Vivid canvas.
 3. **VividCard tone="cyan"** — Today digest.
-4. **VividCard tone="violet"** — Ask AI.
-5. **VividCard** — Overview tiles.
-6. Two-up grid: **VividCard** (apps) + **VividCard tone="rose"** (open risks, when criticals > 0).
-7. **VividCard** — About / `/status` link.
+4. **VividCard tone="violet"** — Ask AI copilot.
+5. **VividStatGrid** — 8 kinetic-number tiles with sparklines (sprint 45).
+6. **VividCard "Activity / Last 24 hours"** — brushable stacked area chart (sprint 46).
+7. **VividCard "Map / Ecosystem"** — radial constellation of every app (sprint 47).
+8. Two-up grid: apps table + (rose-toned-when-criticals) open risks feed.
+9. **VividCard** — About / `/status` link.
 
 ## 7. Accessibility
 
@@ -91,20 +111,19 @@ This is `<VividCard tone="default">`. Tonal variants (`cyan`, `violet`, `magenta
 - The cursor spotlight is `pointer-events: none` and decorative — never interactive.
 - All accent colors meet WCAG AA against `mt-bg` for body-text usage. Tag/eyebrow text uses `mt-text-3` (#8C93A4), which clears AA at sizes ≥ 14px on `mt-bg`.
 
-## 8. Deferred to follow-up sprints
+## 8. Status against the Master Build Prompt
 
-The Master Build Prompt described 13 phases; Sprint 44 shipped the foundation. The remaining bespoke pieces are sequenced to land independently:
+The Master Build Prompt described 13 phases. Sprints 44–49 (this PR) shipped:
 
-1. **Ecosystem Map** — SVG centerpiece showing the App Registry as a connected graph (services ↔ deployments ↔ repos).
-2. **Brushable activity chart** — `recharts` area chart with click-to-zoom range selection over the last 24h.
-3. **Stat-card rewrite** — replaces `OverviewTiles` with kinetic-number + sparkline tiles.
-4. **3D tilt parallax** — `framer-motion`-driven hover tilt on the new stat cards. Reduced-motion safe.
-5. **Particle cursor trail** — supplementary to the spotlight (Kokonut UI ParticleButton-style).
-6. **Resizable sidebar** — shadcn-style splitter applied to the AdminShell (this *would* leak out of `/command-center` — ship as an opt-in flag).
-7. **`Cmd+K` palette upgrade** — fold sprint-31 cmdk into the Vivid look.
-8. **Shortcuts overlay** — `?` to open a Vivid-styled cheatsheet.
+- ✅ Tokens · Fonts · Route shell · Hero · Stat cards · Activity chart (brushable) · Ecosystem map · 3D tilt · Magnetic CTAs · Particle trail · Shortcuts overlay
+- ➖ **Cmd+K palette** — already shipped in sprint 31 globally; intentionally NOT re-skinned to keep Vivid scoped.
 
-None of the deferred phases are required for the route to function — they layer on top of the foundation in this sprint.
+Remaining for follow-up (intentionally out of scope here):
+
+1. **Resizable sidebar** — would leak out of `/command-center` (the AdminShell sidebar is global). Owner-decision sprint: ship as an opt-in flag, or split into a Vivid-only secondary sidebar.
+2. **Per-app deploy progress strip** — sub-page surface (an app detail view), not the dashboard. Belongs in a `/admin/apps/[appKey]` follow-up.
+3. **Entitlement matrix view** — already lives at `/admin/product-access`; promoting it to a Vivid-skinned tile is a future cross-route migration.
+4. **"New" sheet** — generic create-new actions (new agent, new trigger, new app). Currently each surface owns its own creation flow; a Vivid sheet would unify them but requires API-shape work first.
 
 ## 9. Adding a new Vivid surface
 

@@ -19,6 +19,8 @@
  */
 
 import { CursorSpotlight } from "./_components/cursor-spotlight";
+import { ParticleTrail } from "./_components/particle-trail";
+import { ShortcutsOverlay } from "./_components/shortcuts-overlay";
 
 export default function CommandCenterLayout({
   children,
@@ -61,8 +63,10 @@ export default function CommandCenterLayout({
       />
 
       <CursorSpotlight />
+      <ParticleTrail />
+      <ShortcutsOverlay />
 
-      <div className="relative z-0 px-4 py-8 md:px-8 md:py-10">{children}</div>
+      <div className="relative z-[1] px-4 py-8 md:px-8 md:py-10">{children}</div>
     </div>
   );
 }

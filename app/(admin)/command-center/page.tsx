@@ -14,7 +14,7 @@
 import Link from "next/link";
 import { Compass } from "lucide-react";
 import { LastSyncedStamp } from "@/components/ui/last-synced-stamp";
-import { OverviewTiles } from "@/components/command-center/overview-tiles";
+import { VividStatGrid } from "./_components/vivid-stat-grid";
 import { AppStatusTable } from "@/components/command-center/app-status-table";
 import { RiskFeed } from "@/components/command-center/risk-feed";
 import { SyncNowButton } from "@/components/command-center/sync-now-button";
@@ -34,6 +34,9 @@ import { getFixableUnhealthyApps } from "@/lib/services/command-center/fix-unhea
 import { emailReady } from "@/lib/services/command-center/ai-ask-service";
 import { CCHero } from "./_components/cc-hero";
 import { VividCard, VividSectionHeader } from "./_components/vivid-card";
+import { BrushableActivity, type BrushableRow } from "./_components/brushable-activity";
+import { bucket24h } from "./_components/bucket-24h";
+import { EcosystemMap } from "./_components/ecosystem-map";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +60,28 @@ export default async function CommandCenterPage() {
     getTodayDigest(),
     getFixableUnhealthyApps(),
   ]);
+
+  // Sprint 46 — bucket the digest's flat 24h event lists into 24
+  // hourly rows for the brushable activity chart. Done at the
+  // server so the wire payload stays small and the chart renders
+  // instantly client-side.
+  const deployBuckets = bucket24h(digest.deploys.map((d) => ({ at: d.checkedAt })));
+  const agentBuckets = bucket24h(
+    digest.agentRuns.map((r) => ({ at: r.completedAt ?? r.createdAt })),
+  );
+  const riskBuckets = bucket24h(
+    digest.risksOpened.map((r) => ({ at: r.detectedAt })),
+  );
+  const wfBuckets = bucket24h(
+    digest.failedWorkflows.map((w) => ({ at: w.startedAt })),
+  );
+  const activityRows: BrushableRow[] = deployBuckets.map((b, i) => ({
+    t: b.t,
+    deploys: b.n,
+    agentRuns: agentBuckets[i]?.n ?? 0,
+    risksOpened: riskBuckets[i]?.n ?? 0,
+    failedWorkflows: wfBuckets[i]?.n ?? 0,
+  }));
 
   return (
     <div className="space-y-8">
@@ -110,17 +135,38 @@ export default async function CommandCenterPage() {
         />
       </VividCard>
 
+      <VividCard bare className="bg-transparent !p-0 !border-0 !shadow-none">
+        <div className="px-1 pb-2">
+          <div className="font-mt-mono text-[10px] uppercase tracking-[0.18em] text-mt-text-3">
+            Ecosystem
+          </div>
+          <h2 className="mt-1 font-mt-display text-base font-semibold tracking-tight text-mt-text md:text-lg">
+            At a glance
+          </h2>
+        </div>
+        <VividStatGrid status={status} digest={digest} />
+      </VividCard>
+
       <VividCard>
         <VividSectionHeader
-          eyebrow="Ecosystem"
-          title="Overview"
+          eyebrow="Activity"
+          title="Last 24 hours"
+          meta={<span>drag the brush to scope totals</span>}
+        />
+        <BrushableActivity rows={activityRows} />
+      </VividCard>
+
+      <VividCard>
+        <VividSectionHeader
+          eyebrow="Map"
+          title="Ecosystem"
           meta={
             <span>
-              {status.totalApps} apps · {status.openRiskCount} open risks
+              {snapshots.length} apps · click a node to open
             </span>
           }
         />
-        <OverviewTiles status={status} />
+        <EcosystemMap snapshots={snapshots} />
       </VividCard>
 
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">

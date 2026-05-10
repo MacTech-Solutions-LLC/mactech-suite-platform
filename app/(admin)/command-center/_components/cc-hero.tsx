@@ -13,7 +13,9 @@
  *   Brand tagline: "One sign-in, every app, full audit trail."
  */
 
+import { ArrowUpRight } from "lucide-react";
 import { KineticText } from "./kinetic-text";
+import { MagneticLink } from "./magnetic-button";
 
 export interface CCHeroProps {
   eyebrow: string;
@@ -62,6 +64,23 @@ export function CCHero({
           <p className="max-w-2xl text-pretty text-sm leading-relaxed text-mt-text-2 md:text-base">
             {tagline}
           </p>
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <MagneticLink
+              href="/status"
+              className="group inline-flex items-center gap-2 rounded-mt-2 border border-mt-cyan/30 bg-mt-cyan/10 px-3 py-1.5 font-mt-mono text-[11px] uppercase tracking-[0.18em] text-mt-cyan hover:bg-mt-cyan/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mt-cyan"
+            >
+              View public status
+              <ArrowUpRight className="h-3 w-3 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            </MagneticLink>
+            <MagneticLink
+              href="/admin/agents"
+              className="group inline-flex items-center gap-2 rounded-mt-2 border border-mt-violet/30 bg-mt-violet/10 px-3 py-1.5 font-mt-mono text-[11px] uppercase tracking-[0.18em] text-mt-violet hover:bg-mt-violet/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mt-violet"
+            >
+              AgentOps
+              <ArrowUpRight className="h-3 w-3 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            </MagneticLink>
+          </div>
         </div>
 
         {actions ? (
