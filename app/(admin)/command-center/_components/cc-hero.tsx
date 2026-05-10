@@ -13,9 +13,10 @@
  *   Brand tagline: "One sign-in, every app, full audit trail."
  */
 
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Plus } from "lucide-react";
 import { KineticText } from "@/components/vivid/kinetic-text";
 import { MagneticLink } from "@/components/vivid/magnetic-button";
+import { NewSheetTrigger } from "./new-action-sheet";
 
 export interface CCHeroProps {
   eyebrow: string;
@@ -66,6 +67,13 @@ export function CCHero({
           </p>
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
+            <NewSheetTrigger className="group inline-flex items-center gap-2 rounded-mt-2 border border-mt-magenta/30 bg-mt-magenta/10 px-3 py-1.5 font-mt-mono text-[11px] uppercase tracking-[0.18em] text-mt-magenta transition hover:bg-mt-magenta/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mt-magenta">
+              <Plus className="h-3 w-3" aria-hidden />
+              New
+              <kbd className="rounded-mt-1 border border-mt-magenta/30 bg-mt-magenta/10 px-1 font-mt-mono text-[9px] tracking-normal text-mt-magenta">
+                n
+              </kbd>
+            </NewSheetTrigger>
             <MagneticLink
               href="/status"
               className="group inline-flex items-center gap-2 rounded-mt-2 border border-mt-cyan/30 bg-mt-cyan/10 px-3 py-1.5 font-mt-mono text-[11px] uppercase tracking-[0.18em] text-mt-cyan hover:bg-mt-cyan/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mt-cyan"
