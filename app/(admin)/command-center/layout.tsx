@@ -30,6 +30,7 @@ export default function CommandCenterLayout({
 }) {
   return (
     <div
+      data-mt-mood="vivid"
       data-vivid-scope="command-center"
       className="relative isolate -mx-4 -my-6 min-h-[calc(100vh-4rem)] overflow-hidden bg-mt-bg font-mt-display text-mt-text md:-mx-6 md:-my-8"
     >

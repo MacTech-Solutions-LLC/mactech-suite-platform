@@ -1,3 +1,10 @@
+/* Sprint 52 — Vivid mood ships its CSS variables under
+   [data-mt-mood="vivid"]. The selector is scoped, not :root, so this
+   global import only takes effect inside subtrees that opt in via
+   data-mt-mood="vivid" (currently /command-center and
+   /admin/product-access). Other admin routes are unaffected. */
+@import "@mactech-solutions-llc/design-tokens/moods/vivid.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

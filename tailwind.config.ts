@@ -1,6 +1,24 @@
 import type { Config } from "tailwindcss";
+import { mactechPreset } from "@mactech-solutions-llc/design-tokens";
 
+// Sprint 52 — Vivid token system migrated from inline values to the
+// published @mactech-solutions-llc/design-tokens preset. The preset
+// wires every `mt-*` color/font/radius/shadow/easing utility to a
+// CSS variable declared by the active mood file. Mood files live at
+//   node_modules/@mactech-solutions-llc/design-tokens/dist/moods/<name>.css
+// and are activated by setting `data-mt-mood` on an ancestor.
+//
+// What stays inline below:
+//  • Existing shadcn HSL tokens (background/foreground/etc.) that
+//    every non-command-center admin route uses.
+//  • Backwards-compat aliases — `mt-cyan` / `mt-violet` / `mt-magenta`
+//    / `mt-lime` / `mt-amber` / `mt-rose` / `mt-hairline-strong` /
+//    `font-mt-display` — pointing at the preset's canonical names so
+//    Sprint 44/45/46/50/51 components keep rendering unchanged.
+//  • Sprint 44 keyframes/animations (`mt-spin-slow`, `mt-pulse-glow`,
+//    `mt-rise`, `mt-shimmer`) — the preset doesn't ship animations.
 const config: Config = {
+  presets: [mactechPreset],
   darkMode: ["class"],
   content: [
     "./app/**/*.{ts,tsx}",
@@ -17,13 +35,12 @@ const config: Config = {
       fontFamily: {
         sans: ["ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Inter", "sans-serif"],
         mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
-        // Sprint 44 — Vivid scope (/command-center). Wired in app/layout.tsx
-        // via next/font/google so the .variable classes resolve here.
-        "mt-display": ["var(--font-geist-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
-        "mt-mono": ["var(--font-geist-mono)", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
-        "mt-serif": ["var(--font-instrument-serif)", "ui-serif", "Georgia", "serif"],
+        // Backwards-compat: existing components reference font-mt-display.
+        // The preset provides font-mt-sans; alias display → sans here.
+        "mt-display": ["var(--mt-font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       colors: {
+        // shadcn HSL tokens — unchanged for non-command-center routes.
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -65,51 +82,28 @@ const config: Config = {
           DEFAULT: "hsl(var(--warning))",
           foreground: "hsl(var(--warning-foreground))",
         },
-        // ── Sprint 44 — Vivid (/command-center only) ─────────────────
-        // Cyan/violet/magenta system from the Stream OS reference.
-        // Other admin routes don't use these classes — palette stays
-        // scoped by usage, not by build target.
-        "mt-bg": "#06070C",
-        "mt-bg-2": "#0A0C14",
+        // Backwards-compat aliases for Sprint 44 component code that
+        // still references the original semantic names. The preset
+        // provides the canonical mt-accent / mt-accent-2 / etc.
+        "mt-cyan":    "var(--mt-accent)",
+        "mt-violet":  "var(--mt-accent-2)",
+        "mt-magenta": "var(--mt-accent-3)",
+        "mt-lime":    "var(--mt-success)",
+        "mt-amber":   "var(--mt-warning)",
+        "mt-rose":    "var(--mt-danger)",
+        "mt-hairline-strong": "var(--mt-hairline-3)",
+        // Sprint 44 also exposed mt-bg-3 at #10131D; preset uses
+        // #0E1120 for the same role. Override here for visual parity
+        // with the existing Vivid screens.
         "mt-bg-3": "#10131D",
-        "mt-surface-1": "rgba(255, 255, 255, 0.04)",
-        "mt-surface-2": "rgba(255, 255, 255, 0.06)",
-        "mt-surface-3": "rgba(255, 255, 255, 0.08)",
-        "mt-surface-4": "rgba(255, 255, 255, 0.10)",
-        "mt-hairline": "rgba(255, 255, 255, 0.08)",
-        "mt-hairline-strong": "rgba(255, 255, 255, 0.14)",
-        "mt-text": "#F4F6FB",
-        "mt-text-2": "#C8CEDB",
-        "mt-text-3": "#8C93A4",
-        "mt-text-4": "#5D6373",
-        "mt-cyan": "#00E5FF",
-        "mt-violet": "#7C5CFF",
-        "mt-magenta": "#FF5BD0",
-        "mt-lime": "#B6FF6E",
-        "mt-amber": "#FFB454",
-        "mt-rose": "#FF6679",
-      },
-      borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
-        // Sprint 44 — Vivid radii (used inside /command-center).
-        "mt-1": "8px",
-        "mt-2": "12px",
-        "mt-3": "16px",
-        "mt-4": "20px",
-        "mt-5": "28px",
-      },
-      transitionTimingFunction: {
-        // Sprint 44 — Vivid motion easings.
-        "mt-out": "cubic-bezier(0.16, 1, 0.3, 1)",
-        "mt-spring": "cubic-bezier(0.34, 1.56, 0.64, 1)",
       },
       backdropBlur: {
         "mt-glass": "24px",
       },
       boxShadow: {
         // Sprint 44 — Vivid glow utilities for CTAs / focused tiles.
+        // Continue exposing these names; the preset's mt-glow / mt-glow-2
+        // cover the same role for new code.
         "mt-cyan": "0 0 0 1px rgba(0, 229, 255, 0.35), 0 8px 24px -6px rgba(0, 229, 255, 0.45)",
         "mt-violet": "0 0 0 1px rgba(124, 92, 255, 0.35), 0 8px 24px -6px rgba(124, 92, 255, 0.45)",
         "mt-magenta": "0 0 0 1px rgba(255, 91, 208, 0.35), 0 8px 24px -6px rgba(255, 91, 208, 0.45)",
@@ -125,29 +119,18 @@ const config: Config = {
           to: { height: "0" },
         },
         // Sprint 44 — Vivid keyframes.
-        "mt-spin-slow": {
-          to: { transform: "rotate(360deg)" },
-        },
-        "mt-pulse-glow": {
-          "0%, 100%": { opacity: "0.55" },
-          "50%": { opacity: "1" },
-        },
-        "mt-rise": {
-          from: { opacity: "0", transform: "translateY(8px)" },
-          to: { opacity: "1", transform: "translateY(0)" },
-        },
-        "mt-shimmer": {
-          "0%": { backgroundPosition: "-200% 0" },
-          "100%": { backgroundPosition: "200% 0" },
-        },
+        "mt-spin-slow":  { to: { transform: "rotate(360deg)" } },
+        "mt-pulse-glow": { "0%, 100%": { opacity: "0.55" }, "50%": { opacity: "1" } },
+        "mt-rise":       { from: { opacity: "0", transform: "translateY(8px)" }, to: { opacity: "1", transform: "translateY(0)" } },
+        "mt-shimmer":    { "0%": { backgroundPosition: "-200% 0" }, "100%": { backgroundPosition: "200% 0" } },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-        "mt-spin-slow": "mt-spin-slow 8s linear infinite",
-        "mt-pulse-glow": "mt-pulse-glow 3s ease-in-out infinite",
-        "mt-rise": "mt-rise 480ms cubic-bezier(0.16, 1, 0.3, 1) both",
-        "mt-shimmer": "mt-shimmer 6s linear infinite",
+        "accordion-up":   "accordion-up 0.2s ease-out",
+        "mt-spin-slow":   "mt-spin-slow 8s linear infinite",
+        "mt-pulse-glow":  "mt-pulse-glow 3s ease-in-out infinite",
+        "mt-rise":        "mt-rise 480ms cubic-bezier(0.16, 1, 0.3, 1) both",
+        "mt-shimmer":     "mt-shimmer 6s linear infinite",
       },
     },
   },
