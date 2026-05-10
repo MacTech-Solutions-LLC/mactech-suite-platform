@@ -13,8 +13,8 @@
 
 import Link from "next/link";
 import { Compass } from "lucide-react";
-import { LastSyncedStamp } from "@/components/ui/last-synced-stamp";
 import { VividStatGrid } from "./_components/vivid-stat-grid";
+import { LiveReconciliationIndicator } from "./_components/live-reconciliation-indicator";
 import { AppStatusTable } from "@/components/command-center/app-status-table";
 import { RiskFeed } from "@/components/command-center/risk-feed";
 import { SyncNowButton } from "@/components/command-center/sync-now-button";
@@ -33,8 +33,9 @@ import { getTodayDigest } from "@/lib/services/command-center/today-digest-servi
 import { getFixableUnhealthyApps } from "@/lib/services/command-center/fix-unhealthy-service";
 import { emailReady } from "@/lib/services/command-center/ai-ask-service";
 import { CCHero } from "./_components/cc-hero";
-import { VividCard, VividSectionHeader } from "./_components/vivid-card";
-import { BrushableActivity, type BrushableRow } from "./_components/brushable-activity";
+import { VividCard, VividSectionHeader } from "@/components/vivid/vivid-card";
+import type { BrushableRow } from "./_components/brushable-activity";
+import { BrushableActivityLazy } from "./_components/brushable-activity-lazy";
 import { bucket24h } from "./_components/bucket-24h";
 import { EcosystemMap } from "./_components/ecosystem-map";
 
@@ -92,8 +93,10 @@ export default async function CommandCenterPage() {
         titleSuffix="full audit trail."
         tagline="Single internal control plane for the MacTech ecosystem — identity, app registry, runtime health, deployment drift, repository intelligence, and operational risk, correlated into one executive-readable page."
         actions={
-          <div className="flex items-center gap-3 rounded-mt-2 border border-mt-hairline bg-mt-surface-1 px-3 py-1.5 backdrop-blur-mt-glass">
-            <LastSyncedStamp at={status.lastReconciliationAt} />
+          <div className="flex items-center gap-3">
+            <LiveReconciliationIndicator
+              initialAt={status.lastReconciliationAt?.toISOString() ?? null}
+            />
             {canManage ? <SyncNowButton /> : null}
           </div>
         }
@@ -153,7 +156,7 @@ export default async function CommandCenterPage() {
           title="Last 24 hours"
           meta={<span>drag the brush to scope totals</span>}
         />
-        <BrushableActivity rows={activityRows} />
+        <BrushableActivityLazy rows={activityRows} />
       </VividCard>
 
       <VividCard>
