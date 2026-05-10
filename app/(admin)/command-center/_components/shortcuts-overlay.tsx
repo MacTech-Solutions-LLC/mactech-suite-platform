@@ -30,6 +30,7 @@ interface Shortcut {
 
 const SHORTCUTS: Shortcut[] = [
   { keys: ["⌘", "K"], label: "Open command palette (jump anywhere)", group: "Navigation" },
+  { keys: ["N"], label: "Open the New action sheet", group: "Navigation" },
   { keys: ["?"], label: "Open this shortcuts overlay", group: "Navigation" },
   { keys: ["Esc"], label: "Close any open dialog or overlay", group: "Navigation" },
 

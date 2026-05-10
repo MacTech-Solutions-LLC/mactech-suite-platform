@@ -15,6 +15,7 @@ import Link from "next/link";
 import { Compass } from "lucide-react";
 import { VividStatGrid } from "./_components/vivid-stat-grid";
 import { LiveReconciliationIndicator } from "./_components/live-reconciliation-indicator";
+import { OperatorRail, type OperatorRailApp } from "./_components/operator-rail";
 import { AppStatusTable } from "@/components/command-center/app-status-table";
 import { RiskFeed } from "@/components/command-center/risk-feed";
 import { SyncNowButton } from "@/components/command-center/sync-now-button";
@@ -84,6 +85,18 @@ export default async function CommandCenterPage() {
     failedWorkflows: wfBuckets[i]?.n ?? 0,
   }));
 
+  // Sprint 51 — operator-rail derived data. The full apps list goes
+  // to the rail; the rail's own logic decides what to surface (pinned
+  // first, then health-alerting unpinned).
+  const railApps: OperatorRailApp[] = snapshots.map((s) => ({
+    appKey: s.app.appKey,
+    name: s.app.name,
+    criticality: s.app.criticality,
+    health: s.latestHealth?.status ?? "unknown",
+    openRisks: s.openRisks.length,
+    hasCriticalRisk: s.openRisks.some((r) => r.severity === "critical"),
+  }));
+
   return (
     <div className="space-y-8">
       <CCHero
@@ -102,13 +115,16 @@ export default async function CommandCenterPage() {
         }
       />
 
-      <FixUnhealthyBanner fixable={fixable} canStage={canStageAgents} />
+      <div className="flex items-start gap-6">
+        <OperatorRail apps={railApps} />
+        <div className="min-w-0 flex-1 space-y-8">
+          <FixUnhealthyBanner fixable={fixable} canStage={canStageAgents} />
 
-      <AwaitingApprovalStrip
-        runs={digest.awaitingApprovalRuns}
-        viewerClerkUserId={ctx.clerkUserId}
-        canApprove={canApproveAgents}
-      />
+          <AwaitingApprovalStrip
+            runs={digest.awaitingApprovalRuns}
+            viewerClerkUserId={ctx.clerkUserId}
+            canApprove={canApproveAgents}
+          />
 
       <VividCard tone="cyan">
         <VividSectionHeader
@@ -231,6 +247,8 @@ export default async function CommandCenterPage() {
           .
         </p>
       </VividCard>
+        </div>
+      </div>
     </div>
   );
 }
