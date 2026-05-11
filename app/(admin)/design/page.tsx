@@ -18,6 +18,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { fetchAllManifests, findOverrides } from "@/lib/services/design-manifests";
 import { AppCard } from "./_components/app-card";
 import { ManifestStats } from "./_components/manifest-stats";
+import { SurfaceCard } from "./_components/surface-card";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Design Surface · MacTech Suite" };
@@ -88,16 +89,52 @@ export default async function DesignSurfacePage() {
         </div>
       </section>
 
-      <section className="space-y-3 rounded-mt-3 border border-mt-hairline bg-mt-surface-1 p-5">
+      <section className="space-y-3">
+        <h2 className="font-mt-display text-xl font-semibold tracking-tight text-mt-text">
+          Surfaces
+        </h2>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <SurfaceCard
+            href="/design/components"
+            title="Component matrix"
+            body="Rows = components, cols = onboarded apps. Dot = installed, OVR = overridden."
+          />
+          <SurfaceCard
+            href="/design/preview"
+            title="Theme preview"
+            body="Pick source + target mood × palette. Affected apps render in the target combo."
+          />
+          <SurfaceCard
+            href="/design/drift.csv"
+            title="Drift audit · CSV"
+            body="Every override across the suite, with reasons. Audit-logged + downloadable."
+          />
+          <SurfaceCard
+            href={
+              notOnboarded[0]
+                ? `/design/onboard/${notOnboarded[0].appKey}`
+                : "#"
+            }
+            title="Onboarding wizard"
+            body={
+              notOnboarded[0]
+                ? `4-step flow mirroring the CLI. Next: ${notOnboarded[0].appName}.`
+                : "Every app is already onboarded — nothing to do here."
+            }
+            disabled={!notOnboarded[0]}
+          />
+        </div>
+      </section>
+
+      <section className="space-y-3 rounded-mt-3 border border-dashed border-mt-hairline-strong bg-mt-surface-1 p-5">
         <h2 className="font-mt-display text-lg font-semibold tracking-tight text-mt-text">
-          Coming in v0.5.2
+          Coming in v0.6
         </h2>
         <ul className="space-y-1 font-mt-display text-sm text-mt-text-2">
-          <li>· Component matrix (rows = 35 components, cols = onboarded apps; click a cell to see usage sites)</li>
-          <li>· Theme preview multi-app diff-viewer</li>
-          <li>· Drift audit + CMMC-format PDF export</li>
-          <li>· Bump-all-apps governance action (preview-only in v0.5.2, PR-generation in v0.6)</li>
-          <li>· Web onboarding wizard at <code>/admin/design/onboard/&lt;appKey&gt;</code></li>
+          <li>· Apply-across-suite via PR generation against each onboarded repo</li>
+          <li>· Capability matrix once the first capability components ship</li>
+          <li>· Bump-all-apps to latest tokens version with one-click PRs</li>
+          <li>· View Transitions API for mood / palette swaps</li>
         </ul>
       </section>
     </div>
