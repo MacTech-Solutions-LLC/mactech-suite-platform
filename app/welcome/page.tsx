@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { prisma } from "@/lib/db/prisma";
 import { getCurrentAuthContext } from "@/lib/authz";
+import { reconcileUserOrgMembershipsFromClerk } from "@/lib/services/clerk-sync-service";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,18 @@ export default async function WelcomePage() {
   // enabled app + active|trialing entitlement" rules as the JIT helpers
   // in the sibling apps so the welcome list matches what they can
   // actually use.
+  //
+  // Before the first read, self-heal any stuck `invited` rows: when
+  // Clerk's `organizationMembership.created` webhook beats
+  // `user.created` (unordered delivery), the membership handler
+  // silently no-ops and leaves the row at "invited" forever. A quick
+  // Clerk lookup here flips it to "active" on the user's first
+  // /welcome load instead of stranding them on an empty state.
+  await reconcileUserOrgMembershipsFromClerk(
+    session.userId,
+    ctx.userProfile.id,
+  );
+
   const memberships = await prisma.orgUserAccess.findMany({
     where: { userProfileId: ctx.userProfile.id, status: "active" },
     include: {
