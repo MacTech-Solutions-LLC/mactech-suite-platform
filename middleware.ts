@@ -58,7 +58,14 @@ export default clerkMiddleware(async (auth, req) => {
     const session = await auth();
     if (!session.userId) {
       const signInUrl = new URL("/sign-in", req.url);
-      signInUrl.searchParams.set("redirect_url", req.nextUrl.pathname);
+      // Preserve the full original URL (pathname + query string) so that
+      // Clerk-issued query params like `__clerk_ticket` survive the bounce
+      // through /sign-in. Dropping the query here is how org-invitation
+      // tickets used to end at a dead-end "Couldn't find your account".
+      signInUrl.searchParams.set(
+        "redirect_url",
+        req.nextUrl.pathname + req.nextUrl.search,
+      );
       return NextResponse.redirect(signInUrl);
     }
   }

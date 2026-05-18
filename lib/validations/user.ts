@@ -48,6 +48,15 @@ export const removeOrgUserAccessSchema = z.object({
 
 export type RemoveOrgUserAccessInput = z.infer<typeof removeOrgUserAccessSchema>;
 
+export const resendCustomerInvitationSchema = z.object({
+  customerOrganizationId: z.string().min(1),
+  userProfileId: z.string().min(1),
+});
+
+export type ResendCustomerInvitationInput = z.infer<
+  typeof resendCustomerInvitationSchema
+>;
+
 export const addUserToOrgSchema = z.object({
   userProfileId: z.string().min(1),
   customerOrganizationId: z.string().min(1),

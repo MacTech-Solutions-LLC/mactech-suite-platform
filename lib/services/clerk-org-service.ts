@@ -192,6 +192,99 @@ export async function createClerkInvitation(
   }
 }
 
+export interface ListPendingOrgInvitationsInput {
+  clerkOrgId: string;
+  /** Optional filter — when provided, only invitations for this address are returned. */
+  emailAddress?: string;
+}
+
+/**
+ * List pending (not yet accepted or revoked) Clerk org invitations.
+ *
+ * Used by the "Resend invitation" flow: before issuing a new invitation
+ * we must revoke any existing pending one for the same email — Clerk
+ * rejects duplicates with `duplicate_record`, and `tryClerk` would
+ * otherwise swallow it silently.
+ */
+export async function listPendingOrgInvitations(
+  input: ListPendingOrgInvitationsInput,
+): Promise<Array<{ id: string; emailAddress: string }>> {
+  const client = await clerk();
+  try {
+    const res = await client.organizations.getOrganizationInvitationList({
+      organizationId: input.clerkOrgId,
+      status: ["pending"],
+    });
+    const all = (res?.data ?? []).map((inv) => ({
+      id: inv.id,
+      emailAddress: inv.emailAddress,
+    }));
+    if (!input.emailAddress) return all;
+    const target = input.emailAddress.toLowerCase();
+    return all.filter((inv) => inv.emailAddress.toLowerCase() === target);
+  } catch (err) {
+    throw new ClerkSyncError(
+      `Clerk getOrganizationInvitationList failed: ${explain(err)}`,
+      err,
+    );
+  }
+}
+
+export interface RevokeOrgInvitationInput {
+  clerkOrgId: string;
+  invitationId: string;
+  /** A Clerk admin user id; Clerk requires an actor for the revoke audit. */
+  requestingUserId: string;
+}
+
+export async function revokeOrgInvitation(
+  input: RevokeOrgInvitationInput,
+): Promise<void> {
+  const client = await clerk();
+  try {
+    await client.organizations.revokeOrganizationInvitation({
+      organizationId: input.clerkOrgId,
+      invitationId: input.invitationId,
+      requestingUserId: input.requestingUserId,
+    });
+  } catch (err) {
+    throw new ClerkSyncError(
+      `Clerk revokeOrganizationInvitation failed: ${explain(err)}`,
+      err,
+    );
+  }
+}
+
+export interface CreateSignInTokenInput {
+  clerkUserId: string;
+  /** Defaults to 24h; the URL is single-use regardless. */
+  expiresInSeconds?: number;
+}
+
+/**
+ * One-time sign-in URL for an existing Clerk user. We email this to
+ * users whose Clerk account already exists (e.g. they accepted an
+ * invitation previously) but who need a fresh way in — equivalent to
+ * a magic-link, generated server-side.
+ */
+export async function createClerkSignInToken(
+  input: CreateSignInTokenInput,
+): Promise<{ id: string; token: string; url: string }> {
+  const client = await clerk();
+  try {
+    const tok = await client.signInTokens.createSignInToken({
+      userId: input.clerkUserId,
+      expiresInSeconds: input.expiresInSeconds ?? 60 * 60 * 24,
+    });
+    return { id: tok.id, token: tok.token, url: tok.url };
+  } catch (err) {
+    throw new ClerkSyncError(
+      `Clerk createSignInToken failed: ${explain(err)}`,
+      err,
+    );
+  }
+}
+
 export interface CreateClerkMembershipInput {
   clerkOrgId: string;
   clerkUserId: string;

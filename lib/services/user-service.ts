@@ -7,11 +7,13 @@ import {
   updatePlatformUserSchema,
   removeOrgUserAccessSchema,
   addUserToOrgSchema,
+  resendCustomerInvitationSchema,
   type InviteCustomerUserInput,
   type UpdateOrgUserAccessInput,
   type UpdatePlatformUserInput,
   type RemoveOrgUserAccessInput,
   type AddUserToOrgInput,
+  type ResendCustomerInvitationInput,
 } from "@/lib/validations/user";
 import { writeAuditLog } from "@/lib/audit";
 import { requirePlatformPermission } from "@/lib/authz";
@@ -21,11 +23,20 @@ import { localRoleToClerkRole } from "@/lib/clerk-role-map";
 import {
   createClerkInvitation,
   createClerkMembership,
+  createClerkSignInToken,
   deleteClerkMembership,
+  listPendingOrgInvitations,
+  revokeOrgInvitation,
   tryClerk,
   updateClerkMembershipRole,
 } from "./clerk-org-service";
 import { dispatchWebhookEvent } from "./webhook-service";
+import { sendTeamEmail } from "@/lib/integrations/email/client";
+import {
+  renderEmailHtml,
+  renderEmailText,
+  type EmailTemplate,
+} from "@/lib/integrations/email/template";
 
 async function ensureUserProfileByEmail(input: {
   email: string;
@@ -73,20 +84,36 @@ export async function inviteCustomerUser(rawInput: InviteCustomerUserInput) {
   });
 
   let clerkInvitationId: string | null = null;
-  if (input.sendInvite && clerkConfigured() && org.clerkOrgId) {
+  if (input.sendInvite) {
+    if (!clerkConfigured()) {
+      throw new Error(
+        "Clerk is not configured on this environment — cannot send an invitation email. Disable 'Send invite' or configure Clerk first.",
+      );
+    }
+    if (!org.clerkOrgId) {
+      throw new Error(
+        `Organization '${org.name}' is not linked to Clerk yet. Provision the Clerk organization first, then try again.`,
+      );
+    }
     const result = await tryClerk("createOrganizationInvitation", () =>
       createClerkInvitation({
         clerkOrgId: org.clerkOrgId!,
         emailAddress: input.email,
         inviterUserId: ctx.clerkUserId,
         role: localRoleToClerkRole(role.key),
-        // Land them on /welcome so the smart-router decides where to
-        // send them based on their entitlements (1 app → auto-launch,
-        // multiple → picker, 0 → "ask your admin" empty state).
-        redirectUrl: `${env.NEXT_PUBLIC_APP_URL}/welcome`,
+        // Land them on /sign-up so Clerk's hosted <SignUp /> component
+        // can consume the `__clerk_ticket` query param, create the
+        // user, accept the org membership, then forward to /welcome
+        // (configured via SignUp afterSignUpUrl).
+        redirectUrl: `${env.NEXT_PUBLIC_APP_URL}/sign-up`,
       }),
     );
-    if (result.ok) clerkInvitationId = result.value.id;
+    if (!result.ok) {
+      // Surface the failure instead of silently creating a local row
+      // that the user has no way to act on.
+      throw new Error(`Failed to send Clerk invitation: ${result.error}`);
+    }
+    clerkInvitationId = result.value.id;
   }
 
   const access = await prisma.orgUserAccess.upsert({
@@ -143,6 +170,202 @@ export async function inviteCustomerUser(rawInput: InviteCustomerUserInput) {
   });
 
   return { access, clerkInvitationId };
+}
+
+/**
+ * Re-send a customer user's path-to-login. Branches on the user's
+ * actual Clerk state:
+ *
+ *   - No Clerk account yet (UserProfile.clerkUserId is empty or a
+ *     `pending_*` placeholder) → revoke any existing pending Clerk
+ *     org invitation for this email, then issue a fresh one (which
+ *     triggers Clerk to send a new invitation email). Local status
+ *     is reset to "invited" so the admin UI tells the truth.
+ *
+ *   - Real Clerk account → mint a one-time sign-in URL and email it
+ *     via the Suite's Resend mailer. The user signs in via that
+ *     link, then can change their password from their Clerk profile.
+ *
+ * Either branch ends with the user having a working, unexpired link
+ * in their inbox. This is the only admin-driven path to recover from
+ * lost / failed invitation emails — admins never see or set a
+ * password themselves (Clerk forbids that for good reason).
+ */
+export async function resendCustomerUserInvitation(
+  rawInput: ResendCustomerInvitationInput,
+) {
+  const ctx = await requirePlatformPermission(
+    PLATFORM_PERMISSIONS.CUSTOMER_USERS_INVITE,
+  );
+  const input = resendCustomerInvitationSchema.parse(rawInput);
+
+  const access = await prisma.orgUserAccess.findUnique({
+    where: {
+      customerOrganizationId_userProfileId: {
+        customerOrganizationId: input.customerOrganizationId,
+        userProfileId: input.userProfileId,
+      },
+    },
+    include: { userProfile: true, customerOrganization: true },
+  });
+  if (!access) {
+    throw new Error("User is not a member of this organization.");
+  }
+  const { userProfile: profile, customerOrganization: org } = access;
+
+  if (!clerkConfigured()) {
+    throw new Error(
+      "Clerk is not configured on this environment — cannot send a sign-in link.",
+    );
+  }
+  if (!org.clerkOrgId) {
+    throw new Error(
+      `Organization '${org.name}' is not linked to Clerk yet. Provision the Clerk organization first, then try again.`,
+    );
+  }
+
+  const hasRealClerkUser =
+    Boolean(profile.clerkUserId) && !profile.clerkUserId.startsWith("pending_");
+
+  if (hasRealClerkUser) {
+    const token = await createClerkSignInToken({
+      clerkUserId: profile.clerkUserId,
+      expiresInSeconds: 60 * 60 * 24,
+    });
+
+    const tpl: EmailTemplate = {
+      heroEyebrow: `MacTech Suite · ${org.name}`,
+      heroTitle: "Your sign-in link is ready",
+      heroSubtitle: `An admin generated a one-time sign-in link for ${profile.email}.`,
+      sections: [
+        {
+          heading: "How to sign in",
+          body: "Click the button below within the next 24 hours. After you're signed in you can set or change your password from your profile.",
+        },
+      ],
+      cta: { label: "Sign in to MacTech Suite", href: token.url },
+      dangerCard:
+        "If you did not request this link, you can ignore this email — the link expires on its own. Never share it.",
+    };
+    const send = await sendTeamEmail({
+      to: [profile.email],
+      subject: `Sign in to MacTech Suite — ${org.name}`,
+      text: renderEmailText(tpl),
+      html: renderEmailHtml(tpl),
+    });
+    // `not_configured` is a deliberate dev-mode no-op in the mailer;
+    // any other failure means the user won't get a link, so surface it.
+    if (!send.ok && send.skippedReason !== "not_configured") {
+      throw new Error(
+        `Failed to send sign-in email: ${send.error ?? "unknown"}`,
+      );
+    }
+
+    const auditEntry = await writeAuditLog({
+      eventType: "customer_user.signin_link_sent",
+      eventCategory: "user",
+      severity: "info",
+      action: `Sent sign-in link to ${profile.email} (${org.name})`,
+      actorClerkUserId: ctx.clerkUserId,
+      actorEmail: ctx.userProfile.email,
+      actorUserProfileId: ctx.userProfile.id,
+      customerOrganizationId: org.id,
+      resourceType: "OrgUserAccess",
+      resourceId: access.id,
+      metadata: {
+        tokenId: token.id,
+        emailSkipped: send.skippedReason === "not_configured",
+      },
+    });
+
+    void dispatchWebhookEvent({
+      eventType: "customer_user.signin_link_sent",
+      eventId: auditEntry.id,
+      customerOrganizationId: org.id,
+      payload: {
+        orgId: org.id,
+        clerkOrgId: org.clerkOrgId,
+        email: profile.email,
+        clerkUserId: profile.clerkUserId,
+      },
+    });
+
+    return {
+      mode: "signin_token" as const,
+      email: profile.email,
+      emailSkipped: send.skippedReason === "not_configured",
+    };
+  }
+
+  // Pending Clerk user path: revoke duplicates, re-issue the invitation.
+  const pending = await listPendingOrgInvitations({
+    clerkOrgId: org.clerkOrgId,
+    emailAddress: profile.email,
+  });
+  for (const inv of pending) {
+    await revokeOrgInvitation({
+      clerkOrgId: org.clerkOrgId,
+      invitationId: inv.id,
+      requestingUserId: ctx.clerkUserId,
+    });
+  }
+
+  const role = CUSTOMER_ROLE_DEFINITIONS.find((r) => r.key === access.role);
+  if (!role) {
+    throw new Error(`Unknown customer role on access row: ${access.role}`);
+  }
+
+  const fresh = await createClerkInvitation({
+    clerkOrgId: org.clerkOrgId,
+    emailAddress: profile.email,
+    inviterUserId: ctx.clerkUserId,
+    role: localRoleToClerkRole(role.key),
+    redirectUrl: `${env.NEXT_PUBLIC_APP_URL}/sign-up`,
+  });
+
+  await prisma.orgUserAccess.update({
+    where: { id: access.id },
+    data: { status: "invited" },
+  });
+
+  const auditEntry = await writeAuditLog({
+    eventType: "customer_user.invitation_resent",
+    eventCategory: "user",
+    severity: "info",
+    action: `Re-sent Clerk invitation to ${profile.email} (${org.name}) as ${role.name}`,
+    actorClerkUserId: ctx.clerkUserId,
+    actorEmail: ctx.userProfile.email,
+    actorUserProfileId: ctx.userProfile.id,
+    customerOrganizationId: org.id,
+    resourceType: "OrgUserAccess",
+    resourceId: access.id,
+    metadata: {
+      role: role.key,
+      revokedCount: pending.length,
+      clerkInvitationId: fresh.id,
+    },
+  });
+
+  void dispatchWebhookEvent({
+    eventType: "customer_user.invitation_resent",
+    eventId: auditEntry.id,
+    customerOrganizationId: org.id,
+    payload: {
+      orgId: org.id,
+      clerkOrgId: org.clerkOrgId,
+      email: profile.email,
+      role: role.key,
+      clerkInvitationId: fresh.id,
+      revokedCount: pending.length,
+    },
+  });
+
+  return {
+    mode: "invitation" as const,
+    email: profile.email,
+    clerkInvitationId: fresh.id,
+    revokedCount: pending.length,
+  };
 }
 
 export async function updateOrgUserAccess(rawInput: UpdateOrgUserAccessInput) {
@@ -271,21 +494,40 @@ export async function addUserToOrg(rawInput: AddUserToOrgInput) {
   ]);
   if (!profile || !org) throw new Error("User or organization not found.");
 
-  let clerkMembershipId: string | null = null;
+  // Preconditions: this entry point is for users who already have a real
+  // Clerk account. Without one, marking them "active" locally creates the
+  // exact drift we've been fixing (row says active, Clerk has no member).
   const hasRealClerkUser =
     Boolean(profile.clerkUserId) && !profile.clerkUserId.startsWith("pending_");
-  if (clerkConfigured() && org.clerkOrgId && hasRealClerkUser) {
-    const result = await tryClerk("createOrganizationMembership", () =>
-      createClerkMembership({
-        clerkOrgId: org.clerkOrgId!,
-        clerkUserId: profile.clerkUserId,
-        role: localRoleToClerkRole(role.key),
-      }),
+  if (!hasRealClerkUser) {
+    throw new Error(
+      `${profile.email} has not completed Clerk sign-up yet. Use "Send sign-in link" / "Resend invitation" instead so they can set a password first.`,
     );
-    if (result.ok) clerkMembershipId = result.value.id;
-    // Membership may already exist in Clerk; the local upsert still captures
-    // it via clerkMembershipId being null. Audit metadata reflects Clerk state.
   }
+  if (!clerkConfigured()) {
+    throw new Error(
+      "Clerk is not configured on this environment — cannot add a member.",
+    );
+  }
+  if (!org.clerkOrgId) {
+    throw new Error(
+      `Organization '${org.name}' is not linked to Clerk yet. Provision the Clerk organization first, then try again.`,
+    );
+  }
+
+  const membershipResult = await tryClerk("createOrganizationMembership", () =>
+    createClerkMembership({
+      clerkOrgId: org.clerkOrgId!,
+      clerkUserId: profile.clerkUserId,
+      role: localRoleToClerkRole(role.key),
+    }),
+  );
+  if (!membershipResult.ok) {
+    throw new Error(
+      `Failed to add ${profile.email} to Clerk organization: ${membershipResult.error}`,
+    );
+  }
+  const clerkMembershipId = membershipResult.value.id;
 
   const access = await prisma.orgUserAccess.upsert({
     where: {
@@ -298,7 +540,7 @@ export async function addUserToOrg(rawInput: AddUserToOrgInput) {
       role: role.key,
       permissionsJson: role.permissions as unknown as object,
       status: "active",
-      clerkMembershipId: clerkMembershipId ?? undefined,
+      clerkMembershipId,
     },
     create: {
       customerOrganizationId: org.id,
@@ -323,7 +565,7 @@ export async function addUserToOrg(rawInput: AddUserToOrgInput) {
     resourceId: access.id,
     metadata: {
       role: role.key,
-      viaClerk: Boolean(clerkMembershipId),
+      clerkMembershipId,
     },
   });
 

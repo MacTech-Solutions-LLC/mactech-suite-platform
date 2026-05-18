@@ -17,7 +17,9 @@ export default function SignUpPage() {
           <div className="text-base font-semibold">Identity Command Center</div>
         </div>
       </div>
-      <SignUp />
+      {/* afterSignInUrl covers Clerk's silent switch to sign-in when an
+          invited email already has a Clerk account. */}
+      <SignUp afterSignUpUrl="/welcome" afterSignInUrl="/welcome" />
     </div>
   );
 }

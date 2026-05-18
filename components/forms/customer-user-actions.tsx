@@ -8,6 +8,7 @@ import {
   KeyRound,
   Pause,
   Play,
+  Send,
   Trash2,
   ScrollText,
 } from "lucide-react";
@@ -39,6 +40,7 @@ import {
 import {
   updateOrgUserAccess,
   removeCustomerUser,
+  resendCustomerUserInvitation,
 } from "@/lib/services/user-service";
 import { CUSTOMER_ROLE_DEFINITIONS } from "@/lib/permissions";
 import type { UserStatus } from "@prisma/client";
@@ -53,10 +55,22 @@ export interface CustomerUserActionsProps {
 
 export function CustomerUserActions(props: CustomerUserActionsProps) {
   const [roleOpen, setRoleOpen] = useState(false);
-  const [confirm, setConfirm] = useState<null | "suspend" | "reactivate" | "remove">(null);
+  const [confirm, setConfirm] = useState<
+    null | "suspend" | "reactivate" | "remove" | "resend"
+  >(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [resendResult, setResendResult] = useState<{
+    mode: "invitation" | "signin_token";
+    emailSkipped?: boolean;
+  } | null>(null);
   const router = useRouter();
+
+  // Drives the wording on the dropdown item and confirmation dialog:
+  // for users who haven't signed up with Clerk yet ("invited") we
+  // re-send the org invitation; for active users we mint a one-time
+  // sign-in link. The server action picks the same branch.
+  const isInvited = props.currentStatus === "invited";
 
   const submitRole = (role: string) => {
     setError(null);
@@ -108,6 +122,29 @@ export function CustomerUserActions(props: CustomerUserActionsProps) {
     });
   };
 
+  const submitResend = () => {
+    setError(null);
+    setResendResult(null);
+    startTransition(async () => {
+      try {
+        const res = await resendCustomerUserInvitation({
+          customerOrganizationId: props.customerOrganizationId,
+          userProfileId: props.userProfileId,
+        });
+        setResendResult({
+          mode: res.mode,
+          emailSkipped:
+            res.mode === "signin_token" ? res.emailSkipped : undefined,
+        });
+        router.refresh();
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to send sign-in link",
+        );
+      }
+    });
+  };
+
   const isActive = props.currentStatus === "active";
 
   return (
@@ -122,6 +159,16 @@ export function CustomerUserActions(props: CustomerUserActionsProps) {
           <DropdownMenuLabel>Actions</DropdownMenuLabel>
           <DropdownMenuItem onSelect={() => setRoleOpen(true)}>
             <KeyRound className="h-4 w-4" /> Change role
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              setError(null);
+              setResendResult(null);
+              setConfirm("resend");
+            }}
+          >
+            <Send className="h-4 w-4" />{" "}
+            {isInvited ? "Resend invitation" : "Send sign-in link"}
           </DropdownMenuItem>
           {isActive ? (
             <DropdownMenuItem
@@ -169,13 +216,23 @@ export function CustomerUserActions(props: CustomerUserActionsProps) {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={confirm !== null} onOpenChange={(o) => !pending && !o && setConfirm(null)}>
+      <Dialog
+        open={confirm !== null}
+        onOpenChange={(o) => {
+          if (pending || o) return;
+          setConfirm(null);
+          setResendResult(null);
+          setError(null);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
               {confirm === "suspend" && "Suspend user?"}
               {confirm === "reactivate" && "Reactivate user?"}
               {confirm === "remove" && "Remove user from organization?"}
+              {confirm === "resend" &&
+                (isInvited ? "Resend invitation?" : "Send sign-in link?")}
             </DialogTitle>
             <DialogDescription>
               {confirm === "suspend" &&
@@ -189,6 +246,10 @@ export function CustomerUserActions(props: CustomerUserActionsProps) {
                   remains intact. This action is logged but cannot be undone.
                 </>
               )}
+              {confirm === "resend" &&
+                (isInvited
+                  ? `Any existing pending Clerk invitation for ${props.email} will be revoked and a fresh invitation email sent. They'll set their own password.`
+                  : `A one-time sign-in link will be emailed to ${props.email}. The link is valid for 24 hours and expires after one use.`)}
             </DialogDescription>
           </DialogHeader>
           {error && (
@@ -196,27 +257,55 @@ export function CustomerUserActions(props: CustomerUserActionsProps) {
               {error}
             </div>
           )}
+          {resendResult && !error && (
+            <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
+              {resendResult.mode === "invitation"
+                ? `Invitation re-sent. ${props.email} should receive an email from Clerk within a minute.`
+                : resendResult.emailSkipped
+                  ? `Sign-in token generated, but RESEND_API_KEY is not configured so no email was sent. Check the audit log for the token id.`
+                  : `Sign-in link sent to ${props.email}.`}
+            </div>
+          )}
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setConfirm(null)} disabled={pending}>
-              Cancel
-            </Button>
             <Button
-              variant={confirm === "reactivate" ? "default" : "destructive"}
+              variant="outline"
               onClick={() => {
-                if (confirm === "remove") submitRemove();
-                else if (confirm === "suspend") submitStatus("suspended");
-                else if (confirm === "reactivate") submitStatus("active");
+                setConfirm(null);
+                setResendResult(null);
+                setError(null);
               }}
               disabled={pending}
             >
-              {pending
-                ? "Saving…"
-                : confirm === "remove"
-                  ? "Remove"
-                  : confirm === "suspend"
-                    ? "Suspend"
-                    : "Reactivate"}
+              {resendResult ? "Done" : "Cancel"}
             </Button>
+            {!resendResult && (
+              <Button
+                variant={
+                  confirm === "reactivate" || confirm === "resend"
+                    ? "default"
+                    : "destructive"
+                }
+                onClick={() => {
+                  if (confirm === "remove") submitRemove();
+                  else if (confirm === "suspend") submitStatus("suspended");
+                  else if (confirm === "reactivate") submitStatus("active");
+                  else if (confirm === "resend") submitResend();
+                }}
+                disabled={pending}
+              >
+                {pending
+                  ? "Sending…"
+                  : confirm === "remove"
+                    ? "Remove"
+                    : confirm === "suspend"
+                      ? "Suspend"
+                      : confirm === "reactivate"
+                        ? "Reactivate"
+                        : isInvited
+                          ? "Resend invitation"
+                          : "Send sign-in link"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
