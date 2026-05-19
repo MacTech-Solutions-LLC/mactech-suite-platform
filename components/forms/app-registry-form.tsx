@@ -86,7 +86,7 @@ export function AppRegistryForm({
             setError(null);
             const fd = new FormData(event.currentTarget);
             const raw = {
-              appKey: String(fd.get("appKey") || ""),
+              appKey: initial?.appKey ?? String(fd.get("appKey") || ""),
               name: String(fd.get("name") || ""),
               description: String(fd.get("description") || ""),
               baseUrl: String(fd.get("baseUrl") || ""),
