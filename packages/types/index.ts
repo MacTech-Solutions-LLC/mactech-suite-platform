@@ -212,3 +212,38 @@ export type MaxAnchorProps = {
   "data-max-anchor"?: string;
   "data-max-context"?: string;
 };
+
+// ============================================================================
+// FRCS CYBERSECURITY SCOPE CONTRACTS
+// ============================================================================
+
+export type FrcsCyberScopeLane =
+  | "base_frcs_deliverable"
+  | "adjacent_vendor_coordination"
+  | "sitewide_cyber_pmo";
+
+export type FrcsDeliverableKey =
+  | "section_25_05_11_matrix"
+  | "control_system_inventory"
+  | "ports_protocols_services"
+  | "interconnection_schedule"
+  | "network_riser_review"
+  | "stig_srg_applicability"
+  | "vendor_data_calls"
+  | "security_configuration_review"
+  | "test_procedures"
+  | "final_test_report"
+  | "closeout_support"
+  | "training_support";
+
+export type FrcsCyberScopeProfile = {
+  scopeLane: FrcsCyberScopeLane;
+  baseDeliverables: FrcsDeliverableKey[];
+  adjacentVendorCoordinationRequired?: boolean;
+  sitewideCyberRequested?: boolean;
+  optionalAddOns?: string[];
+  governanceReadinessRef?: string;
+  pricingVersionRef?: string;
+  evidenceRefs?: string[];
+  boundaryStatement: string;
+};

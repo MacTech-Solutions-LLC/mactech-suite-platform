@@ -79,8 +79,8 @@ export default async function RailwayIntegrationPage() {
       <section className="rounded-md border border-border bg-card/40 p-4 text-xs text-muted-foreground">
         <div className="text-sm font-medium text-foreground">Webhook setup</div>
         <p className="mt-2">
-          Railway's public GraphQL API does not expose webhook CRUD. Add the webhook in each
-          project's Settings → Webhooks tab manually, pointing at
+          Railway&apos;s public GraphQL API does not expose webhook CRUD. Add the webhook in each
+          project&apos;s Settings → Webhooks tab manually, pointing at
           <span className="ml-1 font-mono">/api/webhooks/railway?secret=&lt;RAILWAY_WEBHOOK_SECRET&gt;</span>.
           Until configured, the periodic reconciliation still picks up deployment state via the API
           on every cycle.

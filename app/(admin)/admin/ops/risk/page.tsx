@@ -171,11 +171,11 @@ export default async function RiskPage({
         <Siren className="mr-1 inline h-3 w-3" />
         Risks auto-resolve when the underlying condition clears. The inline actions are for
         triage:{" "}
-        <strong className="text-foreground">Ack</strong> = "I&rsquo;m on it",{" "}
+        <strong className="text-foreground">Ack</strong> = &quot;I&rsquo;m on it&quot;,{" "}
         <strong className="text-foreground">Resolve</strong> = handled out-of-band, and{" "}
         <strong className="text-foreground">Ignore</strong> = false positive. For categories the
         cross-repo agent can fix automatically (e.g. <code className="font-mono">missing_health_endpoint</code>),
-        the row dropdown surfaces a "Fix this with agent" deep-link.
+        the row dropdown surfaces a &quot;Fix this with agent&quot; deep-link.
       </div>
     </div>
   );

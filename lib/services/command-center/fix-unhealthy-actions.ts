@@ -143,7 +143,6 @@ async function stageOneRun(
 function cryptoRandom(): string {
   // Server-only: 24-byte hex (matches the existing run/step id shape
   // used by the orchestrator).
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { randomBytes } = require("crypto") as typeof import("crypto");
   return randomBytes(16).toString("hex");
 }

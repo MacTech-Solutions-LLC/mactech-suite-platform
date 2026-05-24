@@ -9,7 +9,7 @@ export function ReleaseNotesList({ summaries }: { summaries: SummaryRow[] }) {
   if (summaries.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-        No release notes generated yet. Use the "Generate now" button above to produce a daily,
+        No release notes generated yet. Use the &quot;Generate now&quot; button above to produce a daily,
         weekly, or release-scoped summary.
       </div>
     );

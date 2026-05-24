@@ -150,7 +150,7 @@ const APP_FIXTURES = [
     appKey: "governance",
     name: "MacTech Governance",
     description:
-      "GovCon governance workspace: clauses, reps & certs, delegation, flowdowns, evidence, post-award.",
+      "GovCon governance workspace: clauses, reps & certs, delegation, flowdowns, FRCS cyber scope, evidence, post-award.",
     category: "compliance" as const,
     baseUrl: "https://governance.mactechsolutionsllc.com",
     requiresOrgContext: true,
@@ -209,7 +209,7 @@ const APP_FIXTURES = [
   {
     appKey: "proposal",
     name: "MacTech Proposal (ProposalOS)",
-    description: "Proposal workspace covering Section K reps & certs through cost-volume submission.",
+    description: "Proposal workspace covering Section K reps & certs, FRCS cyber execution, and cost-volume submission.",
     category: "reporting" as const,
     requiresOrgContext: true,
     isInternalOnly: false,
@@ -221,6 +221,23 @@ const APP_FIXTURES = [
     lifecycle: "development" as const,
     visibility: "customer" as const,
     repoFullName: "MacTech-Solutions-LLC/Proposal",
+    repoDefaultBranch: "main",
+  },
+  {
+    appKey: "pricing",
+    name: "MacTech Pricing (PricingOS)",
+    description: "Pricing workspace for rate snapshots, BOE, Green Team, FRCS scope boundaries, and price volume export.",
+    category: "reporting" as const,
+    requiresOrgContext: true,
+    isInternalOnly: false,
+    status: "development" as const,
+    publicUrl: "https://pricing.mactechsolutionsllc.com",
+    subdomain: "pricing",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "high" as const,
+    lifecycle: "development" as const,
+    visibility: "customer" as const,
+    repoFullName: "MacTech-Solutions-LLC/Pricing",
     repoDefaultBranch: "main",
   },
   {
@@ -516,6 +533,7 @@ const APP_DEPENDENCIES: Array<{
   { sourceAppKey: "cleard", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "high" },
   { sourceAppKey: "opportunities", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "medium" },
   { sourceAppKey: "proposal", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "medium" },
+  { sourceAppKey: "pricing", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "high" },
 
   // Suite ingests audit events from every sibling app.
   { sourceAppKey: "capture", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "high" },
@@ -533,6 +551,9 @@ const APP_DEPENDENCIES: Array<{
   { sourceAppKey: "capture", targetAppKey: "proposal", dependencyType: "capture_source", description: "Pursuit + capture data feeds proposal authoring", criticality: "high" },
   { sourceAppKey: "quality", targetAppKey: "governance", dependencyType: "qms_source", description: "Document control / change records inform governance", criticality: "high" },
   { sourceAppKey: "codex", targetAppKey: "governance", dependencyType: "governance_source", description: "Control + clause knowledge powers governance workflows", criticality: "high" },
+  { sourceAppKey: "governance", targetAppKey: "pricing", dependencyType: "governance_source", description: "Rate cards, clause risk, FRCS scope boundaries, and approval metadata feed PricingOS", criticality: "high" },
+  { sourceAppKey: "pricing", targetAppKey: "proposal", dependencyType: "api_calls", description: "Approved price volume, BOE summary, Green Team metadata, and FRCS scope export feed ProposalOS", criticality: "high" },
+  { sourceAppKey: "opportunities", targetAppKey: "governance", dependencyType: "capture_source", description: "Opportunity FRCS and bid/no-bid signals feed GovernanceOS readiness review", criticality: "high" },
 
   // Suite is the registry/control shell for all apps.
   { sourceAppKey: "identity-command-center", targetAppKey: "capture", dependencyType: "shared_component", description: "Suite tracks capture in AppRegistry + entitlements", criticality: "medium" },
@@ -548,6 +569,7 @@ const APP_DEPENDENCIES: Array<{
   { sourceAppKey: "cleard", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "medium" },
   { sourceAppKey: "opportunities", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "medium" },
   { sourceAppKey: "proposal", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "medium" },
+  { sourceAppKey: "pricing", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "high" },
   { sourceAppKey: "vetted", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "medium" },
   { sourceAppKey: "mactech-core", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "medium" },
 
@@ -555,6 +577,7 @@ const APP_DEPENDENCIES: Array<{
   { sourceAppKey: "identity-command-center", targetAppKey: "cleard", dependencyType: "shared_component", description: "Suite tracks cleard in AppRegistry + entitlements", criticality: "medium" },
   { sourceAppKey: "identity-command-center", targetAppKey: "opportunities", dependencyType: "shared_component", description: "Suite tracks opportunities in AppRegistry + entitlements", criticality: "medium" },
   { sourceAppKey: "identity-command-center", targetAppKey: "proposal", dependencyType: "shared_component", description: "Suite tracks proposal in AppRegistry + entitlements", criticality: "medium" },
+  { sourceAppKey: "identity-command-center", targetAppKey: "pricing", dependencyType: "shared_component", description: "Suite tracks pricing in AppRegistry + entitlements", criticality: "medium" },
   { sourceAppKey: "identity-command-center", targetAppKey: "vetted", dependencyType: "shared_component", description: "Suite tracks vetted in AppRegistry + entitlements", criticality: "medium" },
   { sourceAppKey: "identity-command-center", targetAppKey: "mactech-core", dependencyType: "shared_component", description: "Suite tracks mactech-core in AppRegistry + entitlements", criticality: "low" },
 
@@ -576,6 +599,7 @@ const APP_DEPENDENCIES: Array<{
   { sourceAppKey: "enclavewatch", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "high" },
   { sourceAppKey: "opportunities", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "medium" },
   { sourceAppKey: "proposal", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "medium" },
+  { sourceAppKey: "pricing", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run to /api/webhooks/github", criticality: "high" },
   { sourceAppKey: "vetted", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "medium" },
   { sourceAppKey: "mactech-core", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "low" },
 ];

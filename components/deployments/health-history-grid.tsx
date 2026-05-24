@@ -26,7 +26,7 @@ export function HealthHistoryGrid({ rows }: { rows: AppHistory[] }) {
   if (rows.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-        No health snapshots yet. Click "Sync now" on /command-center to run the first probe pass.
+        No health snapshots yet. Click &quot;Sync now&quot; on /command-center to run the first probe pass.
       </div>
     );
   }

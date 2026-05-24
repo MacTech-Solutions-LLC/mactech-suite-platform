@@ -430,7 +430,6 @@ const open_repo_pull_request_repo_in_allowlist: InvariantDefinition = {
     // is just a constant, but this file is also bundled into the
     // browser-side IntentBuilder UI, so we avoid any chance of
     // pulling capability code into the client bundle).
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { isAllowlistedRepo } = require("../cross-repo/policy") as {
       isAllowlistedRepo: (repo: string) => boolean;
     };
