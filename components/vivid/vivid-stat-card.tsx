@@ -21,7 +21,9 @@
 import { cn } from "@/lib/utils";
 import { KineticNumber } from "./kinetic-number";
 import { Sparkline } from "./sparkline";
-import { TiltCard } from "./tilt-card";
+// Sprint 55: TiltCard wrap removed — cursor-tracking parallax on a
+// dense stat grid was a primary "discombobulated" complaint. The
+// underlying glass + accent recipe is preserved.
 
 export type VividStatTone =
   | "default"
@@ -90,7 +92,6 @@ export function VividStatCard({
 }: VividStatCardProps) {
   const t = TONE[tone];
   return (
-    <TiltCard maxTilt={5} className="rounded-mt-3">
     <div
       className={cn(
         "group relative overflow-hidden rounded-mt-3 border bg-mt-surface-1 p-4 transition duration-300 hover:bg-mt-surface-2",
@@ -132,6 +133,5 @@ export function VividStatCard({
         </div>
       ) : null}
     </div>
-    </TiltCard>
   );
 }

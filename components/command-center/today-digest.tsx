@@ -9,8 +9,6 @@
 import Link from "next/link";
 import {
   AlertOctagon,
-  ShieldOff,
-  XCircle,
   Bot,
   CalendarClock,
   GitCommit,
@@ -21,6 +19,7 @@ import {
   ArrowRightCircle,
   ExternalLink,
   ChevronRight,
+  XCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SeverityBadge } from "@/components/ui/severity-badge";
@@ -54,7 +53,10 @@ export function TodayDigestCard({ digest }: Props) {
         </span>
       </div>
 
-      <CriticalNowStrip critical={digest.criticalNow} />
+      {/* Sprint 55: CriticalNowStrip removed — its 5 tiles are now
+          consolidated into the AttentionRail at the top of the page
+          (Zone A). The digest below stays focused on the 24h activity
+          breakdown. */}
 
       {total === 0 ? (
         <div className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
@@ -367,89 +369,6 @@ export function TodayDigestCard({ digest }: Props) {
           </Section>
         </div>
       )}
-    </div>
-  );
-}
-
-function CriticalNowStrip({
-  critical,
-}: {
-  critical: TodayDigest["criticalNow"];
-}) {
-  const items = [
-    {
-      Icon: Siren,
-      label: "Critical risks",
-      value: critical.openCriticalRisks,
-      hot: critical.openCriticalRisks > 0,
-      href: "/admin/ops/risk?severity=critical",
-    },
-    {
-      Icon: ShieldOff,
-      label: "Apps down",
-      value: critical.appsCurrentlyDown,
-      hot: critical.appsCurrentlyDown > 0,
-      href: "/admin/public-status",
-    },
-    {
-      Icon: XCircle,
-      label: "Deploys failed (24h)",
-      value: critical.failedDeployments24h,
-      hot: critical.failedDeployments24h > 0,
-      href: "/admin/ops/deployments",
-    },
-    {
-      Icon: Bot,
-      label: "Agents refused (24h)",
-      value: critical.refusedAgentRuns24h,
-      hot: critical.refusedAgentRuns24h > 0,
-      href: "/admin/agents",
-    },
-    {
-      Icon: AlertOctagon,
-      label: "Awaiting approval",
-      value: critical.awaitingApproval,
-      hot: critical.awaitingApproval > 0,
-      href: "/admin/agents",
-    },
-  ];
-
-  return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-      {items.map((it) => (
-        <Link
-          key={it.label}
-          href={it.href}
-          className={
-            "group flex items-center gap-2 rounded-md border px-3 py-2 transition-colors " +
-            (it.hot
-              ? "border-destructive/40 bg-destructive/5 hover:bg-destructive/10"
-              : "border-border bg-card/40 hover:bg-muted/40")
-          }
-          aria-label={`${it.label}: ${it.value}`}
-        >
-          <it.Icon
-            className={
-              "h-4 w-4 shrink-0 " +
-              (it.hot ? "text-destructive" : "text-muted-foreground")
-            }
-          />
-          <div className="min-w-0 flex-1">
-            <div
-              className={
-                "text-lg font-semibold tabular-nums " +
-                (it.hot ? "text-destructive" : "text-foreground")
-              }
-            >
-              {it.value}
-            </div>
-            <div className="truncate text-[10px] uppercase tracking-widest text-muted-foreground">
-              {it.label}
-            </div>
-          </div>
-          <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
-        </Link>
-      ))}
     </div>
   );
 }

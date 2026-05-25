@@ -4,8 +4,16 @@
  * Sprint 45 — kinetic number for Vivid stat cards.
  *
  * Counts up from 0 (or from `from`) to `value` over `durationMs`,
- * easing with mt-out. Re-runs whenever `value` changes so live
- * updates feel alive.
+ * easing with mt-out. Re-runs only when `value` *changes* — so live
+ * polling (which fires router.refresh every 30s) doesn't make every
+ * tile twitch when nothing changed.
+ *
+ * Sprint 55: short-circuit added. Previously every render with the
+ * same value still kicked off an rAF tween (visible as a count-up
+ * from current → same value due to React render timing on RSC tree
+ * refresh). We now bail out early when the next value equals the
+ * previously-targeted value, preserving the operator's eye for the
+ * tiles whose value actually changed.
  *
  * Reduced-motion: jumps straight to the final value.
  */
@@ -42,6 +50,10 @@ export function KineticNumber({
   const startRef = useRef<number | null>(null);
   const fromRef = useRef<number>(from ?? 0);
   const reducedRef = useRef<boolean>(false);
+  // Track the last value we *targeted* for an animation. When the
+  // parent re-renders with the same number (e.g. polling RSC refresh
+  // with no underlying delta), we bail.
+  const lastTargetRef = useRef<number | null>(null);
 
   useEffect(() => {
     reducedRef.current = window.matchMedia(
@@ -52,8 +64,14 @@ export function KineticNumber({
   useEffect(() => {
     if (reducedRef.current) {
       setDisplay(value);
+      lastTargetRef.current = value;
       return;
     }
+    // Short-circuit: nothing changed since last tween, do nothing.
+    if (lastTargetRef.current === value) {
+      return;
+    }
+    lastTargetRef.current = value;
     fromRef.current = display;
     startRef.current = null;
     let raf = 0;
