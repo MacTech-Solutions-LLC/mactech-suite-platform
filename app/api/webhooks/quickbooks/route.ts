@@ -20,6 +20,7 @@ import {
   verifyQuickbooksSignature,
   type QboWebhookPayload,
 } from "@/lib/integrations/quickbooks/webhook";
+import { processEventById } from "@/lib/services/qbo-event-processor";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
   const payload = (safeParseJson(rawBody) ?? {}) as QboWebhookPayload;
   const { realmId, eventType } = summarizeWebhookPayload(payload);
 
-  await prisma.quickbooksWebhookEvent.create({
+  const event = await prisma.quickbooksWebhookEvent.create({
     data: {
       signatureVerified: true,
       status: "received",
@@ -68,6 +69,13 @@ export async function POST(request: NextRequest) {
       payloadJson: payload as object,
       rawBody,
     },
+  });
+
+  // Fire the handler inline so the common case (Payment → provision)
+  // completes inside Intuit's delivery window. Failures persist on the
+  // event row and are retried by the sweep job.
+  void processEventById(event.id).catch(() => {
+    /* logged inside processEventById */
   });
 
   return NextResponse.json({ ok: true });

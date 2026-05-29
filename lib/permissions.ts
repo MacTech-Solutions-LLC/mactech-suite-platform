@@ -76,13 +76,17 @@ export const PLATFORM_PERMISSIONS = {
   AGENTS_APPROVE: "platform:agents:approve",
   AGENTS_MANAGE: "platform:agents:manage",
 
-  // ── Commerce + Billing ──────────────────────────────────────────────────
-  // Packages (the product catalog) and the QuickBooks integration that
-  // backs checkout + recurring billing. Read access to /admin/packages
-  // is granted via PACKAGES_VIEW; CRUD via PACKAGES_MANAGE. QBO connection
-  // setup + token rotation requires QUICKBOOKS_MANAGE.
+  // ── Commercial Operations ───────────────────────────────────────────────
+  // The hub surface for the buyer journey: catalog (Packages),
+  // transactions (Orders), recurring billing (Subscriptions), and the
+  // QBO integration that powers it. View permissions are wide (support
+  // + auditor see these); MANAGE is narrower.
   PACKAGES_VIEW: "platform:packages:view",
   PACKAGES_MANAGE: "platform:packages:manage",
+  ORDERS_VIEW: "platform:orders:view",
+  ORDERS_MANAGE: "platform:orders:manage",
+  SUBSCRIPTIONS_VIEW: "platform:subscriptions:view",
+  SUBSCRIPTIONS_MANAGE: "platform:subscriptions:manage",
   QUICKBOOKS_MANAGE: "platform:quickbooks:manage",
 } as const;
 
@@ -158,11 +162,15 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, PlatformPermission[
     PLATFORM_PERMISSIONS.AGENTS_VIEW,
     PLATFORM_PERMISSIONS.AGENTS_CREATE,
     PLATFORM_PERMISSIONS.AGENTS_APPROVE,
-    // Commerce: admins can manage the catalog + see QBO connection.
+    // Commercial Operations: admins manage catalog + orders + subs.
     // QBO mutate (reconnect / disconnect) is super-admin only via
     // Object.values mapping above.
     PLATFORM_PERMISSIONS.PACKAGES_VIEW,
     PLATFORM_PERMISSIONS.PACKAGES_MANAGE,
+    PLATFORM_PERMISSIONS.ORDERS_VIEW,
+    PLATFORM_PERMISSIONS.ORDERS_MANAGE,
+    PLATFORM_PERMISSIONS.SUBSCRIPTIONS_VIEW,
+    PLATFORM_PERMISSIONS.SUBSCRIPTIONS_MANAGE,
   ],
   mactech_support: [
     PLATFORM_PERMISSIONS.DASHBOARD_VIEW,
@@ -182,6 +190,8 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, PlatformPermission[
     // triage and needs to see what an admin asked the agent to do.
     PLATFORM_PERMISSIONS.AGENTS_VIEW,
     PLATFORM_PERMISSIONS.PACKAGES_VIEW,
+    PLATFORM_PERMISSIONS.ORDERS_VIEW,
+    PLATFORM_PERMISSIONS.SUBSCRIPTIONS_VIEW,
   ],
   mactech_auditor: [
     PLATFORM_PERMISSIONS.DASHBOARD_VIEW,

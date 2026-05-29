@@ -147,6 +147,18 @@ const RawEnvSchema = z.object({
    *  encrypts QBO access + refresh tokens at rest. Generate with
    *  `openssl rand -base64 32`. Rotate by re-running the OAuth flow. */
   QBO_ENCRYPTION_KEY: z.string().optional(),
+
+  // ── Commercial Operations (marketing-site → Hub → QBO → provisioning) ──
+  /** Shared HMAC secret the marketing site uses to sign POSTs to
+   *  /api/checkout/sessions and /api/public/intake. The header
+   *  X-Mactech-Signature is sha256(secret + raw body). Without this,
+   *  the endpoints refuse every request — never a wide-open public API. */
+  MARKETING_SITE_HMAC_SECRET: z.string().optional(),
+  /** Clerk user ID of the bot/service account that gets attributed as
+   *  the creator of auto-provisioned Clerk orgs and the inviter on
+   *  customer invitations. Typically a MacTech super admin's clerkUserId.
+   *  Required for the post-payment provisioning flow. */
+  SYSTEM_PROVISIONER_CLERK_USER_ID: z.string().optional(),
 });
 
 const parsed = RawEnvSchema.safeParse(process.env);
@@ -218,6 +230,16 @@ export function quickbooksOauthConfigured(): boolean {
 /** True when inbound QBO webhook signatures can be verified. */
 export function quickbooksWebhookConfigured(): boolean {
   return Boolean(env.QBO_WEBHOOK_VERIFIER_TOKEN);
+}
+
+/** True when the marketing-site public APIs can verify caller signatures. */
+export function marketingSiteHmacConfigured(): boolean {
+  return Boolean(env.MARKETING_SITE_HMAC_SECRET);
+}
+
+/** True when auto-provisioning has a Clerk creator/inviter identity. */
+export function systemProvisionerConfigured(): boolean {
+  return Boolean(env.SYSTEM_PROVISIONER_CLERK_USER_ID);
 }
 
 export function envHealth(): Array<{ key: string; ok: boolean; required: boolean }> {

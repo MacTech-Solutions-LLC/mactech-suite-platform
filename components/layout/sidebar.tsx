@@ -30,6 +30,8 @@ import {
   Clock,
   ShoppingBag,
   Receipt,
+  ReceiptText,
+  Repeat,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -114,9 +116,11 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     ],
   },
   {
-    group: "Commerce",
+    group: "Commercial Operations",
     items: [
       { href: "/admin/packages", label: "Packages", icon: ShoppingBag },
+      { href: "/admin/orders", label: "Orders", icon: ReceiptText },
+      { href: "/admin/subscriptions", label: "Subscriptions", icon: Repeat },
       { href: "/admin/quickbooks", label: "QuickBooks", icon: Receipt },
     ],
   },

@@ -25,6 +25,13 @@ const isPublicRoute = createRouteMatcher([
   // against QBO_WEBHOOK_VERIFIER_TOKEN (X-Intuit-Signature header)
   // inside the route. Skipping Clerk auth so Intuit's POSTs reach us.
   "/api/webhooks/quickbooks",
+  // Marketing-site checkout API — verified via HMAC-SHA256 against
+  // MARKETING_SITE_HMAC_SECRET (X-Mactech-Signature header) inside
+  // the route. Anonymous buyers reach us through the marketing site.
+  "/api/checkout/(.*)",
+  // Cron sweep endpoints — auth via CRON_SECRET bearer/query secret
+  // inside the route.
+  "/api/cron/(.*)",
   "/api/audit/ingest",
   "/api/v1/(.*)",
 ]);

@@ -98,3 +98,255 @@ export async function fetchCompanyInfo(): Promise<QboResult<QboCompanyInfo>> {
     path: `/companyinfo/${connection.realmId}`,
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Commerce helpers — Customer, Item, Invoice, RecurringTransaction
+//
+// Every helper returns QboResult<T>. Callers branch on ok and never throw.
+// All POSTs use QBO's "sparse update" off-pattern: full object on create.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type QboCustomer = {
+  Id: string;
+  DisplayName: string;
+  PrimaryEmailAddr?: { Address: string };
+  CompanyName?: string;
+  SyncToken: string;
+};
+
+export type QboItem = {
+  Id: string;
+  Name: string;
+  Type: "Service" | "Inventory" | "NonInventory";
+  UnitPrice?: number;
+  IncomeAccountRef?: { value: string; name?: string };
+  SyncToken: string;
+};
+
+export type QboInvoice = {
+  Id: string;
+  DocNumber?: string;
+  TotalAmt: number;
+  Balance: number;
+  CustomerRef: { value: string };
+  SyncToken: string;
+};
+
+/** Find a Customer by exact PrimaryEmailAddr match. Null if not found. */
+export async function findCustomerByEmail(
+  email: string,
+): Promise<QboResult<QboCustomer | null>> {
+  const safe = email.replace(/'/g, "\\'");
+  const query = `SELECT * FROM Customer WHERE PrimaryEmailAddr = '${safe}' MAXRESULTS 1`;
+  const res = await qboFetch<{ QueryResponse: { Customer?: QboCustomer[] } }>({
+    path: "/query",
+    query: { query },
+  });
+  if (!res.ok) return res;
+  const customer = res.data.QueryResponse.Customer?.[0] ?? null;
+  return { ok: true, data: customer };
+}
+
+export async function createCustomer(input: {
+  email: string;
+  displayName: string;
+  companyName?: string | null;
+}): Promise<QboResult<QboCustomer>> {
+  const body: Record<string, unknown> = {
+    DisplayName: input.displayName,
+    PrimaryEmailAddr: { Address: input.email },
+  };
+  if (input.companyName) body.CompanyName = input.companyName;
+  const res = await qboFetch<{ Customer: QboCustomer }>({
+    method: "POST",
+    path: "/customer",
+    body,
+  });
+  if (!res.ok) return res;
+  return { ok: true, data: res.data.Customer };
+}
+
+/** Find-or-create idempotently. */
+export async function findOrCreateCustomer(input: {
+  email: string;
+  displayName: string;
+  companyName?: string | null;
+}): Promise<QboResult<QboCustomer>> {
+  const existing = await findCustomerByEmail(input.email);
+  if (existing.ok && existing.data) return { ok: true, data: existing.data };
+  if (!existing.ok && existing.status !== 0) return existing;
+  return createCustomer(input);
+}
+
+/** Find an Item by exact Name. */
+export async function findItemByName(name: string): Promise<QboResult<QboItem | null>> {
+  const safe = name.replace(/'/g, "\\'");
+  const query = `SELECT * FROM Item WHERE Name = '${safe}' MAXRESULTS 1`;
+  const res = await qboFetch<{ QueryResponse: { Item?: QboItem[] } }>({
+    path: "/query",
+    query: { query },
+  });
+  if (!res.ok) return res;
+  const item = res.data.QueryResponse.Item?.[0] ?? null;
+  return { ok: true, data: item };
+}
+
+/** Sync a MacSuite Package to a QBO Item. Idempotent on Name. Requires the
+ *  QBO company to have a default income account on file (it always will). */
+export async function upsertItem(input: {
+  name: string;
+  unitPriceCents: number;
+  description?: string | null;
+}): Promise<QboResult<QboItem>> {
+  const existing = await findItemByName(input.name);
+  if (!existing.ok && existing.status !== 0) return existing;
+  if (existing.ok && existing.data) return { ok: true, data: existing.data };
+
+  // Need an income account to create the Item. Pull the first sales-income
+  // account QBO exposes.
+  const incomeRes = await qboFetch<{
+    QueryResponse: { Account?: Array<{ Id: string; Name: string }> };
+  }>({
+    path: "/query",
+    query: {
+      query: "SELECT * FROM Account WHERE AccountType = 'Income' MAXRESULTS 1",
+    },
+  });
+  if (!incomeRes.ok) return incomeRes;
+  const income = incomeRes.data.QueryResponse.Account?.[0];
+  if (!income) {
+    return { ok: false, status: 500, error: "no Income account in QBO" };
+  }
+
+  const body: Record<string, unknown> = {
+    Name: input.name,
+    Type: "Service",
+    UnitPrice: input.unitPriceCents / 100,
+    IncomeAccountRef: { value: income.Id, name: income.Name },
+  };
+  if (input.description) body.Description = input.description;
+
+  const res = await qboFetch<{ Item: QboItem }>({
+    method: "POST",
+    path: "/item",
+    body,
+  });
+  if (!res.ok) return res;
+  return { ok: true, data: res.data.Item };
+}
+
+export async function createInvoice(input: {
+  customerId: string;
+  itemId: string;
+  itemName: string;
+  unitPriceCents: number;
+  quantity?: number;
+  buyerEmail: string;
+  /** True → QBO sends its own "Invoice / Pay Now" email to the buyer
+   *  with the hosted payment link. */
+  emailInvoice?: boolean;
+}): Promise<QboResult<QboInvoice>> {
+  const body: Record<string, unknown> = {
+    CustomerRef: { value: input.customerId },
+    Line: [
+      {
+        DetailType: "SalesItemLineDetail",
+        Amount: (input.unitPriceCents / 100) * (input.quantity ?? 1),
+        SalesItemLineDetail: {
+          ItemRef: { value: input.itemId, name: input.itemName },
+          Qty: input.quantity ?? 1,
+          UnitPrice: input.unitPriceCents / 100,
+        },
+      },
+    ],
+    BillEmail: { Address: input.buyerEmail },
+    AllowOnlineCreditCardPayment: true,
+    AllowOnlineACHPayment: true,
+  };
+  const res = await qboFetch<{ Invoice: QboInvoice }>({
+    method: "POST",
+    path: "/invoice",
+    body,
+    query: input.emailInvoice ? { include: "invoiceLink" } : undefined,
+  });
+  if (!res.ok) return res;
+  return { ok: true, data: res.data.Invoice };
+}
+
+/** QBO doesn't return a stable "pay this invoice" URL via the API. The
+ *  standard approach is to email the customer the invoice (QBO renders
+ *  its own hosted payment page and sends the link). We trigger that via
+ *  sendInvoice. */
+export async function sendInvoice(invoiceId: string, email: string): Promise<QboResult<true>> {
+  const res = await qboFetch<unknown>({
+    method: "POST",
+    path: `/invoice/${invoiceId}/send`,
+    query: { sendTo: email },
+  });
+  if (!res.ok) return res;
+  return { ok: true, data: true };
+}
+
+export type QboRecurringTransaction = {
+  Id: string;
+  Name: string;
+  SyncToken: string;
+};
+
+/** Recurring template that issues a fresh Invoice on every cycle.
+ *  Used for monthly/annual subscriptions. */
+export async function createRecurringInvoice(input: {
+  name: string;
+  customerId: string;
+  itemId: string;
+  itemName: string;
+  unitPriceCents: number;
+  buyerEmail: string;
+  intervalType: "Daily" | "Weekly" | "Monthly" | "Yearly";
+  numInterval: number;
+}): Promise<QboResult<QboRecurringTransaction>> {
+  const body = {
+    RecurringTransaction: [
+      {
+        Invoice: {
+          Name: input.name,
+          RecurringInfo: {
+            Name: input.name,
+            RecurType: "Automated",
+            Active: true,
+            ScheduleInfo: {
+              IntervalType: input.intervalType,
+              NumInterval: input.numInterval,
+              StartDate: new Date().toISOString().split("T")[0],
+            },
+          },
+          CustomerRef: { value: input.customerId },
+          Line: [
+            {
+              DetailType: "SalesItemLineDetail",
+              Amount: input.unitPriceCents / 100,
+              SalesItemLineDetail: {
+                ItemRef: { value: input.itemId, name: input.itemName },
+                Qty: 1,
+                UnitPrice: input.unitPriceCents / 100,
+              },
+            },
+          ],
+          BillEmail: { Address: input.buyerEmail },
+          AllowOnlineCreditCardPayment: true,
+          AllowOnlineACHPayment: true,
+        },
+      },
+    ],
+  };
+
+  const res = await qboFetch<{ RecurringTransaction: QboRecurringTransaction[] }>({
+    method: "POST",
+    path: "/recurringtransaction",
+    body,
+  });
+  if (!res.ok) return res;
+  const rt = res.data.RecurringTransaction[0];
+  if (!rt) return { ok: false, status: 500, error: "QBO returned empty RecurringTransaction array" };
+  return { ok: true, data: rt };
+}
