@@ -21,6 +21,10 @@ const isPublicRoute = createRouteMatcher([
   // Railway webhook deliveries — verified via HMAC OR query secret
   // against RAILWAY_WEBHOOK_SECRET inside the route.
   "/api/webhooks/railway",
+  // QuickBooks Online webhook deliveries — verified via HMAC-SHA256
+  // against QBO_WEBHOOK_VERIFIER_TOKEN (X-Intuit-Signature header)
+  // inside the route. Skipping Clerk auth so Intuit's POSTs reach us.
+  "/api/webhooks/quickbooks",
   "/api/audit/ingest",
   "/api/v1/(.*)",
 ]);

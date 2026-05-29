@@ -75,6 +75,15 @@ export const PLATFORM_PERMISSIONS = {
   AGENTS_CREATE: "platform:agents:create",
   AGENTS_APPROVE: "platform:agents:approve",
   AGENTS_MANAGE: "platform:agents:manage",
+
+  // ── Commerce + Billing ──────────────────────────────────────────────────
+  // Packages (the product catalog) and the QuickBooks integration that
+  // backs checkout + recurring billing. Read access to /admin/packages
+  // is granted via PACKAGES_VIEW; CRUD via PACKAGES_MANAGE. QBO connection
+  // setup + token rotation requires QUICKBOOKS_MANAGE.
+  PACKAGES_VIEW: "platform:packages:view",
+  PACKAGES_MANAGE: "platform:packages:manage",
+  QUICKBOOKS_MANAGE: "platform:quickbooks:manage",
 } as const;
 
 export type PlatformPermission =
@@ -149,6 +158,11 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, PlatformPermission[
     PLATFORM_PERMISSIONS.AGENTS_VIEW,
     PLATFORM_PERMISSIONS.AGENTS_CREATE,
     PLATFORM_PERMISSIONS.AGENTS_APPROVE,
+    // Commerce: admins can manage the catalog + see QBO connection.
+    // QBO mutate (reconnect / disconnect) is super-admin only via
+    // Object.values mapping above.
+    PLATFORM_PERMISSIONS.PACKAGES_VIEW,
+    PLATFORM_PERMISSIONS.PACKAGES_MANAGE,
   ],
   mactech_support: [
     PLATFORM_PERMISSIONS.DASHBOARD_VIEW,
@@ -167,6 +181,7 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, PlatformPermission[
     // Read-only visibility into the agent run history; support owns
     // triage and needs to see what an admin asked the agent to do.
     PLATFORM_PERMISSIONS.AGENTS_VIEW,
+    PLATFORM_PERMISSIONS.PACKAGES_VIEW,
   ],
   mactech_auditor: [
     PLATFORM_PERMISSIONS.DASHBOARD_VIEW,

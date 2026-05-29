@@ -501,6 +501,8 @@ model CustomerOrganization {
   auditLogs            AuditLog[]
   securityEvents       SecurityEvent[]
   webhookSubscriptions WebhookSubscription[]
+  orders               Order[]
+  subscriptions        Subscription[]
 
   @@index([clerkOrgId])
   @@index([slug])
@@ -1658,4 +1660,241 @@ model AgentApproval {
   @@index([agentRunId])
   @@index([approverClerkUserId])
   @@index([decision])
+}
+
+// ============================================================================
+// COMMERCE + QUICKBOOKS (Phase 1)
+//
+// Marketing site (mactechsolutionsllc.com) sells Packages. Checkout hits
+// MacSuite, which creates a QBO Customer + Invoice (or RecurringTransaction
+// for subscriptions). Buyer pays via QuickBooks. QBO webhook fires
+// payment.completed -> Clerk org + CustomerOrganization + Subscription +
+// entitlements + invite (handled in Phase 2).
+// ============================================================================
+
+enum BillingCycle {
+  one_time
+  monthly
+  quarterly
+  annually
+}
+
+enum PackageStatus {
+  draft
+  active
+  archived
+}
+
+enum OrderStatus {
+  /// Checkout session created; QBO invoice not yet issued.
+  pending
+  /// Invoice issued, awaiting buyer payment.
+  payment_pending
+  /// Payment received; org not yet provisioned.
+  paid
+  /// Clerk org + CustomerOrganization + entitlements all applied.
+  provisioned
+  failed
+  refunded
+  cancelled
+}
+
+enum SubscriptionStatus {
+  active
+  past_due
+  cancelled
+  paused
+}
+
+enum PaymentStatus {
+  pending
+  succeeded
+  failed
+  refunded
+}
+
+enum QuickbooksEnvironment {
+  sandbox
+  production
+}
+
+enum QuickbooksWebhookStatus {
+  received
+  processing
+  processed
+  failed
+  /// Event type not relevant to our domain (e.g. CompanyInfo change).
+  skipped
+}
+
+model Package {
+  id              String           @id @default(cuid())
+  /// Stable external identifier used in checkout URLs and analytics.
+  sku             String           @unique
+  name            String
+  description     String?
+  priceCents      Int
+  currency        String           @default("USD")
+  billingCycle    BillingCycle
+  /// QBO Item ID once this package has been synced to QuickBooks.
+  qboItemId       String?          @unique
+  /// Tier applied to the buyer's CustomerOrganization on provisioning.
+  entitlementTier SubscriptionTier @default(starter)
+  /// AppRegistry.appKey values enabled for buyers of this package.
+  includedAppKeys String[]         @default([])
+  status          PackageStatus    @default(draft)
+  metadataJson    Json?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  orders        Order[]
+  subscriptions Subscription[]
+
+  @@index([status])
+  @@index([billingCycle])
+}
+
+model Order {
+  id           String      @id @default(cuid())
+  buyerEmail   String
+  buyerName    String?
+  buyerCompany String?
+  packageId    String
+  status       OrderStatus @default(pending)
+  totalCents   Int
+  currency     String      @default("USD")
+
+  /// QBO Customer ID for the buyer's company (created on checkout).
+  qboCustomerId       String?
+  /// QBO Invoice ID for the one-time charge.
+  qboInvoiceId        String? @unique
+  /// Human-readable invoice number QBO assigns (DocNumber).
+  qboInvoiceDocNumber String?
+  /// QBO-hosted invoice payment link returned to the marketing site.
+  qboPaymentLinkUrl   String?
+
+  /// Set once provisioning succeeds; nullable for the window between
+  /// payment-received and org-created.
+  customerOrganizationId String?
+  metadataJson           Json?
+
+  placedAt      DateTime?
+  paidAt        DateTime?
+  provisionedAt DateTime?
+  failedAt      DateTime?
+  failureReason String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  package              Package               @relation(fields: [packageId], references: [id])
+  customerOrganization CustomerOrganization? @relation(fields: [customerOrganizationId], references: [id])
+  payments             Payment[]
+  subscription         Subscription?
+
+  @@index([buyerEmail])
+  @@index([status])
+  @@index([packageId])
+  @@index([customerOrganizationId])
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  customerOrganizationId String
+  packageId              String
+  /// The original Order that opened the subscription. Null on subscriptions
+  /// imported from QBO without a corresponding MacSuite checkout.
+  orderId                String?            @unique
+  status                 SubscriptionStatus @default(active)
+  /// QBO RecurringTransaction template ID that issues renewal invoices.
+  qboRecurringTransactionId String?         @unique
+  currentPeriodStart        DateTime
+  currentPeriodEnd          DateTime
+  cancelAtPeriodEnd         Boolean         @default(false)
+  cancelledAt               DateTime?
+  metadataJson              Json?
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
+
+  customerOrganization CustomerOrganization @relation(fields: [customerOrganizationId], references: [id], onDelete: Cascade)
+  package              Package              @relation(fields: [packageId], references: [id])
+  order                Order?               @relation(fields: [orderId], references: [id])
+
+  @@index([customerOrganizationId])
+  @@index([packageId])
+  @@index([status])
+  @@index([currentPeriodEnd])
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  orderId       String
+  /// QBO Payment ID. Unique once the QBO webhook reports the captured
+  /// payment; allows idempotent upsert across retries.
+  qboPaymentId  String?       @unique
+  amountCents   Int
+  currency      String        @default("USD")
+  status        PaymentStatus @default(pending)
+  capturedAt    DateTime?
+  failureReason String?
+  metadataJson  Json?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([status])
+}
+
+/// Stores the OAuth tokens for the single QBO company MacSuite bills
+/// through. We don't multiplex across QBO realms — the admin connects
+/// MacTech's own company once and every customer purchase routes through
+/// it. Tokens are encrypted at rest with QBO_ENCRYPTION_KEY (AES-256-GCM).
+model QuickbooksConnection {
+  id                    String                @id @default(cuid())
+  realmId               String                @unique
+  environment           QuickbooksEnvironment @default(sandbox)
+  /// AES-256-GCM ciphertext of the QBO OAuth access token.
+  accessTokenCipher     String
+  /// AES-256-GCM ciphertext of the QBO OAuth refresh token.
+  refreshTokenCipher    String
+  accessTokenExpiresAt  DateTime
+  refreshTokenExpiresAt DateTime
+  scope                 String?
+  companyName           String?
+  /// Clerk user ID of whoever last completed the OAuth handshake. Audit-only.
+  connectedByClerkUserId String?
+  lastRefreshedAt        DateTime?
+  lastErrorMessage       String?
+  isActive               Boolean   @default(true)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@index([isActive])
+  @@index([environment])
+}
+
+/// Append-only log of every QBO webhook delivery. Used for replay
+/// protection (intuitEventId unique), audit, and post-mortem debugging.
+/// The handler is intentionally write-then-process so a crash mid-handler
+/// never loses the payload.
+model QuickbooksWebhookEvent {
+  id                String                  @id @default(cuid())
+  /// QBO doesn't always include a stable event ID in the payload, so this
+  /// is best-effort. When present we use it for idempotency.
+  intuitEventId     String?                 @unique
+  realmId           String?
+  eventType         String?
+  signatureVerified Boolean                 @default(false)
+  status            QuickbooksWebhookStatus @default(received)
+  payloadJson       Json
+  /// Raw request body kept for signature re-verification + debugging.
+  rawBody           String?                 @db.Text
+  errorMessage      String?
+  receivedAt        DateTime                @default(now())
+  processedAt       DateTime?
+
+  @@index([status])
+  @@index([receivedAt])
+  @@index([realmId])
 }

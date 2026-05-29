@@ -128,6 +128,25 @@ const RawEnvSchema = z.object({
     .union([z.literal("true"), z.literal("false")])
     .optional()
     .transform((v) => v === "true"),
+
+  // ── QuickBooks Online (commerce + recurring billing) ───────────────────
+  /** OAuth 2.0 client credentials issued by Intuit for the MacTech app. */
+  QBO_CLIENT_ID: z.string().optional(),
+  QBO_CLIENT_SECRET: z.string().optional(),
+  /** Absolute URL Intuit redirects back to after the consent screen.
+   *  Must match exactly what's registered in the Intuit developer console
+   *  (e.g. https://suite.mactechsolutionsllc.com/api/integrations/quickbooks/callback). */
+  QBO_REDIRECT_URI: z.string().url().optional(),
+  /** Webhook verifier token from the Intuit app's Webhooks tab. Used to
+   *  validate the X-Intuit-Signature HMAC on inbound webhook POSTs. */
+  QBO_WEBHOOK_VERIFIER_TOKEN: z.string().optional(),
+  /** Which Intuit environment we point at. Sandbox uses sandbox-quickbooks.api.intuit.com
+   *  for API calls and Intuit's sandbox OAuth host; production uses the live hosts. */
+  QBO_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+  /** 32-byte key (hex, base64, or raw) used as the AES-256-GCM key that
+   *  encrypts QBO access + refresh tokens at rest. Generate with
+   *  `openssl rand -base64 32`. Rotate by re-running the OAuth flow. */
+  QBO_ENCRYPTION_KEY: z.string().optional(),
 });
 
 const parsed = RawEnvSchema.safeParse(process.env);
@@ -186,6 +205,21 @@ export function crossRepoAgentConfigured(): boolean {
   return Boolean(env.ENABLE_CROSS_REPO_AGENT && env.GITHUB_TOKEN);
 }
 
+/** True when the QBO OAuth handshake can be initiated end-to-end. */
+export function quickbooksOauthConfigured(): boolean {
+  return Boolean(
+    env.QBO_CLIENT_ID &&
+      env.QBO_CLIENT_SECRET &&
+      env.QBO_REDIRECT_URI &&
+      env.QBO_ENCRYPTION_KEY,
+  );
+}
+
+/** True when inbound QBO webhook signatures can be verified. */
+export function quickbooksWebhookConfigured(): boolean {
+  return Boolean(env.QBO_WEBHOOK_VERIFIER_TOKEN);
+}
+
 export function envHealth(): Array<{ key: string; ok: boolean; required: boolean }> {
   return [
     { key: "DATABASE_URL", ok: Boolean(env.DATABASE_URL), required: true },
@@ -201,5 +235,14 @@ export function envHealth(): Array<{ key: string; ok: boolean; required: boolean
     { key: "COMMAND_CENTER_CRON_SECRET", ok: Boolean(env.COMMAND_CENTER_CRON_SECRET), required: false },
     { key: "GITHUB_TOKEN", ok: Boolean(env.GITHUB_TOKEN), required: false },
     { key: "RAILWAY_API_TOKEN", ok: Boolean(env.RAILWAY_API_TOKEN), required: false },
+    { key: "QBO_CLIENT_ID", ok: Boolean(env.QBO_CLIENT_ID), required: false },
+    { key: "QBO_CLIENT_SECRET", ok: Boolean(env.QBO_CLIENT_SECRET), required: false },
+    { key: "QBO_REDIRECT_URI", ok: Boolean(env.QBO_REDIRECT_URI), required: false },
+    {
+      key: "QBO_WEBHOOK_VERIFIER_TOKEN",
+      ok: Boolean(env.QBO_WEBHOOK_VERIFIER_TOKEN),
+      required: false,
+    },
+    { key: "QBO_ENCRYPTION_KEY", ok: Boolean(env.QBO_ENCRYPTION_KEY), required: false },
   ];
 }

@@ -28,6 +28,8 @@ import {
   Cloud,
   Bot,
   Clock,
+  ShoppingBag,
+  Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -109,6 +111,13 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     items: [
       { href: "/admin/audit-logs", label: "Central Audit Logs", icon: ScrollText },
       { href: "/admin/security-events", label: "Security Events", icon: Siren, badgeKey: "securityEventsOpen", badgeTone: "destructive" },
+    ],
+  },
+  {
+    group: "Commerce",
+    items: [
+      { href: "/admin/packages", label: "Packages", icon: ShoppingBag },
+      { href: "/admin/quickbooks", label: "QuickBooks", icon: Receipt },
     ],
   },
   {
