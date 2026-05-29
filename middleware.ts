@@ -32,6 +32,8 @@ const isPublicRoute = createRouteMatcher([
   // Cron sweep endpoints — auth via CRON_SECRET bearer/query secret
   // inside the route.
   "/api/cron/(.*)",
+  // Public read-only endpoints (catalog, etc.) — no auth, CDN-cached.
+  "/api/public/(.*)",
   "/api/audit/ingest",
   "/api/v1/(.*)",
 ]);
