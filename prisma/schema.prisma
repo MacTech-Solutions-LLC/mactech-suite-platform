@@ -523,6 +523,29 @@ model CustomerOrganization {
   @@index([customerType])
 }
 
+/// Suite-wide object reference read model used by canonical Hub audit rows.
+/// Apps may keep richer local object history, but audit rows only point at
+/// Hub-resolved object references when cross-app traceability is needed.
+model SuiteObjectReference {
+  id              String   @id @default(cuid())
+  sourceAppKey    String
+  objectType      String
+  objectId        String
+  objectVersion   String?
+  objectHash      String?
+  displayName     String?
+  metadataJson    Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  auditLogs AuditLog[]
+
+  @@unique([sourceAppKey, objectType, objectId, objectVersion])
+  @@index([sourceAppKey])
+  @@index([objectType])
+  @@index([objectId])
+}
+
 // AppRegistry is the canonical source of truth for every MacTech app.
 // Suite is the product; Command Center is the flagship capability —
 // the operational fields below let `/command-center` answer "which apps
@@ -665,37 +688,89 @@ model OrgUserAccess {
 
 model AuditLog {
   id                     String        @id @default(cuid())
+  sequenceNumber         Int           @unique @default(autoincrement())
+  previousHash           String
+  currentHash            String        @unique
+  canonicalPayloadHash   String
   timestamp              DateTime      @default(now())
+  actorHubUserId         String?
   actorClerkUserId       String?
   actorEmail             String?
   actorUserProfileId     String?
+  actorServiceId         String?
+  organizationId         String?
   customerOrganizationId String?
+  tenantOrgId            String?
   appRegistryId          String?
+  sourceAppKey           String?
   eventType              String
   eventCategory          AuditCategory
   severity               AuditSeverity @default(info)
   action                 String
+  objectType             String?
+  objectId               String?
+  objectVersion          String?
+  objectHash             String?
   resourceType           String?
   resourceId             String?
+  suiteObjectReferenceId String?
   ipAddress              String?
   userAgent              String?
   requestId              String?
+  beforeJson             Json?
+  afterJson              Json?
   metadataJson           Json?
+  signature              String?
+  exportBatchId          String?
   createdAt              DateTime      @default(now())
 
   actor                UserProfile?          @relation("AuditActor", fields: [actorUserProfileId], references: [id], onDelete: SetNull)
   customerOrganization CustomerOrganization? @relation(fields: [customerOrganizationId], references: [id], onDelete: SetNull)
   app                  AppRegistry?          @relation(fields: [appRegistryId], references: [id], onDelete: SetNull)
+  actorService         ServiceIdentity?      @relation("AuditServiceActor", fields: [actorServiceId], references: [id], onDelete: SetNull)
+  suiteObjectReference SuiteObjectReference? @relation(fields: [suiteObjectReferenceId], references: [id], onDelete: SetNull)
 
   @@index([timestamp])
+  @@index([sequenceNumber])
+  @@index([currentHash])
+  @@index([previousHash])
   @@index([eventCategory])
   @@index([severity])
   @@index([eventType])
+  @@index([sourceAppKey])
+  @@index([organizationId])
+  @@index([tenantOrgId])
   @@index([customerOrganizationId])
+  @@index([actorHubUserId])
   @@index([actorUserProfileId])
+  @@index([actorServiceId])
   @@index([actorClerkUserId])
   @@index([appRegistryId])
+  @@index([suiteObjectReferenceId])
+  @@index([exportBatchId])
   @@index([customerOrganizationId, timestamp])
+}
+
+model AuditExportManifest {
+  id              String   @id @default(cuid())
+  exportBatchId   String   @unique
+  startDate       DateTime?
+  endDate         DateTime?
+  appFiltersJson  Json?
+  firstSequence   Int?
+  lastSequence    Int?
+  firstHash       String?
+  lastHash        String?
+  eventCount      Int
+  exportHash      String
+  signerIdentity  String
+  signature       String
+  createdAt       DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([firstSequence])
+  @@index([lastSequence])
+  @@index([exportHash])
 }
 
 model SecurityEvent {
@@ -784,6 +859,8 @@ model ServiceIdentity {
   authorityVersion    Int                   @default(1)
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
+
+  auditLogs AuditLog[] @relation("AuditServiceActor")
 
   @@index([appKey])
   @@index([status])

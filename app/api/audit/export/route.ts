@@ -46,7 +46,11 @@ export async function GET(request: NextRequest) {
 
   const header = [
     "id",
+    "sequenceNumber",
     "timestamp",
+    "previousHash",
+    "currentHash",
+    "canonicalPayloadHash",
     "severity",
     "category",
     "eventType",
@@ -61,7 +65,11 @@ export async function GET(request: NextRequest) {
   const rows = items.map((row) =>
     [
       row.id,
+      String(row.sequenceNumber),
       row.timestamp.toISOString(),
+      row.previousHash,
+      row.currentHash,
+      row.canonicalPayloadHash,
       row.severity,
       row.eventCategory,
       row.eventType,

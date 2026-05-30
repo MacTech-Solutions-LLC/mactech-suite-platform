@@ -18,6 +18,7 @@ export {
 } from "./errors";
 export type {
   HubAuditEventInput,
+  HubAuditEventResult,
   HubAuthorityDecision,
   HubAuthorityRequest,
   HubAuthoritySnapshot,

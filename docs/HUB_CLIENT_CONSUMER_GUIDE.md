@@ -57,7 +57,7 @@ Use `snapshot.canonicalHubUserId`, `snapshot.canonicalOrganizationId`, `snapshot
 | tenant resolver | Use `snapshot.canonicalOrganizationId`; local tenant ids become read-model mappings only. |
 | entitlement checks | Use Hub `decision.allow` and `productEntitlementStatus`. |
 | app registry checks | Hub endpoint fails closed on missing/inactive/internal-only app rows. |
-| audit emitters | `emitHubAuditEvent()` to Hub `/api/audit/ingest`. |
+| audit emitters | `emitHubAuditEvent()` to Hub `/api/hub/audit/events`. |
 
 ## App Migration Steps
 
@@ -97,14 +97,19 @@ Compile-checked examples live in `packages/hub-client/examples/consumer-examples
 
 ```ts
 await hub.emitHubAuditEvent({
-  appKey: "proposal",
+  sourceAppKey: "proposal",
   eventType: "proposal.volume.updated",
   eventCategory: "system",
-  action: "Updated technical volume",
-  actorClerkUserId,
-  customerOrgId,
+  action: "proposal.volume.updated",
+  actorHubUserId: snapshot.canonicalHubUserId,
+  actorClerkUserId: snapshot.clerkUserId,
+  organizationId: snapshot.canonicalOrganizationId,
+  tenantOrgId: snapshot.canonicalOrganizationId,
+  objectType: "ProposalVolume",
+  objectId: volumeId,
   requestId,
+  metadata: { authorityHash: snapshot.cache.authorityHash },
 });
 ```
 
-Audit failures are explicit errors. Do not silently downgrade audit emission for compliance-sensitive routes.
+The call returns `{ id, sequenceNumber, currentHash }`. Audit failures are explicit errors. Do not silently downgrade audit emission for compliance-sensitive routes.

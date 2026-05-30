@@ -7,6 +7,8 @@
  */
 
 import { prisma } from "./db/prisma";
+import { appendInternalHubAuditEvent } from "@/lib/hub-audit";
+import { redactAuditMetadata } from "@/lib/hub-audit-core";
 import type {
   AuditCategory,
   AuditSeverity,
@@ -34,24 +36,31 @@ export interface WriteAuditLogInput {
 }
 
 export async function writeAuditLog(input: WriteAuditLogInput) {
-  return prisma.auditLog.create({
-    data: {
-      eventType: input.eventType,
-      eventCategory: input.eventCategory,
-      severity: input.severity ?? "info",
-      action: input.action,
-      actorClerkUserId: input.actorClerkUserId ?? null,
-      actorEmail: input.actorEmail ?? null,
-      actorUserProfileId: input.actorUserProfileId ?? null,
-      customerOrganizationId: input.customerOrganizationId ?? null,
-      appRegistryId: input.appRegistryId ?? null,
-      resourceType: input.resourceType ?? null,
-      resourceId: input.resourceId ?? null,
-      ipAddress: input.ipAddress ?? null,
-      userAgent: input.userAgent ?? null,
-      requestId: input.requestId ?? null,
-      metadataJson: redactMetadata(input.metadata ?? undefined),
-    },
+  const app = input.appRegistryId
+    ? await prisma.appRegistry.findUnique({
+        where: { id: input.appRegistryId },
+        select: { appKey: true },
+      })
+    : null;
+
+  return appendInternalHubAuditEvent({
+    sourceAppKey: app?.appKey ?? "hub",
+    eventType: input.eventType,
+    eventCategory: input.eventCategory,
+    severity: input.severity ?? "info",
+    action: input.action,
+    actorHubUserId: input.actorUserProfileId ?? null,
+    actorClerkUserId: input.actorClerkUserId ?? null,
+    actorEmail: input.actorEmail ?? null,
+    organizationId: input.customerOrganizationId ?? null,
+    tenantOrgId: input.customerOrganizationId ?? null,
+    appRegistryId: input.appRegistryId ?? null,
+    objectType: input.resourceType ?? null,
+    objectId: input.resourceId ?? null,
+    ipAddress: input.ipAddress ?? null,
+    userAgent: input.userAgent ?? null,
+    requestId: input.requestId ?? null,
+    metadataJson: input.metadata ?? null,
   });
 }
 
@@ -164,24 +173,7 @@ function buildAuditWhere(filters: AuditLogFilters): Prisma.AuditLogWhereInput {
  * (password, token, secret, api_key, authorization, cookie, ssn, dob)
  * is replaced with `[redacted]`. We never mutate the caller's object.
  */
-const SENSITIVE_KEY_RE = /(password|token|secret|api[_-]?key|authorization|cookie|ssn|dob)/i;
-
 export function redactMetadata(value: unknown): Prisma.InputJsonValue | undefined {
-  if (value === undefined) return undefined;
-  if (value === null) return undefined; // store no metadata rather than null
-  return _redact(value) as Prisma.InputJsonValue;
-}
-
-function _redact(value: unknown): unknown {
-  if (value === null || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map(_redact);
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    if (SENSITIVE_KEY_RE.test(k)) {
-      out[k] = "[redacted]";
-    } else {
-      out[k] = _redact(v);
-    }
-  }
-  return out;
+  if (value === undefined || value === null) return undefined;
+  return redactAuditMetadata(value) as Prisma.InputJsonValue;
 }

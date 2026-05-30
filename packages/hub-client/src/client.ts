@@ -7,6 +7,7 @@ import {
 import { assertSnapshotShape, verifyAuthoritySnapshot } from "./snapshot";
 import type {
   HubAuditEventInput,
+  HubAuditEventResult,
   HubAuthorityRequest,
   HubAuthoritySnapshot,
   HubClientConfig,
@@ -102,12 +103,14 @@ export async function requireHubAppAccess(
 export async function emitHubAuditEvent(
   config: HubClientConfig,
   event: HubAuditEventInput,
-): Promise<{ ok: true; id: string }> {
+): Promise<HubAuditEventResult> {
   const normalized = normalizeConfig(config);
-  const response = await hubFetch(normalized, "/api/audit/ingest", {
+  const response = await hubFetch(normalized, "/api/hub/audit/events", {
     method: "POST",
     body: JSON.stringify({
       ...event,
+      sourceAppKey: event.sourceAppKey ?? event.appKey ?? normalized.sourceAppKey,
+      appKey: event.appKey ?? event.sourceAppKey ?? normalized.sourceAppKey,
       requestId: event.requestId ?? normalized.requestId ?? null,
     }),
   });
@@ -115,10 +118,20 @@ export async function emitHubAuditEvent(
   if (!response.ok) {
     throw new HubUnavailableError(payload?.detail ?? payload?.error ?? "Hub audit emission failed.", response.status);
   }
-  if (!payload?.ok || typeof payload.id !== "string") {
+  if (
+    !payload?.ok ||
+    typeof payload.id !== "string" ||
+    typeof payload.sequenceNumber !== "number" ||
+    typeof payload.currentHash !== "string"
+  ) {
     throw new HubContractValidationError("Hub audit endpoint returned a malformed payload.");
   }
-  return { ok: true, id: payload.id };
+  return {
+    ok: true,
+    id: payload.id,
+    sequenceNumber: payload.sequenceNumber,
+    currentHash: payload.currentHash,
+  };
 }
 
 export async function resolveSuiteObjectRef(

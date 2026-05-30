@@ -113,3 +113,27 @@ npm run test
 npm run build:hub-client
 npm run lint
 ```
+
+Reconfirmed during Hub Audit Ingestion v1 on 2026-05-30:
+
+```bash
+npm install
+```
+
+failed with the same GitHub Packages `E401` for `@mactech-solutions-llc/onboard@0.2.0`. This continues to block full local `npm run typecheck` and `npm run build`; the audit-specific TypeScript errors found during implementation were fixed, and the remaining typecheck output is the missing dependency set listed above.
+
+## Hub Audit Ingestion v1 migration creation check
+
+GitHub tracking issue: https://github.com/MacTech-Solutions-LLC/mactech-suite-platform/issues/106
+
+Command:
+
+```bash
+$env:DATABASE_URL='postgresql://user:pass@localhost:5432/mactech_suite_placeholder'; npx prisma migrate dev --name hub-audit-ingestion-v1 --create-only
+```
+
+Result: failed.
+
+Summary: Prisma loaded the schema but could not reach a PostgreSQL database at `localhost:5432`; the command ended with a schema engine error. The migration SQL was created manually at `prisma/migrations/20260530120000_hub_audit_ingestion_v1/migration.sql` and includes the legacy `AuditLog` backfill plus PostgreSQL append-only trigger enforcement.
+
+Missing variable/permission/service: a reachable non-production PostgreSQL `DATABASE_URL` for Prisma migration dry-run checks.
