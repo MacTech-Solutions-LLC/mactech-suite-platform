@@ -605,7 +605,7 @@ async function seedLegacyApiKey() {
         "Pre-migration env-var key. Rotate every consumer onto a DB-issued key, then revoke this row.",
       keyHash: hash,
       keyPrefix: legacy.slice(0, 12),
-      scopes: ["audit_ingest", "org_read", "user_access_read", "app_authority_resolve"],
+      scopes: ["audit_ingest", "org_read", "user_access_read", "app_authority_resolve", "object_reference_write"],
       appKey: null,
       status: "active",
     },

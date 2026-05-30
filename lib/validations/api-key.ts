@@ -5,6 +5,7 @@ export const ApiKeyScopeEnum = z.enum([
   "org_read",
   "user_access_read",
   "app_authority_resolve",
+  "object_reference_write",
   "webhook_send",
 ]);
 

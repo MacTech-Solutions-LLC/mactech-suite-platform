@@ -1,5 +1,5 @@
 /**
- * Example client for submitting audit logs to the Identity Command Center
+ * Example client for submitting audit logs to Hub audit ingestion
  * from another MacTech app.
  *
  * Usage in a sibling app (CUI Vault, Evidence Engine, etc.):
@@ -28,7 +28,8 @@
  */
 
 export interface AuditIngestPayload {
-  appKey: string;
+  sourceAppKey: string;
+  appKey?: string;
   eventType: string;
   eventCategory:
     | "auth"
@@ -44,12 +45,22 @@ export interface AuditIngestPayload {
     | "system";
   severity?: "info" | "warning" | "critical";
   action: string;
+  actorHubUserId?: string;
   customerOrgId?: string;
+  organizationId?: string;
+  tenantOrgId?: string;
   customerOrgClerkId?: string;
   actorClerkUserId?: string;
   actorEmail?: string;
+  objectType?: string;
+  objectId?: string;
+  objectVersion?: string;
+  objectHash?: string;
+  suiteObjectReferenceId?: string;
   resourceType?: string;
   resourceId?: string;
+  beforeJson?: Record<string, unknown>;
+  afterJson?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   requestId?: string;
 }
@@ -64,12 +75,13 @@ export interface SendAuditLogOptions {
 
 export async function sendAuditLog(opts: SendAuditLogOptions) {
   const { baseUrl, apiKey, payload, fetchImpl = fetch, signal } = opts;
-  const url = new URL("/api/audit/ingest", baseUrl).toString();
+  const url = new URL("/api/hub/audit/events", baseUrl).toString();
   const res = await fetchImpl(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-MacTech-Audit-Key": apiKey,
+      "X-MacTech-Service-Token": apiKey,
+      "X-MacTech-Source-App": payload.sourceAppKey,
     },
     body: JSON.stringify(payload),
     signal,
@@ -78,5 +90,10 @@ export async function sendAuditLog(opts: SendAuditLogOptions) {
     const text = await res.text().catch(() => "");
     throw new Error(`audit/ingest failed: ${res.status} ${text}`);
   }
-  return res.json() as Promise<{ id: string; ok: true }>;
+  return res.json() as Promise<{
+    id: string;
+    ok: true;
+    sequenceNumber: number;
+    currentHash: string;
+  }>;
 }

@@ -446,6 +446,13 @@ enum SecurityEventStatus {
   ignored
 }
 
+enum SuiteObjectReferenceVerificationStatus {
+  pending
+  verified
+  failed
+  deprecated
+}
+
 enum RoleScope {
   platform
   customer_org
@@ -468,6 +475,7 @@ model UserProfile {
 
   orgAccess OrgUserAccess[]
   auditLogs AuditLog[]      @relation("AuditActor")
+  suiteObjectReferences SuiteObjectReference[] @relation("SuiteObjectReferenceCreatedByUser")
 
   @@index([email])
   @@index([clerkUserId])
@@ -511,6 +519,8 @@ model CustomerOrganization {
   orgUserAccess        OrgUserAccess[]
   auditLogs            AuditLog[]
   securityEvents       SecurityEvent[]
+  suiteObjectReferences SuiteObjectReference[] @relation("SuiteObjectReferenceOrganization")
+  suiteObjectReferenceTenants SuiteObjectReference[] @relation("SuiteObjectReferenceTenantOrg")
   webhookSubscriptions WebhookSubscription[]
   orders               Order[]
   subscriptions        Subscription[]
@@ -521,6 +531,55 @@ model CustomerOrganization {
   @@index([subscriptionTier])
   @@index([cmmcTargetLevel])
   @@index([customerType])
+}
+
+/// Canonical Hub durable cross-app object reference contract. Hub does not own
+/// the target object; `owningAppKey` names the app that owns object authority.
+/// Local apps may keep rich domain data, while cross-app handoffs reference
+/// this row instead of copying ownership or relying on loose JSON blobs.
+model SuiteObjectReference {
+  id                    String                                 @id @default(cuid())
+  sourceAppKey          String
+  owningAppKey          String
+  objectType            String
+  objectId              String
+  objectVersion         String?
+  objectHash            String?
+  tenantOrgId           String?
+  organizationId        String?
+  createdByHubUserId    String?
+  createdByServiceId    String?
+  createdAt             DateTime                               @default(now())
+  lastVerifiedAt        DateTime?
+  verificationStatus    SuiteObjectReferenceVerificationStatus @default(pending)
+  metadataJson          Json?
+  deprecatedAt          DateTime?
+  replacedByReferenceId String?
+  updatedAt             DateTime                               @updatedAt
+
+  auditLogs AuditLog[]
+
+  sourceApp           AppRegistry            @relation("SuiteObjectReferenceSourceApp", fields: [sourceAppKey], references: [appKey])
+  owningApp           AppRegistry            @relation("SuiteObjectReferenceOwningApp", fields: [owningAppKey], references: [appKey])
+  organization        CustomerOrganization?  @relation("SuiteObjectReferenceOrganization", fields: [organizationId], references: [id], onDelete: SetNull)
+  tenantOrganization  CustomerOrganization?  @relation("SuiteObjectReferenceTenantOrg", fields: [tenantOrgId], references: [id], onDelete: SetNull)
+  createdByHubUser    UserProfile?           @relation("SuiteObjectReferenceCreatedByUser", fields: [createdByHubUserId], references: [id], onDelete: SetNull)
+  createdByService    ServiceIdentity?       @relation("SuiteObjectReferenceCreatedByService", fields: [createdByServiceId], references: [id], onDelete: SetNull)
+  replacedByReference SuiteObjectReference?  @relation("SuiteObjectReferenceReplacement", fields: [replacedByReferenceId], references: [id], onDelete: SetNull)
+  replacesReferences  SuiteObjectReference[] @relation("SuiteObjectReferenceReplacement")
+
+  @@unique([owningAppKey, objectType, objectId, objectVersion])
+  @@index([sourceAppKey])
+  @@index([owningAppKey])
+  @@index([objectType])
+  @@index([objectId])
+  @@index([tenantOrgId])
+  @@index([organizationId])
+  @@index([createdByHubUserId])
+  @@index([createdByServiceId])
+  @@index([verificationStatus])
+  @@index([deprecatedAt])
+  @@index([replacedByReferenceId])
 }
 
 // AppRegistry is the canonical source of truth for every MacTech app.
@@ -605,6 +664,8 @@ model AppRegistry {
   incomingDependencies AppDependency[]       @relation("DependencyTarget")
   outgoingCalls        AppCallEvent[]        @relation("CallEventSource")
   incomingCalls        AppCallEvent[]        @relation("CallEventTarget")
+  sourceObjectRefs     SuiteObjectReference[] @relation("SuiteObjectReferenceSourceApp")
+  ownedObjectRefs      SuiteObjectReference[] @relation("SuiteObjectReferenceOwningApp")
 
   @@index([appKey])
   @@index([slug])
@@ -665,37 +726,89 @@ model OrgUserAccess {
 
 model AuditLog {
   id                     String        @id @default(cuid())
+  sequenceNumber         Int           @unique @default(autoincrement())
+  previousHash           String
+  currentHash            String        @unique
+  canonicalPayloadHash   String
   timestamp              DateTime      @default(now())
+  actorHubUserId         String?
   actorClerkUserId       String?
   actorEmail             String?
   actorUserProfileId     String?
+  actorServiceId         String?
+  organizationId         String?
   customerOrganizationId String?
+  tenantOrgId            String?
   appRegistryId          String?
+  sourceAppKey           String?
   eventType              String
   eventCategory          AuditCategory
   severity               AuditSeverity @default(info)
   action                 String
+  objectType             String?
+  objectId               String?
+  objectVersion          String?
+  objectHash             String?
   resourceType           String?
   resourceId             String?
+  suiteObjectReferenceId String?
   ipAddress              String?
   userAgent              String?
   requestId              String?
+  beforeJson             Json?
+  afterJson              Json?
   metadataJson           Json?
+  signature              String?
+  exportBatchId          String?
   createdAt              DateTime      @default(now())
 
   actor                UserProfile?          @relation("AuditActor", fields: [actorUserProfileId], references: [id], onDelete: SetNull)
   customerOrganization CustomerOrganization? @relation(fields: [customerOrganizationId], references: [id], onDelete: SetNull)
   app                  AppRegistry?          @relation(fields: [appRegistryId], references: [id], onDelete: SetNull)
+  actorService         ServiceIdentity?      @relation("AuditServiceActor", fields: [actorServiceId], references: [id], onDelete: SetNull)
+  suiteObjectReference SuiteObjectReference? @relation(fields: [suiteObjectReferenceId], references: [id], onDelete: SetNull)
 
   @@index([timestamp])
+  @@index([sequenceNumber])
+  @@index([currentHash])
+  @@index([previousHash])
   @@index([eventCategory])
   @@index([severity])
   @@index([eventType])
+  @@index([sourceAppKey])
+  @@index([organizationId])
+  @@index([tenantOrgId])
   @@index([customerOrganizationId])
+  @@index([actorHubUserId])
   @@index([actorUserProfileId])
+  @@index([actorServiceId])
   @@index([actorClerkUserId])
   @@index([appRegistryId])
+  @@index([suiteObjectReferenceId])
+  @@index([exportBatchId])
   @@index([customerOrganizationId, timestamp])
+}
+
+model AuditExportManifest {
+  id              String   @id @default(cuid())
+  exportBatchId   String   @unique
+  startDate       DateTime?
+  endDate         DateTime?
+  appFiltersJson  Json?
+  firstSequence   Int?
+  lastSequence    Int?
+  firstHash       String?
+  lastHash        String?
+  eventCount      Int
+  exportHash      String
+  signerIdentity  String
+  signature       String
+  createdAt       DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([firstSequence])
+  @@index([lastSequence])
+  @@index([exportHash])
 }
 
 model SecurityEvent {
@@ -753,6 +866,7 @@ enum ApiKeyScope {
   org_read // GET /api/v1/orgs/*
   user_access_read // GET /api/v1/users/*/access
   app_authority_resolve // POST /api/hub/authority/resolve-app-access
+  object_reference_write // POST /api/hub/object-references/*
   webhook_send // outbound webhook deliveries (server-internal use)
   /// Slice 5.7: external Claude / automation trigger for AgentOps runs.
   /// Holders may POST /api/v1/agents/runs with an Intent payload. The
@@ -784,6 +898,9 @@ model ServiceIdentity {
   authorityVersion    Int                   @default(1)
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
+
+  auditLogs AuditLog[] @relation("AuditServiceActor")
+  suiteObjectReferences SuiteObjectReference[] @relation("SuiteObjectReferenceCreatedByService")
 
   @@index([appKey])
   @@index([status])

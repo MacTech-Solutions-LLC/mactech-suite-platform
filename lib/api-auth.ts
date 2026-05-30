@@ -1,5 +1,6 @@
 /**
- * Bearer/key auth for the public surface (`/api/v1/*` and `/api/audit/ingest`).
+ * Bearer/key auth for the public surface (`/api/v1/*`, `/api/audit/ingest`,
+ * and `/api/hub/audit/events`).
  *
  * Keys live in the `ApiKey` table — SHA-256 hashed at rest, with an explicit
  * scope set, revocable, and tracking `lastUsedAt`. Issued + managed via
@@ -12,8 +13,8 @@
  * sibling apps rotated to DB-issued keys; revocation in the DB now
  * actually takes effect.
  *
- * Sibling apps send the key in `X-MacTech-Audit-Key` (preferred) or as a
- * `Bearer` token in `Authorization`. We accept either for ergonomic reasons.
+ * Sibling apps send the key in `X-MacTech-Service-Token`,
+ * `X-MacTech-Audit-Key` (legacy), or as a `Bearer` token in `Authorization`.
  */
 
 import type { NextRequest } from "next/server";
@@ -36,6 +37,8 @@ export interface ApiAuthSuccess {
 }
 
 function extractKey(request: NextRequest): string | null {
+  const serviceHeader = request.headers.get("x-mactech-service-token");
+  if (serviceHeader) return serviceHeader;
   const header = request.headers.get("x-mactech-audit-key");
   if (header) return header;
   const auth = request.headers.get("authorization");
@@ -46,7 +49,7 @@ function extractKey(request: NextRequest): string | null {
 /**
  * Require an API key with the given scope. Pass the scope appropriate to
  * the route — e.g. `org_read` for /api/v1/orgs, `audit_ingest` for
- * /api/audit/ingest.
+ * /api/hub/audit/events.
  */
 export async function requireApiKey(
   request: NextRequest,

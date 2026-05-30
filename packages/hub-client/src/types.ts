@@ -48,7 +48,8 @@ export type HubAuthoritySnapshot = {
 };
 
 export type HubAuditEventInput = {
-  appKey: string;
+  appKey?: string;
+  sourceAppKey?: string;
   eventType: string;
   eventCategory:
     | "auth"
@@ -64,22 +65,55 @@ export type HubAuditEventInput = {
     | "system";
   severity?: "info" | "warning" | "critical";
   action: string;
+  actorHubUserId?: string | null;
   actorClerkUserId?: string | null;
   actorEmail?: string | null;
+  actorServiceId?: string | null;
+  organizationId?: string | null;
+  tenantOrgId?: string | null;
   customerOrgId?: string | null;
   customerOrgClerkId?: string | null;
+  objectType?: string | null;
+  objectId?: string | null;
+  objectVersion?: string | null;
+  objectHash?: string | null;
+  suiteObjectReferenceId?: string | null;
   resourceType?: string | null;
   resourceId?: string | null;
   requestId?: string | null;
+  beforeJson?: Record<string, unknown> | null;
+  afterJson?: Record<string, unknown> | null;
   metadata?: Record<string, unknown> | null;
 };
 
+export type HubAuditEventResult = {
+  ok: true;
+  id: string;
+  sequenceNumber: number;
+  currentHash: string;
+};
+
 export type SuiteObjectReferenceInput = {
-  objectType: string;
-  objectId?: string | null;
-  externalId?: string | null;
   sourceAppKey?: string | null;
-  customerOrganizationId?: string | null;
+  owningAppKey: string;
+  objectType: string;
+  objectId: string;
+  objectVersion?: string | null;
+  objectHash?: string | null;
+  tenantOrgId?: string | null;
+  organizationId?: string | null;
+  createdByHubUserId?: string | null;
+  metadataJson?: Record<string, unknown> | null;
+};
+
+export type SuiteObjectReference = SuiteObjectReferenceInput & {
+  id: string;
+  createdByServiceId?: string | null;
+  createdAt: string;
+  lastVerifiedAt?: string | null;
+  verificationStatus: "pending" | "verified" | "failed" | "deprecated";
+  deprecatedAt?: string | null;
+  replacedByReferenceId?: string | null;
 };
 
 export type HubClientConfig = {
