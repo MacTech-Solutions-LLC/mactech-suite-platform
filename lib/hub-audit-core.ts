@@ -311,6 +311,7 @@ const SENSITIVE_KEY_RE = /(password|token|secret|api[_-]?key|authorization|cooki
 
 function redact(value: unknown): unknown {
   if (value === null || typeof value !== "object") return value;
+  if (value instanceof Date) return value;
   if (Array.isArray(value)) return value.map(redact);
   const out: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
