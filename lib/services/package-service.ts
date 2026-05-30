@@ -1,7 +1,12 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
-import { upsertPackageSchema, type UpsertPackageInput } from "@/lib/validations/package";
+import {
+  upsertPackageSchema,
+  PackageStatusEnum,
+  type UpsertPackageInput,
+} from "@/lib/validations/package";
 import { writeAuditLog } from "@/lib/audit";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
@@ -31,6 +36,8 @@ export async function upsertPackage(rawInput: UpsertPackageInput) {
     ? await prisma.package.update({ where: { id: previous.id }, data })
     : await prisma.package.create({ data });
 
+  revalidatePath("/admin/packages");
+
   await writeAuditLog({
     eventType: previous ? "package.updated" : "package.created",
     eventCategory: "system",
@@ -53,22 +60,50 @@ export async function upsertPackage(rawInput: UpsertPackageInput) {
   return pkg;
 }
 
-export async function archivePackage(id: string) {
+/**
+ * Flip a package's lifecycle status from an inline control on
+ * /admin/packages. The marketing catalog (GET /api/public/packages)
+ * only returns `status="active"` rows, so:
+ *   - active   → live and checkout-eligible
+ *   - draft    → hidden from buyers (work-in-progress)
+ *   - archived → hidden from buyers (retired)
+ * Note: this updates the catalog the marketing site *reads*, but the
+ * marketing site is a separate deployment that caches the response —
+ * a package change here won't surface there until that site re-fetches.
+ */
+export async function setPackageStatus(id: string, statusInput: string) {
   const ctx = await requirePlatformPermission(PLATFORM_PERMISSIONS.PACKAGES_MANAGE);
-  const pkg = await prisma.package.update({
-    where: { id },
-    data: { status: "archived" },
-  });
+  const status = PackageStatusEnum.parse(statusInput);
+
+  const previous = await prisma.package.findUnique({ where: { id } });
+  if (!previous) {
+    return { ok: false as const, error: "Package not found" };
+  }
+  if (previous.status === status) {
+    return { ok: true as const, status };
+  }
+
+  const pkg = await prisma.package.update({ where: { id }, data: { status } });
+
+  revalidatePath("/admin/packages");
+
   await writeAuditLog({
-    eventType: "package.archived",
+    eventType:
+      status === "archived"
+        ? "package.archived"
+        : status === "active"
+          ? "package.activated"
+          : "package.drafted",
     eventCategory: "system",
     severity: "info",
-    action: `Archived package ${pkg.name} (${pkg.sku})`,
+    action: `Set package ${pkg.name} (${pkg.sku}) to ${status}`,
     actorClerkUserId: ctx.clerkUserId,
     actorEmail: ctx.userProfile.email,
     actorUserProfileId: ctx.userProfile.id,
     resourceType: "Package",
     resourceId: pkg.id,
+    metadata: { status, previousStatus: previous.status },
   });
-  return pkg;
+
+  return { ok: true as const, status };
 }

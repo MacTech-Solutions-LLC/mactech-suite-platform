@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PackageForm } from "@/components/forms/package-form";
+import { PackageStatusControl } from "@/components/packages/package-status-control";
 import { prisma } from "@/lib/db/prisma";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
@@ -45,6 +46,58 @@ export default async function PackagesPage() {
     }),
   ]);
 
+  const live = packages.filter((p) => p.status !== "archived");
+  const archived = packages.filter((p) => p.status === "archived");
+
+  const renderRow = (pkg: (typeof packages)[number]) => (
+    <TableRow key={pkg.id} className={pkg.status === "draft" ? "opacity-60" : undefined}>
+      <TableCell>
+        <div className="font-medium">{pkg.name}</div>
+        {pkg.description ? (
+          <div className="text-xs text-muted-foreground line-clamp-1">{pkg.description}</div>
+        ) : null}
+      </TableCell>
+      <TableCell className="font-mono text-xs">{pkg.sku}</TableCell>
+      <TableCell>{formatPrice(pkg.priceCents, pkg.currency)}</TableCell>
+      <TableCell>{CYCLE_LABEL[pkg.billingCycle] ?? pkg.billingCycle}</TableCell>
+      <TableCell className="capitalize">{pkg.entitlementTier}</TableCell>
+      <TableCell>
+        {pkg.includedAppKeys.length === 0 ? (
+          <span className="text-xs text-muted-foreground">—</span>
+        ) : (
+          <div className="flex flex-wrap gap-1">
+            {pkg.includedAppKeys.map((k) => (
+              <Badge key={k} variant="outline" className="font-mono text-xs">
+                {k}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </TableCell>
+      <TableCell>
+        <PackageStatusControl id={pkg.id} name={pkg.name} status={pkg.status} />
+      </TableCell>
+      <TableCell>
+        <PackageForm
+          apps={apps}
+          triggerLabel="Edit"
+          initial={{
+            id: pkg.id,
+            sku: pkg.sku,
+            name: pkg.name,
+            description: pkg.description,
+            priceCents: pkg.priceCents,
+            currency: pkg.currency,
+            billingCycle: pkg.billingCycle,
+            entitlementTier: pkg.entitlementTier,
+            includedAppKeys: pkg.includedAppKeys,
+            status: pkg.status,
+          }}
+        />
+      </TableCell>
+    </TableRow>
+  );
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -69,77 +122,45 @@ export default async function PackagesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {packages.length === 0 ? (
+              {live.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     No packages yet. Click <strong>New package</strong> to define one.
                   </TableCell>
                 </TableRow>
               ) : null}
-              {packages.map((pkg) => (
-                <TableRow key={pkg.id}>
-                  <TableCell>
-                    <div className="font-medium">{pkg.name}</div>
-                    {pkg.description ? (
-                      <div className="text-xs text-muted-foreground line-clamp-1">
-                        {pkg.description}
-                      </div>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="font-mono text-xs">{pkg.sku}</TableCell>
-                  <TableCell>{formatPrice(pkg.priceCents, pkg.currency)}</TableCell>
-                  <TableCell>{CYCLE_LABEL[pkg.billingCycle] ?? pkg.billingCycle}</TableCell>
-                  <TableCell className="capitalize">{pkg.entitlementTier}</TableCell>
-                  <TableCell>
-                    {pkg.includedAppKeys.length === 0 ? (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    ) : (
-                      <div className="flex flex-wrap gap-1">
-                        {pkg.includedAppKeys.map((k) => (
-                          <Badge key={k} variant="outline" className="font-mono text-xs">
-                            {k}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        pkg.status === "active"
-                          ? "default"
-                          : pkg.status === "draft"
-                            ? "secondary"
-                            : "outline"
-                      }
-                    >
-                      {pkg.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <PackageForm
-                      apps={apps}
-                      triggerLabel="Edit"
-                      initial={{
-                        id: pkg.id,
-                        sku: pkg.sku,
-                        name: pkg.name,
-                        description: pkg.description,
-                        priceCents: pkg.priceCents,
-                        currency: pkg.currency,
-                        billingCycle: pkg.billingCycle,
-                        entitlementTier: pkg.entitlementTier,
-                        includedAppKeys: pkg.includedAppKeys,
-                        status: pkg.status,
-                      }}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
+              {live.map(renderRow)}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      {archived.length > 0 ? (
+        <details className="group rounded-lg border border-border">
+          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground">
+            <span className="group-open:hidden">▸ </span>
+            <span className="hidden group-open:inline">▾ </span>
+            Archived ({archived.length}) — hidden from the marketing site
+          </summary>
+          <div className="border-t border-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>Price</TableHead>
+                  <TableHead>Cycle</TableHead>
+                  <TableHead>Tier</TableHead>
+                  <TableHead>Apps</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-[80px]" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>{archived.map(renderRow)}</TableBody>
+            </Table>
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }
