@@ -5,12 +5,12 @@
  * Order's qboInvoiceId. The flow:
  *
  *   1. Re-load the Order with package + included apps
- *   2. Derive a unique slug from buyer company / email
- *   3. Create the Clerk org (creator = SYSTEM_PROVISIONER_CLERK_USER_ID)
- *   4. Create the CustomerOrganization row
- *   5. Apply ProductEntitlement rows for each package.includedAppKeys
- *   6. Push enabled apps into Clerk publicMetadata for sibling apps to read
- *   7. Send Clerk invitation to the buyer (role: org:admin)
+ *   2. Resolve the org: reuse the company's existing org (so additional
+ *      buyers JOIN it) or create a new Clerk org + CustomerOrganization
+ *   3. (new orgs only) Create the Clerk org + CustomerOrganization row
+ *   4. Apply ProductEntitlement rows for each package.includedAppKeys (upsert)
+ *   5. Push enabled apps into Clerk publicMetadata for sibling apps to read
+ *   6. Send Clerk invitation to the buyer (founder → org:admin, joiner → member)
  *   8. Create Subscription row if the package billingCycle != one_time
  *   9. Mark Order provisioned + link customerOrganizationId
  *  10. Audit + outbound webhook dispatch
@@ -34,7 +34,7 @@ import {
   updateClerkOrg,
 } from "./clerk-org-service";
 import { dispatchWebhookEvent } from "./webhook-service";
-import type { Order } from "@prisma/client";
+import type { CustomerOrganization, Order } from "@prisma/client";
 
 export type ProvisionResult =
   | { ok: true; customerOrganizationId: string; clerkOrgId: string | null; invited: boolean }
@@ -74,51 +74,65 @@ export async function provisionOrder(orderId: string): Promise<ProvisionResult> 
     };
   }
 
-  // 2. Slug
-  const baseSlug = deriveSlug(order.buyerCompany ?? order.buyerEmail.split("@")[0] ?? "org");
-  const slug = await ensureUniqueSlug(baseSlug);
-  const orgName = order.buyerCompany ?? order.buyerName ?? order.buyerEmail;
+  // 2. Resolve the organization. Reuse an existing org for the same company
+  //    so additional buyers JOIN it rather than spawning a duplicate; only
+  //    create a fresh org for the company's first paid order.
+  const existingOrg = await findExistingOrgForBuyer(order);
 
-  // 3. Clerk org (best-effort — local row still created if Clerk fails)
-  const initialPublicMetadata = buildPublicMetadata(
-    {
-      id: "pending",
-      slug,
-      customerType: "other",
-      subscriptionTier: order.package.entitlementTier,
-      cmmcTargetLevel: "unknown",
-      cuiBoundaryType: "none",
-      status: "onboarding",
-      industry: null,
-    } as never,
-    [],
-  );
+  let org: CustomerOrganization;
+  let clerkOrgId: string | null;
+  const joinedExisting = Boolean(existingOrg);
 
-  let clerkOrgId: string | null = null;
-  const clerkRes = await tryClerk("createOrganization (auto-provision)", () =>
-    createClerkOrg({
-      name: orgName,
-      slug,
-      createdBy: env.SYSTEM_PROVISIONER_CLERK_USER_ID!,
-      publicMetadata: initialPublicMetadata,
-    }),
-  );
-  if (clerkRes.ok) clerkOrgId = clerkRes.value.id;
+  if (existingOrg) {
+    org = existingOrg;
+    clerkOrgId = existingOrg.clerkOrgId;
+  } else {
+    // 2a. Slug
+    const baseSlug = deriveSlug(order.buyerCompany ?? order.buyerEmail.split("@")[0] ?? "org");
+    const slug = await ensureUniqueSlug(baseSlug);
+    const orgName = order.buyerCompany ?? order.buyerName ?? order.buyerEmail;
 
-  // 4. CustomerOrganization
-  const org = await prisma.customerOrganization.create({
-    data: {
-      name: orgName,
-      slug,
-      legalName: order.buyerCompany ?? null,
-      primaryContactName: order.buyerName ?? null,
-      primaryContactEmail: order.buyerEmail,
-      customerType: "other",
-      subscriptionTier: order.package.entitlementTier,
-      status: "onboarding",
-      clerkOrgId,
-    },
-  });
+    // 2b. Clerk org (best-effort — local row still created if Clerk fails)
+    const initialPublicMetadata = buildPublicMetadata(
+      {
+        id: "pending",
+        slug,
+        customerType: "other",
+        subscriptionTier: order.package.entitlementTier,
+        cmmcTargetLevel: "unknown",
+        cuiBoundaryType: "none",
+        status: "onboarding",
+        industry: null,
+      } as never,
+      [],
+    );
+
+    clerkOrgId = null;
+    const clerkRes = await tryClerk("createOrganization (auto-provision)", () =>
+      createClerkOrg({
+        name: orgName,
+        slug,
+        createdBy: env.SYSTEM_PROVISIONER_CLERK_USER_ID!,
+        publicMetadata: initialPublicMetadata,
+      }),
+    );
+    if (clerkRes.ok) clerkOrgId = clerkRes.value.id;
+
+    // 2c. CustomerOrganization
+    org = await prisma.customerOrganization.create({
+      data: {
+        name: orgName,
+        slug,
+        legalName: order.buyerCompany ?? null,
+        primaryContactName: order.buyerName ?? null,
+        primaryContactEmail: order.buyerEmail,
+        customerType: "other",
+        subscriptionTier: order.package.entitlementTier,
+        status: "onboarding",
+        clerkOrgId,
+      },
+    });
+  }
 
   // 5. Entitlements — one per app in package.includedAppKeys
   if (order.package.includedAppKeys.length > 0) {
@@ -127,10 +141,23 @@ export async function provisionOrder(orderId: string): Promise<ProvisionResult> 
       select: { id: true, appKey: true, name: true },
     });
     for (const app of apps) {
-      await prisma.productEntitlement.create({
-        data: {
+      // Upsert so re-provisioning or a second package into an existing org
+      // never trips the (customerOrganizationId, appRegistryId) unique key.
+      await prisma.productEntitlement.upsert({
+        where: {
+          customerOrganizationId_appRegistryId: {
+            customerOrganizationId: org.id,
+            appRegistryId: app.id,
+          },
+        },
+        create: {
           customerOrganizationId: org.id,
           appRegistryId: app.id,
+          enabled: true,
+          plan: planFromTier(order.package.entitlementTier),
+          status: "active",
+        },
+        update: {
           enabled: true,
           plan: planFromTier(order.package.entitlementTier),
           status: "active",
@@ -171,7 +198,8 @@ export async function provisionOrder(orderId: string): Promise<ProvisionResult> 
         clerkOrgId,
         emailAddress: order.buyerEmail,
         inviterUserId: env.SYSTEM_PROVISIONER_CLERK_USER_ID!,
-        role: "org:admin",
+        // Founding buyer administers the org; later joiners come in as members.
+        role: joinedExisting ? "org:member" : "org:admin",
         redirectUrl: `${env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "")}/welcome`,
         publicMetadata: { provisionedFromOrderId: order.id, packageSku: order.package.sku },
       }),
@@ -216,13 +244,16 @@ export async function provisionOrder(orderId: string): Promise<ProvisionResult> 
     eventType: "order.provisioned",
     eventCategory: "org",
     severity: "info",
-    action: `Auto-provisioned ${org.name} for paid order ${order.id}`,
+    action: joinedExisting
+      ? `Joined ${order.buyerEmail} into existing org ${org.name} for paid order ${order.id}`
+      : `Auto-provisioned ${org.name} for paid order ${order.id}`,
     customerOrganizationId: org.id,
     resourceType: "Order",
     resourceId: order.id,
     metadata: {
       clerkOrgId,
       invited,
+      joinedExisting,
       subscriptionId,
       packageSku: order.package.sku,
       includedAppKeys: order.package.includedAppKeys,
@@ -242,6 +273,50 @@ export async function provisionOrder(orderId: string): Promise<ProvisionResult> 
   });
 
   return { ok: true, customerOrganizationId: org.id, clerkOrgId, invited };
+}
+
+/** Domains where a shared address does NOT imply a shared organization. */
+const FREE_EMAIL_DOMAINS = new Set([
+  "gmail.com", "googlemail.com", "yahoo.com", "ymail.com", "outlook.com",
+  "hotmail.com", "live.com", "msn.com", "icloud.com", "me.com", "mac.com",
+  "aol.com", "proton.me", "protonmail.com", "gmx.com", "mail.com", "zoho.com",
+]);
+
+/**
+ * The org a new buyer should join, or null to create a fresh one.
+ *   1. By company name — case-insensitive match on legalName or name. Mirrors
+ *      the QBO customer dedup (one company → one customer → one org).
+ *   2. By corporate email domain — when there's no company name, two buyers
+ *      sharing a non-free domain (e.g. @acme.com) belong to the same org.
+ * Individuals (no company + a free email domain) always get their own org.
+ */
+async function findExistingOrgForBuyer(
+  order: Order,
+): Promise<CustomerOrganization | null> {
+  const company = order.buyerCompany?.trim();
+  if (company) {
+    const byName = await prisma.customerOrganization.findFirst({
+      where: {
+        OR: [
+          { legalName: { equals: company, mode: "insensitive" } },
+          { name: { equals: company, mode: "insensitive" } },
+        ],
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    if (byName) return byName;
+  }
+
+  const domain = order.buyerEmail.split("@")[1]?.toLowerCase();
+  if (domain && !FREE_EMAIL_DOMAINS.has(domain)) {
+    const byDomain = await prisma.customerOrganization.findFirst({
+      where: { primaryContactEmail: { endsWith: `@${domain}`, mode: "insensitive" } },
+      orderBy: { createdAt: "asc" },
+    });
+    if (byDomain) return byDomain;
+  }
+
+  return null;
 }
 
 function deriveSlug(seed: string): string {
