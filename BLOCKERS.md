@@ -137,3 +137,34 @@ Result: failed.
 Summary: Prisma loaded the schema but could not reach a PostgreSQL database at `localhost:5432`; the command ended with a schema engine error. The migration SQL was created manually at `prisma/migrations/20260530120000_hub_audit_ingestion_v1/migration.sql` and includes the legacy `AuditLog` backfill plus PostgreSQL append-only trigger enforcement.
 
 Missing variable/permission/service: a reachable non-production PostgreSQL `DATABASE_URL` for Prisma migration dry-run checks.
+
+## SuiteObjectReference migration creation check
+
+GitHub tracking issue: https://github.com/MacTech-Solutions-LLC/mactech-suite-platform/issues/106
+Downstream repo confirmation issue: https://github.com/MacTech-Solutions-LLC/mactech-suite-platform/issues/108
+
+Command:
+
+```bash
+$env:DATABASE_URL='postgresql://user:pass@localhost:5432/mactech_suite_placeholder'; npx prisma migrate dev --name suite-object-reference-contract --create-only
+```
+
+Result: failed.
+
+Summary: Prisma loaded the schema but could not reach a PostgreSQL database at `localhost:5432`; the command ended with `Schema engine error`. The SuiteObjectReference SQL was added to the existing unmerged Hub audit migration because that migration already introduced the stub reference table used by `AuditLog.suiteObjectReferenceId`.
+
+Missing variable/permission/service: a reachable non-production PostgreSQL `DATABASE_URL` for Prisma migration dry-run checks.
+
+## SuiteObjectReference local typecheck
+
+Command:
+
+```bash
+npm run typecheck
+```
+
+Result: failed.
+
+Summary: SuiteObjectReference and hub-client TypeScript errors were fixed after `npx prisma generate`. The remaining failures are the existing dependency-resolution blocker from `npm install`/GitHub Packages authentication: TypeScript cannot resolve `@mactech-solutions-llc/onboard`, `@mactech-solutions-llc/design-tokens`, `recharts`, `geist`, `motion`, and `cron-parser`, followed by implicit-any noise in files that depend on those missing packages.
+
+Missing variable/permission/service: a valid local npm/GitHub Packages token with read access to private MacTech packages and a restored local dependency tree.

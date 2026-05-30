@@ -12,6 +12,7 @@ import type {
   HubAuthoritySnapshot,
   HubClientConfig,
   RequireHubAccessOptions,
+  SuiteObjectReference,
   SuiteObjectReferenceInput,
 } from "./types";
 
@@ -137,9 +138,9 @@ export async function emitHubAuditEvent(
 export async function resolveSuiteObjectRef(
   config: HubClientConfig,
   ref: SuiteObjectReferenceInput,
-): Promise<Record<string, unknown>> {
+): Promise<SuiteObjectReference> {
   const normalized = normalizeConfig(config);
-  const response = await hubFetch(normalized, "/api/hub/objects/resolve", {
+  const response = await hubFetch(normalized, "/api/hub/object-references", {
     method: "POST",
     body: JSON.stringify({ ...ref, sourceAppKey: ref.sourceAppKey ?? normalized.sourceAppKey }),
   });
@@ -147,10 +148,10 @@ export async function resolveSuiteObjectRef(
   if (!response.ok) {
     throw new HubUnavailableError(payload?.detail ?? payload?.error ?? "Hub object reference resolution failed.", response.status);
   }
-  if (!payload || typeof payload !== "object") {
+  if (!payload?.reference || typeof payload.reference.id !== "string") {
     throw new HubContractValidationError("Hub object reference payload is malformed.");
   }
-  return payload as Record<string, unknown>;
+  return payload.reference as SuiteObjectReference;
 }
 
 async function hubFetch(config: HubClientConfig, path: string, init: RequestInit) {

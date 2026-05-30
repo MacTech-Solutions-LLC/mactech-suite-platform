@@ -37,6 +37,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/audit/ingest",
   "/api/hub/audit/events",
   "/api/hub/authority/(.*)",
+  "/api/hub/object-references(.*)",
   "/api/v1/(.*)",
 ]);
 

@@ -28,6 +28,11 @@ const SCOPES = [
     description: "POST /api/audit/ingest — forward audit events.",
   },
   {
+    value: "object_reference_write",
+    label: "object_reference_write",
+    description: "POST /api/hub/object-references/* - create, verify, and deprecate object references.",
+  },
+  {
     value: "org_read",
     label: "org_read",
     description: "GET /api/v1/orgs/{clerkOrgId} — read org metadata + entitlements.",

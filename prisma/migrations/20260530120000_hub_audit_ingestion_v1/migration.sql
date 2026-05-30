@@ -13,16 +13,43 @@
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_enum
+    WHERE enumlabel = 'object_reference_write'
+      AND enumtypid = '"ApiKeyScope"'::regtype
+  ) THEN
+    ALTER TYPE "ApiKeyScope" ADD VALUE 'object_reference_write';
+  END IF;
+END $$;
+
+CREATE TYPE "SuiteObjectReferenceVerificationStatus" AS ENUM (
+  'pending',
+  'verified',
+  'failed',
+  'deprecated'
+);
+
 CREATE TABLE "SuiteObjectReference" (
   "id" TEXT NOT NULL,
   "sourceAppKey" TEXT NOT NULL,
+  "owningAppKey" TEXT NOT NULL,
   "objectType" TEXT NOT NULL,
   "objectId" TEXT NOT NULL,
   "objectVersion" TEXT,
   "objectHash" TEXT,
-  "displayName" TEXT,
+  "tenantOrgId" TEXT,
+  "organizationId" TEXT,
+  "createdByHubUserId" TEXT,
+  "createdByServiceId" TEXT,
   "metadataJson" JSONB,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "lastVerifiedAt" TIMESTAMP(3),
+  "verificationStatus" "SuiteObjectReferenceVerificationStatus" NOT NULL DEFAULT 'pending',
+  "deprecatedAt" TIMESTAMP(3),
+  "replacedByReferenceId" TEXT,
   "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "SuiteObjectReference_pkey" PRIMARY KEY ("id")
 );
@@ -138,11 +165,19 @@ SELECT setval(
 ALTER TABLE "AuditLog" ALTER COLUMN "sequenceNumber" SET DEFAULT nextval('"AuditLog_sequenceNumber_seq"');
 ALTER SEQUENCE "AuditLog_sequenceNumber_seq" OWNED BY "AuditLog"."sequenceNumber";
 
-CREATE UNIQUE INDEX "SuiteObjectReference_sourceAppKey_objectType_objectId_objectVersion_key"
-  ON "SuiteObjectReference"("sourceAppKey", "objectType", "objectId", "objectVersion");
+CREATE UNIQUE INDEX "SuiteObjectReference_owningAppKey_objectType_objectId_objectVersion_key"
+  ON "SuiteObjectReference"("owningAppKey", "objectType", "objectId", "objectVersion");
 CREATE INDEX "SuiteObjectReference_sourceAppKey_idx" ON "SuiteObjectReference"("sourceAppKey");
+CREATE INDEX "SuiteObjectReference_owningAppKey_idx" ON "SuiteObjectReference"("owningAppKey");
 CREATE INDEX "SuiteObjectReference_objectType_idx" ON "SuiteObjectReference"("objectType");
 CREATE INDEX "SuiteObjectReference_objectId_idx" ON "SuiteObjectReference"("objectId");
+CREATE INDEX "SuiteObjectReference_tenantOrgId_idx" ON "SuiteObjectReference"("tenantOrgId");
+CREATE INDEX "SuiteObjectReference_organizationId_idx" ON "SuiteObjectReference"("organizationId");
+CREATE INDEX "SuiteObjectReference_createdByHubUserId_idx" ON "SuiteObjectReference"("createdByHubUserId");
+CREATE INDEX "SuiteObjectReference_createdByServiceId_idx" ON "SuiteObjectReference"("createdByServiceId");
+CREATE INDEX "SuiteObjectReference_verificationStatus_idx" ON "SuiteObjectReference"("verificationStatus");
+CREATE INDEX "SuiteObjectReference_deprecatedAt_idx" ON "SuiteObjectReference"("deprecatedAt");
+CREATE INDEX "SuiteObjectReference_replacedByReferenceId_idx" ON "SuiteObjectReference"("replacedByReferenceId");
 
 CREATE UNIQUE INDEX "AuditExportManifest_exportBatchId_key" ON "AuditExportManifest"("exportBatchId");
 CREATE INDEX "AuditExportManifest_createdAt_idx" ON "AuditExportManifest"("createdAt");
@@ -168,7 +203,22 @@ ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_actorServiceId_fkey"
 ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_suiteObjectReferenceId_fkey"
   FOREIGN KEY ("suiteObjectReferenceId") REFERENCES "SuiteObjectReference"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
-COMMENT ON TABLE "SuiteObjectReference" IS 'Hub read model for cross-app object references used by canonical suite audit rows. Local apps remain owners of domain object details.';
+ALTER TABLE "SuiteObjectReference" ADD CONSTRAINT "SuiteObjectReference_sourceAppKey_fkey"
+  FOREIGN KEY ("sourceAppKey") REFERENCES "AppRegistry"("appKey") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "SuiteObjectReference" ADD CONSTRAINT "SuiteObjectReference_owningAppKey_fkey"
+  FOREIGN KEY ("owningAppKey") REFERENCES "AppRegistry"("appKey") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "SuiteObjectReference" ADD CONSTRAINT "SuiteObjectReference_tenantOrgId_fkey"
+  FOREIGN KEY ("tenantOrgId") REFERENCES "CustomerOrganization"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "SuiteObjectReference" ADD CONSTRAINT "SuiteObjectReference_organizationId_fkey"
+  FOREIGN KEY ("organizationId") REFERENCES "CustomerOrganization"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "SuiteObjectReference" ADD CONSTRAINT "SuiteObjectReference_createdByHubUserId_fkey"
+  FOREIGN KEY ("createdByHubUserId") REFERENCES "UserProfile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "SuiteObjectReference" ADD CONSTRAINT "SuiteObjectReference_createdByServiceId_fkey"
+  FOREIGN KEY ("createdByServiceId") REFERENCES "ServiceIdentity"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "SuiteObjectReference" ADD CONSTRAINT "SuiteObjectReference_replacedByReferenceId_fkey"
+  FOREIGN KEY ("replacedByReferenceId") REFERENCES "SuiteObjectReference"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+COMMENT ON TABLE "SuiteObjectReference" IS 'Hub durable cross-app object reference contract. Local apps remain owners of domain object details.';
 COMMENT ON TABLE "AuditLog" IS 'Canonical Hub append-only, tamper-evident audit/event authority for MacTech Suite.';
 COMMENT ON TABLE "AuditExportManifest" IS 'Signed manifest for a point-in-time export over canonical AuditLog rows.';
 

@@ -94,11 +94,26 @@ export type HubAuditEventResult = {
 };
 
 export type SuiteObjectReferenceInput = {
-  objectType: string;
-  objectId?: string | null;
-  externalId?: string | null;
   sourceAppKey?: string | null;
-  customerOrganizationId?: string | null;
+  owningAppKey: string;
+  objectType: string;
+  objectId: string;
+  objectVersion?: string | null;
+  objectHash?: string | null;
+  tenantOrgId?: string | null;
+  organizationId?: string | null;
+  createdByHubUserId?: string | null;
+  metadataJson?: Record<string, unknown> | null;
+};
+
+export type SuiteObjectReference = SuiteObjectReferenceInput & {
+  id: string;
+  createdByServiceId?: string | null;
+  createdAt: string;
+  lastVerifiedAt?: string | null;
+  verificationStatus: "pending" | "verified" | "failed" | "deprecated";
+  deprecatedAt?: string | null;
+  replacedByReferenceId?: string | null;
 };
 
 export type HubClientConfig = {

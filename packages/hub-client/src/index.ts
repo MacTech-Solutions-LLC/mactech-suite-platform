@@ -24,5 +24,6 @@ export type {
   HubAuthoritySnapshot,
   HubClientConfig,
   RequireHubAccessOptions,
+  SuiteObjectReference,
   SuiteObjectReferenceInput,
 } from "./types";
