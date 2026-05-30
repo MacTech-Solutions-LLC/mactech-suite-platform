@@ -128,14 +128,15 @@ SET
   "previousHash" = chained.previous_hash,
   "currentHash" = chained.row_hash,
   "canonicalPayloadHash" = chained.row_hash,
-  "actorHubUserId" = a."actorUserProfileId",
-  "organizationId" = a."customerOrganizationId",
-  "tenantOrgId" = a."customerOrganizationId",
+  "actorHubUserId" = source_a."actorUserProfileId",
+  "organizationId" = source_a."customerOrganizationId",
+  "tenantOrgId" = source_a."customerOrganizationId",
   "sourceAppKey" = app."appKey",
-  "objectType" = a."resourceType",
-  "objectId" = a."resourceId"
+  "objectType" = source_a."resourceType",
+  "objectId" = source_a."resourceId"
 FROM chained
-LEFT JOIN "AppRegistry" app ON app."id" = a."appRegistryId"
+JOIN "AuditLog" source_a ON source_a."id" = chained."id"
+LEFT JOIN "AppRegistry" app ON app."id" = source_a."appRegistryId"
 WHERE a."id" = chained."id";
 
 UPDATE "AuditLog"
