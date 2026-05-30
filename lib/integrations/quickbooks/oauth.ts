@@ -23,10 +23,16 @@ const TOKEN_URL =
 const REVOKE_URL =
   "https://developer.api.intuit.com/v2/oauth2/tokens/revoke";
 
-/** Scopes we request. Accounting covers Customers, Items, Invoices,
- *  Payments, RecurringTransactions. Add `openid profile email` if we
- *  ever surface the connected Intuit user identity. */
-export const QBO_SCOPES = "com.intuit.quickbooks.accounting";
+/** Scopes we request.
+ *  - `accounting` covers Customers, Items, Invoices, accounting Payments,
+ *    RecurringTransactions.
+ *  - `payments` is required to charge cards / ACH through the QuickBooks
+ *    Payments API (the in-suite "Charge new payment" flow). It is a
+ *    SEPARATE grant — a connection authorized before this scope was added
+ *    must be reconnected before charging works.
+ *  Add `openid profile email` if we ever surface the Intuit user identity. */
+export const QBO_PAYMENTS_SCOPE = "com.intuit.quickbooks.payments";
+export const QBO_SCOPES = `com.intuit.quickbooks.accounting ${QBO_PAYMENTS_SCOPE}`;
 
 export type QboTokenResponse = {
   access_token: string;

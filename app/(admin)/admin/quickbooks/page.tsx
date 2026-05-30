@@ -21,6 +21,7 @@ import {
   quickbooksWebhookConfigured,
 } from "@/lib/env";
 import { getActiveConnection } from "@/lib/integrations/quickbooks/connection-service";
+import { QBO_PAYMENTS_SCOPE } from "@/lib/integrations/quickbooks/oauth";
 import { prisma } from "@/lib/db/prisma";
 
 export const dynamic = "force-dynamic";
@@ -98,6 +99,27 @@ export default async function QuickbooksAdminPage({
         <div className="flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
           <div>{ERROR_LABEL[errKey] ?? `OAuth error: ${errKey}`}</div>
+        </div>
+      ) : null}
+
+      {/* Payments capability — charging cards/ACH from /admin/orders needs
+          the Payments scope, which a pre-existing connection won't have. */}
+      {connection && !connection.scope?.includes(QBO_PAYMENTS_SCOPE) ? (
+        <div className="flex items-start gap-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+          <div>
+            This connection isn&apos;t authorized for <strong>QuickBooks Payments</strong>, so in-suite
+            card / ACH charging on the Orders page is disabled. Recording manual payments still works.{" "}
+            <a href="/api/integrations/quickbooks/connect" className="font-medium underline">
+              Reconnect QuickBooks
+            </a>{" "}
+            to enable charging.
+          </div>
+        </div>
+      ) : connection ? (
+        <div className="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3 text-sm">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+          <div>Payments scope granted — card / ACH charging is available on the Orders page.</div>
         </div>
       ) : null}
 

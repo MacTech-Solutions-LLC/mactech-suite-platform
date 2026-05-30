@@ -14,7 +14,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { env } from "@/lib/env";
 import { decryptToken, encryptToken } from "./encryption";
-import { refreshAccessToken, type QboTokenResponse } from "./oauth";
+import { refreshAccessToken, QBO_PAYMENTS_SCOPE, type QboTokenResponse } from "./oauth";
 import type { QuickbooksConnection, QuickbooksEnvironment } from "@prisma/client";
 
 /** Refresh proactively if the access token has < 5 minutes of life left. */
@@ -47,6 +47,11 @@ export async function persistTokens(input: {
   tokens: QboTokenResponse;
   connectedByClerkUserId?: string | null;
   companyName?: string | null;
+  /** The scopes the user granted at consent. Pass this ONLY from the OAuth
+   *  callback (where consent just happened). The refresh path must omit it
+   *  — a token refresh never changes the granted scope, so we preserve the
+   *  stored value rather than overwrite it. */
+  scope?: string | null;
 }): Promise<QuickbooksConnection> {
   const now = Date.now();
   const accessTokenExpiresAt = new Date(now + input.tokens.expires_in * 1000);
@@ -73,7 +78,7 @@ export async function persistTokens(input: {
       refreshTokenCipher,
       accessTokenExpiresAt,
       refreshTokenExpiresAt,
-      scope: null,
+      scope: input.scope ?? null,
       companyName: input.companyName ?? null,
       connectedByClerkUserId: input.connectedByClerkUserId ?? null,
       lastRefreshedAt: new Date(),
@@ -85,6 +90,9 @@ export async function persistTokens(input: {
       refreshTokenCipher,
       accessTokenExpiresAt,
       refreshTokenExpiresAt,
+      // Only overwrite scope when the caller explicitly supplies it (a new
+      // consent). undefined leaves the stored grant untouched on refresh.
+      scope: input.scope ?? undefined,
       companyName: input.companyName ?? undefined,
       connectedByClerkUserId: input.connectedByClerkUserId ?? undefined,
       lastRefreshedAt: new Date(),
@@ -167,4 +175,20 @@ export function apiBaseUrl(): string {
   return env.QBO_ENV === "production"
     ? "https://quickbooks.api.intuit.com"
     : "https://sandbox-quickbooks.api.intuit.com";
+}
+
+/** Base URL for the QuickBooks *Payments* API (charges, echecks, tokens).
+ *  This is a different gateway host than the accounting API above. */
+export function paymentsApiBaseUrl(): string {
+  return env.QBO_ENV === "production"
+    ? "https://api.intuit.com"
+    : "https://sandbox.api.intuit.com";
+}
+
+/** True when the active connection's granted scope includes the Payments
+ *  scope. Used to decide whether the in-suite "Charge new payment" flow is
+ *  available, or whether the operator must reconnect QuickBooks first. */
+export async function connectionHasPaymentsScope(): Promise<boolean> {
+  const row = await getActiveConnection();
+  return Boolean(row?.scope?.includes(QBO_PAYMENTS_SCOPE));
 }

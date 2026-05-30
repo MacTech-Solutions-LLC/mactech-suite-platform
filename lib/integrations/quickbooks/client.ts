@@ -350,3 +350,64 @@ export async function createRecurringInvoice(input: {
   if (!rt) return { ok: false, status: 500, error: "QBO returned empty RecurringTransaction array" };
   return { ok: true, data: rt };
 }
+
+/** Read a single Invoice — used by the in-suite "Receive Payment" flow to
+ *  show the operator the live open balance (which may differ from the
+ *  Order total after partial payments). */
+export async function getInvoice(invoiceId: string): Promise<QboResult<QboInvoice>> {
+  const res = await qboFetch<{ Invoice: QboInvoice }>({ path: `/invoice/${invoiceId}` });
+  if (!res.ok) return res;
+  return { ok: true, data: res.data.Invoice };
+}
+
+export type QboPayment = {
+  Id: string;
+  TotalAmt: number;
+  TxnDate?: string;
+  CustomerRef?: { value: string };
+  SyncToken: string;
+};
+
+/** Create an *accounting* Payment that applies against an Invoice and
+ *  closes it in QBO. This is the books-of-record entry — used both for
+ *  manually-recorded payments (check/cash/ACH) and to settle a card/ACH
+ *  charge taken through the Payments API.
+ *
+ *  Linking via `LinkedTxn` of type "Invoice" is what marks the invoice
+ *  PAID. We deliberately omit DepositToAccountRef so QBO routes it to the
+ *  company's default (Undeposited Funds), matching the QBO UI's behavior. */
+export async function createPayment(input: {
+  customerId: string;
+  invoiceId: string;
+  amountCents: number;
+  /** YYYY-MM-DD. Defaults to today in QBO if omitted. */
+  txnDate?: string | null;
+  /** Free-text reference (check number, charge id, etc.). */
+  paymentRefNum?: string | null;
+  /** Note stored on the QBO Payment — we use it to record the method and
+   *  that it originated in MacTech Suite. */
+  privateNote?: string | null;
+}): Promise<QboResult<QboPayment>> {
+  const amount = input.amountCents / 100;
+  const body: Record<string, unknown> = {
+    CustomerRef: { value: input.customerId },
+    TotalAmt: amount,
+    Line: [
+      {
+        Amount: amount,
+        LinkedTxn: [{ TxnId: input.invoiceId, TxnType: "Invoice" }],
+      },
+    ],
+  };
+  if (input.txnDate) body.TxnDate = input.txnDate;
+  if (input.paymentRefNum) body.PaymentRefNum = input.paymentRefNum.slice(0, 21);
+  if (input.privateNote) body.PrivateNote = input.privateNote;
+
+  const res = await qboFetch<{ Payment: QboPayment }>({
+    method: "POST",
+    path: "/payment",
+    body,
+  });
+  if (!res.ok) return res;
+  return { ok: true, data: res.data.Payment };
+}

@@ -11,7 +11,7 @@ import { cookies } from "next/headers";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
 import { env, quickbooksOauthConfigured } from "@/lib/env";
-import { exchangeCodeForTokens } from "@/lib/integrations/quickbooks/oauth";
+import { exchangeCodeForTokens, QBO_SCOPES } from "@/lib/integrations/quickbooks/oauth";
 import { persistTokens } from "@/lib/integrations/quickbooks/connection-service";
 import { writeAuditLog } from "@/lib/audit";
 
@@ -87,6 +87,9 @@ export async function GET(request: NextRequest) {
       environment: env.QBO_ENV,
       tokens,
       connectedByClerkUserId: ctx.clerkUserId,
+      // Record the scopes just granted so the UI knows whether the Payments
+      // (charge card/ACH) capability is available without re-consent.
+      scope: QBO_SCOPES,
     });
 
     await writeAuditLog({

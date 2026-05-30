@@ -17,9 +17,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { prisma } from "@/lib/db/prisma";
-import { requirePlatformPermission } from "@/lib/authz";
+import { requirePlatformPermission, hasPlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
+import { paymentsApiBaseUrl } from "@/lib/integrations/quickbooks/connection-service";
+import { ReceivePaymentModal } from "@/components/orders/receive-payment-modal";
 import type { OrderStatus } from "@prisma/client";
+
+/** Statuses where there's still a balance an operator can collect. */
+const PAYABLE_STATUSES: ReadonlySet<OrderStatus> = new Set<OrderStatus>([
+  "pending",
+  "payment_pending",
+  "failed",
+]);
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +56,9 @@ function formatDate(d: Date | null): string {
 }
 
 export default async function OrdersPage() {
-  await requirePlatformPermission(PLATFORM_PERMISSIONS.ORDERS_VIEW);
+  const ctx = await requirePlatformPermission(PLATFORM_PERMISSIONS.ORDERS_VIEW);
+  const canManage = hasPlatformPermission(ctx, PLATFORM_PERMISSIONS.ORDERS_MANAGE);
+  const paymentsBaseUrl = paymentsApiBaseUrl();
 
   const orders = await prisma.order.findMany({
     orderBy: { createdAt: "desc" },
@@ -79,12 +90,13 @@ export default async function OrdersPage() {
                 <TableHead>Org</TableHead>
                 <TableHead>Placed</TableHead>
                 <TableHead>Paid</TableHead>
+                {canManage ? <TableHead className="text-right">Actions</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
               {orders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={canManage ? 9 : 8} className="py-8 text-center text-muted-foreground">
                     No orders yet. Once the marketing site POSTs to /api/checkout/sessions, they appear here.
                   </TableCell>
                 </TableRow>
@@ -137,6 +149,19 @@ export default async function OrdersPage() {
                     {formatDate(order.placedAt ?? order.createdAt)}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{formatDate(order.paidAt)}</TableCell>
+                  {canManage ? (
+                    <TableCell className="text-right">
+                      {order.qboInvoiceId && PAYABLE_STATUSES.has(order.status) ? (
+                        <ReceivePaymentModal
+                          orderId={order.id}
+                          buyerLabel={order.buyerCompany || order.buyerName || order.buyerEmail}
+                          totalCents={order.totalCents}
+                          currency={order.currency}
+                          paymentsBaseUrl={paymentsBaseUrl}
+                        />
+                      ) : null}
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
             </TableBody>
