@@ -1,7 +1,9 @@
 /**
- * Tenant Scoping Utility
+ * Deprecated legacy tenant scoping utility.
  * 
- * Enforces server-side tenant filtering on all database queries.
+ * Enforces server-side tenant filtering for legacy Tenant/User/Membership
+ * callers. New Suite app access must be resolved by Hub Authority Contract v1
+ * and consume canonical CustomerOrganization / OrgUserAccess references.
  * This implements the "No Naked Tables" rule from the security model:
  * every tenant-scoped query MUST include tenantId filtering.
  * 

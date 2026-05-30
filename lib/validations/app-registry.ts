@@ -1,6 +1,13 @@
 import { z } from "zod";
 
-export const AppStatusEnum = z.enum(["active", "disabled", "development"]);
+export const AppStatusEnum = z.enum([
+  "active",
+  "disabled",
+  "development",
+  "inactive",
+  "hidden",
+  "suspended",
+]);
 
 export const AppCategoryEnum = z.enum([
   "vault",

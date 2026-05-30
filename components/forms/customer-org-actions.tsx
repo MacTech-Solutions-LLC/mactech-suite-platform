@@ -37,13 +37,13 @@ const customerTypes = ["dib", "prime", "subcontractor", "internal", "other"] as 
 const subscriptionTiers = ["starter", "professional", "enterprise", "federal"] as const;
 const cmmcLevels = ["level1", "level2", "unknown"] as const;
 const cuiBoundaries = ["none", "vault_only", "customer_managed", "hybrid"] as const;
-const statuses = ["active", "onboarding", "suspended", "archived"] as const;
+const statuses = ["active", "onboarding", "suspended", "inactive", "unpaid", "archived"] as const;
 
 export function CustomerOrgActions({ org }: { org: CustomerOrganization }) {
   return (
     <div className="flex flex-wrap gap-2">
       <EditCustomerOrgDialog org={org} />
-      {org.status !== "suspended" && org.status !== "archived" && (
+      {org.status !== "suspended" && org.status !== "inactive" && org.status !== "unpaid" && org.status !== "archived" && (
         <SuspendCustomerOrgDialog org={org} />
       )}
     </div>

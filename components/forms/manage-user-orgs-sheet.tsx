@@ -34,6 +34,7 @@ import {
   removeCustomerUser,
 } from "@/lib/services/user-service";
 import { CUSTOMER_ROLE_DEFINITIONS } from "@/lib/permissions";
+import type { UserStatus } from "@prisma/client";
 
 export interface OrgOption {
   id: string;
@@ -47,7 +48,7 @@ export interface MembershipRow {
   customerOrganizationName: string;
   customerOrganizationSlug: string;
   role: string;
-  status: "active" | "suspended" | "invited";
+  status: UserStatus;
 }
 
 export interface ManageUserOrgsSheetProps {

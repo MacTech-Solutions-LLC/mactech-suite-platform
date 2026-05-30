@@ -1,11 +1,14 @@
 /**
- * Auth Adapter Layer
+ * Deprecated legacy tenant compatibility adapter.
  * 
  * This module creates a 'clean room' where the application only cares about
  * internalUserId and tenantId. External identity providers (Clerk, Google)
  * are resolved into internal MacTech abstractions at the boundary.
  * 
- * Goal: Allow future provider swaps without touching business logic.
+ * Hub Authority Contract v1 runtime access decisions must use the canonical
+ * Hub models through /api/hub/authority/resolve-app-access. This adapter only
+ * preserves the original Tenant/User/Membership read path for legacy callers
+ * until those callers migrate to Hub authority snapshots.
  * 
  * Critical Constraint: No Clerk IDs leak into business services.
  * All downstream code uses internal MacTech identifiers only.

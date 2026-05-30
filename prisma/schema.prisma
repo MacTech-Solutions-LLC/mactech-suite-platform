@@ -156,6 +156,10 @@ enum UserStatus {
   active
   suspended
   invited
+  inactive
+  revoked
+  expired
+  deleted
 }
 
 enum CustomerType {
@@ -170,6 +174,8 @@ enum CustomerStatus {
   active
   onboarding
   suspended
+  inactive
+  unpaid
   archived
 }
 
@@ -197,6 +203,9 @@ enum AppStatus {
   active
   disabled
   development
+  inactive
+  hidden
+  suspended
 }
 
 enum AppCategory {
@@ -452,6 +461,7 @@ model UserProfile {
   isInternalMacTechUser Boolean      @default(false)
   platformRole          PlatformRole @default(none)
   status                UserStatus   @default(active)
+  authorityVersion      Int          @default(1)
   lastSeenAt            DateTime?
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt
@@ -479,6 +489,7 @@ model CustomerOrganization {
   industry            String?
   customerType        CustomerType     @default(other)
   status              CustomerStatus   @default(onboarding)
+  authorityVersion    Int              @default(1)
   subscriptionTier    SubscriptionTier @default(starter)
   cmmcTargetLevel     CmmcLevel        @default(unknown)
   cuiBoundaryType     CuiBoundaryType  @default(none)
@@ -526,6 +537,7 @@ model AppRegistry {
   category           AppCategory @default(other)
   requiresOrgContext Boolean     @default(true)
   isInternalOnly     Boolean     @default(false)
+  authorityVersion   Int         @default(1)
 
   // ── Command Center operational metadata ──────────────────────────────
   // Slug used in URLs and join keys when appKey isn't url-safe enough.
@@ -615,6 +627,7 @@ model ProductEntitlement {
   expiresAt              DateTime?
   status                 EntitlementStatus @default(active)
   configurationJson      Json?
+  authorityVersion       Int               @default(1)
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
 
@@ -636,6 +649,7 @@ model OrgUserAccess {
   role                   String
   permissionsJson        Json?
   status                 UserStatus @default(invited)
+  authorityVersion       Int        @default(1)
   createdAt              DateTime   @default(now())
   updatedAt              DateTime   @updatedAt
 
@@ -738,6 +752,7 @@ enum ApiKeyScope {
   audit_ingest // POST /api/audit/ingest
   org_read // GET /api/v1/orgs/*
   user_access_read // GET /api/v1/users/*/access
+  app_authority_resolve // POST /api/hub/authority/resolve-app-access
   webhook_send // outbound webhook deliveries (server-internal use)
   /// Slice 5.7: external Claude / automation trigger for AgentOps runs.
   /// Holders may POST /api/v1/agents/runs with an Intent payload. The
@@ -748,6 +763,30 @@ enum ApiKeyScope {
   /// "requester" is a synthetic api-key:<id> identity, never matching a
   /// Clerk admin id).
   agents_trigger
+}
+
+enum ServiceIdentityStatus {
+  active
+  suspended
+  retired
+}
+
+/// Canonical service identity for server-to-server Hub calls. Tokens remain
+/// in ApiKey rows; this table binds a source app identity and rotation status.
+model ServiceIdentity {
+  id                  String                @id @default(cuid())
+  appKey              String                @unique
+  name                String
+  status              ServiceIdentityStatus @default(active)
+  tokenRotatedAt      DateTime?
+  tokenExpiresAt      DateTime?
+  lastAuthenticatedAt DateTime?
+  authorityVersion    Int                   @default(1)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@index([appKey])
+  @@index([status])
 }
 
 /// API key for sibling apps + integrations to talk to the central hub.

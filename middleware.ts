@@ -35,6 +35,7 @@ const isPublicRoute = createRouteMatcher([
   // Public read-only endpoints (catalog, etc.) — no auth, CDN-cached.
   "/api/public/(.*)",
   "/api/audit/ingest",
+  "/api/hub/authority/(.*)",
   "/api/v1/(.*)",
 ]);
 

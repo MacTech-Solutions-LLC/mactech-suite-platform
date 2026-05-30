@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 
 const ACTIVE = ["active", "trialing"];
 const WARN = ["onboarding", "invited", "trialing"];
-const NEGATIVE = ["suspended", "expired", "archived", "disabled"];
+const NEGATIVE = ["suspended", "expired", "archived", "disabled", "inactive", "unpaid", "revoked", "deleted", "hidden"];
 
 export function StatusBadge({
   status,
