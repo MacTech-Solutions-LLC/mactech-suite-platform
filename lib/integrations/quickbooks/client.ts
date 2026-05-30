@@ -166,16 +166,57 @@ export async function createCustomer(input: {
   return { ok: true, data: res.data.Customer };
 }
 
-/** Find-or-create idempotently. */
+/** Find a Customer by exact DisplayName. Null if not found. QBO enforces
+ *  DisplayName uniqueness, so this is how we detect a name already in use. */
+export async function findCustomerByDisplayName(
+  name: string,
+): Promise<QboResult<QboCustomer | null>> {
+  const safe = name.replace(/'/g, "\\'");
+  const query = `SELECT * FROM Customer WHERE DisplayName = '${safe}' MAXRESULTS 1`;
+  const res = await qboFetch<{ QueryResponse: { Customer?: QboCustomer[] } }>({
+    path: "/query",
+    query: { query },
+  });
+  if (!res.ok) return res;
+  return { ok: true, data: res.data.QueryResponse.Customer?.[0] ?? null };
+}
+
+/** Find-or-create idempotently — resilient to QBO's global DisplayName
+ *  uniqueness. Multiple buyers from one company share a company-based
+ *  DisplayName, so a naive create collides ("Duplicate Name Exists", code
+ *  6240). Resolution order:
+ *    1. Reuse the customer whose email matches (most specific).
+ *    2. Reuse the customer with the same DisplayName (same company → one
+ *       QBO customer; the per-buyer email still rides on each invoice's
+ *       BillEmail).
+ *    3. Create. If QBO still reports 6240 (e.g. the existing name belongs
+ *       to an inactive customer the queries skip), retry once with an
+ *       email-disambiguated DisplayName so checkout never hard-fails. */
 export async function findOrCreateCustomer(input: {
   email: string;
   displayName: string;
   companyName?: string | null;
 }): Promise<QboResult<QboCustomer>> {
-  const existing = await findCustomerByEmail(input.email);
-  if (existing.ok && existing.data) return { ok: true, data: existing.data };
-  if (!existing.ok && existing.status !== 0) return existing;
-  return createCustomer(input);
+  const byEmail = await findCustomerByEmail(input.email);
+  if (byEmail.ok && byEmail.data) return { ok: true, data: byEmail.data };
+  if (!byEmail.ok && byEmail.status !== 0) return byEmail;
+
+  const byName = await findCustomerByDisplayName(input.displayName);
+  if (byName.ok && byName.data) return { ok: true, data: byName.data };
+  if (!byName.ok && byName.status !== 0) return byName;
+
+  const created = await createCustomer(input);
+  if (created.ok) return created;
+  const isDuplicate =
+    created.status !== 0 &&
+    /"code":"6240"|duplicate name exists/i.test(created.error);
+  if (isDuplicate) {
+    return createCustomer({
+      ...input,
+      displayName: `${input.displayName} (${input.email})`,
+    });
+  }
+  return created;
 }
 
 /** Find an Item by exact Name. */
