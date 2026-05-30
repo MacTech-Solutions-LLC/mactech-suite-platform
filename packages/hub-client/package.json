@@ -1,0 +1,29 @@
+{
+  "name": "@mactech/hub-client",
+  "version": "0.1.0",
+  "description": "MacTech Suite Hub authority client for app access, audit emission, and object references.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "examples",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "peerDependencies": {
+    "typescript": ">=5"
+  },
+  "devDependencies": {}
+}

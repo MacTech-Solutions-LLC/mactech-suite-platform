@@ -1,6 +1,14 @@
 import { z } from "zod";
 
-export const UserStatusEnum = z.enum(["active", "suspended", "invited"]);
+export const UserStatusEnum = z.enum([
+  "active",
+  "suspended",
+  "invited",
+  "inactive",
+  "revoked",
+  "expired",
+  "deleted",
+]);
 
 export const PlatformRoleEnum = z.enum([
   "mactech_super_admin",

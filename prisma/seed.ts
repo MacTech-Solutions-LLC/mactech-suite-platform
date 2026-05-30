@@ -147,6 +147,43 @@ const APP_FIXTURES = [
     repoDefaultBranch: "main",
   },
   {
+    appKey: "hub",
+    name: "MacTech Suite Hub",
+    description: "Suite control plane for identity, tenants, access, navigation, and audit.",
+    category: "admin" as const,
+    baseUrl: "https://www.suite.mactechsolutionsllc.com",
+    requiresOrgContext: false,
+    isInternalOnly: true,
+    status: "active" as const,
+    publicUrl: "https://www.suite.mactechsolutionsllc.com",
+    adminUrl: "https://www.suite.mactechsolutionsllc.com/command-center",
+    subdomain: "www.suite",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "mission_critical" as const,
+    lifecycle: "production" as const,
+    visibility: "internal" as const,
+    repoFullName: "MacTech-Solutions-LLC/mactech-suite-platform",
+    repoDefaultBranch: "main",
+  },
+  {
+    appKey: "qms",
+    name: "QMS",
+    description: "Controlled documents, records, evidence, and approvals.",
+    category: "evidence" as const,
+    baseUrl: "https://qms.mactechsolutionsllc.com",
+    requiresOrgContext: true,
+    isInternalOnly: false,
+    status: "active" as const,
+    publicUrl: "https://qms.mactechsolutionsllc.com",
+    subdomain: "qms",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "high" as const,
+    lifecycle: "production" as const,
+    visibility: "customer" as const,
+    repoFullName: "MacTech-Solutions-LLC/QMS",
+    repoDefaultBranch: "main",
+  },
+  {
     appKey: "governance",
     name: "MacTech Governance",
     description:
@@ -241,6 +278,70 @@ const APP_FIXTURES = [
     repoDefaultBranch: "main",
   },
   {
+    appKey: "workspace-gateway",
+    name: "Workspace Gateway",
+    description: "Google Workspace intake gateway and draft/pending routing layer.",
+    category: "other" as const,
+    baseUrl: "https://workspace.mactechsolutionsllc.com",
+    requiresOrgContext: true,
+    isInternalOnly: false,
+    status: "active" as const,
+    publicUrl: "https://workspace.mactechsolutionsllc.com",
+    subdomain: "workspace",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "medium" as const,
+    lifecycle: "production" as const,
+    visibility: "customer" as const,
+  },
+  {
+    appKey: "codex-cui-vault",
+    name: "Codex / CUI Vault",
+    description: "CUI, CMMC, cyber evidence, and secure client deliverable enclave.",
+    category: "vault" as const,
+    baseUrl: "https://vault.mactechsolutionsllc.com",
+    requiresOrgContext: true,
+    isInternalOnly: false,
+    status: "active" as const,
+    publicUrl: "https://vault.mactechsolutionsllc.com",
+    subdomain: "vault",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "mission_critical" as const,
+    lifecycle: "production" as const,
+    visibility: "customer" as const,
+  },
+  {
+    appKey: "mackali",
+    name: "MacKali",
+    description: "Internal MacTech offensive security and validation environment.",
+    category: "other" as const,
+    baseUrl: "https://mackali.mactechsolutionsllc.com",
+    requiresOrgContext: true,
+    isInternalOnly: true,
+    status: "active" as const,
+    publicUrl: "https://mackali.mactechsolutionsllc.com",
+    subdomain: "mackali",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "high" as const,
+    lifecycle: "production" as const,
+    visibility: "internal" as const,
+  },
+  {
+    appKey: "cyber-range",
+    name: "Cyber Range",
+    description: "Internal cyber range, exercise, and export environment.",
+    category: "other" as const,
+    baseUrl: "https://cyber-range.mactechsolutionsllc.com",
+    requiresOrgContext: true,
+    isInternalOnly: true,
+    status: "active" as const,
+    publicUrl: "https://cyber-range.mactechsolutionsllc.com",
+    subdomain: "cyber-range",
+    apexDomain: "mactechsolutionsllc.com",
+    criticality: "high" as const,
+    lifecycle: "production" as const,
+    visibility: "internal" as const,
+  },
+  {
     appKey: "vetted",
     name: "Vetted",
     description: "Partner vetting and supply-chain risk surfacing.",
@@ -280,6 +381,12 @@ const APP_FIXTURES = [
     railwayEnvironmentName: "production",
   },
 ];
+
+const SERVICE_IDENTITY_FIXTURES = APP_FIXTURES.map((app) => ({
+  appKey: app.appKey,
+  name: `${app.name} service identity`,
+  status: "active" as const,
+}));
 
 async function seedApps() {
   for (const app of APP_FIXTURES) {
@@ -352,6 +459,19 @@ async function seedApps() {
         status: app.status,
         ...opsFields,
       },
+    });
+  }
+}
+
+async function seedServiceIdentities() {
+  for (const service of SERVICE_IDENTITY_FIXTURES) {
+    await prisma.serviceIdentity.upsert({
+      where: { appKey: service.appKey },
+      update: {
+        name: service.name,
+        status: service.status,
+      },
+      create: service,
     });
   }
 }
@@ -485,7 +605,7 @@ async function seedLegacyApiKey() {
         "Pre-migration env-var key. Rotate every consumer onto a DB-issued key, then revoke this row.",
       keyHash: hash,
       keyPrefix: legacy.slice(0, 12),
-      scopes: ["audit_ingest", "org_read", "user_access_read"],
+      scopes: ["audit_ingest", "org_read", "user_access_read", "app_authority_resolve"],
       appKey: null,
       status: "active",
     },
@@ -643,6 +763,8 @@ async function main() {
   console.log("🌱 Seeding MacTech Suite Command Center fixtures...");
   await seedApps();
   console.log("✓ App registry seeded");
+  await seedServiceIdentities();
+  console.log("✓ Service identities seeded");
   await seedAppDependencies();
   console.log("✓ App dependencies seeded");
   await seedRoleTemplates();

@@ -19,7 +19,7 @@ import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-const STATUSES = ["active", "onboarding", "suspended", "archived"] as const;
+const STATUSES = ["active", "onboarding", "suspended", "inactive", "unpaid", "archived"] as const;
 const TIERS = ["starter", "professional", "enterprise", "federal"] as const;
 const LEVELS = ["level1", "level2", "unknown"] as const;
 const TYPES = ["dib", "prime", "subcontractor", "internal", "other"] as const;

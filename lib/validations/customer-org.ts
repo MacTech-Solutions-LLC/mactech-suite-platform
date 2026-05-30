@@ -12,6 +12,8 @@ export const CustomerStatusEnum = z.enum([
   "active",
   "onboarding",
   "suspended",
+  "inactive",
+  "unpaid",
   "archived",
 ]);
 

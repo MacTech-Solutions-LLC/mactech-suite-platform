@@ -10,7 +10,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { writeAuditLog } from "@/lib/audit";
-import { requireCustomerOrgAccess } from "@/lib/authz";
+import { getCurrentAuthContext } from "@/lib/authz";
+import { evaluateHubAuthorityRecords } from "@/lib/hub-authority-core";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,16 +25,22 @@ export async function GET(
     return NextResponse.json({ error: "orgId is required." }, { status: 400 });
   }
 
-  let access;
-  try {
-    access = await requireCustomerOrgAccess(orgId);
-  } catch (err) {
+  const context = await getCurrentAuthContext();
+  if (!context) {
     return NextResponse.redirect(new URL("/access-restricted?reason=no_org_access", request.url));
   }
 
-  const [app, org, entitlement] = await Promise.all([
+  const [app, org, membership, entitlement] = await Promise.all([
     prisma.appRegistry.findUnique({ where: { appKey: params.appKey } }),
     prisma.customerOrganization.findUnique({ where: { id: orgId } }),
+    prisma.orgUserAccess.findUnique({
+      where: {
+        customerOrganizationId_userProfileId: {
+          customerOrganizationId: orgId,
+          userProfileId: context.userProfile.id,
+        },
+      },
+    }),
     prisma.productEntitlement.findFirst({
       where: {
         customerOrganizationId: orgId,
@@ -41,13 +48,42 @@ export async function GET(
       },
     }),
   ]);
+  const roleTemplate =
+    membership && !Array.isArray(membership.permissionsJson)
+      ? await prisma.roleTemplate.findUnique({
+          where: { scope_key: { scope: "customer_org", key: membership.role } },
+        })
+      : null;
 
   if (!app || !org) {
     return NextResponse.json({ error: "App or org not found." }, { status: 404 });
   }
-  if (!entitlement?.enabled || entitlement.status !== "active") {
+  const snapshot = evaluateHubAuthorityRecords(
+    {
+      clerkUserId: context.clerkUserId,
+      appKey: params.appKey,
+      requestedOrgId: orgId,
+      requestId: request.headers.get("x-request-id"),
+      sourceIp: getIp(request),
+      userAgent: request.headers.get("user-agent"),
+      service: { sourceAppKey: "hub", authMethod: "service_token" },
+    },
+    {
+      serviceValid: true,
+      sourceAppKnown: true,
+      app,
+      user: context.userProfile,
+      organization: org,
+      membership,
+      entitlement,
+      roleTemplatePermissions: Array.isArray(roleTemplate?.permissionsJson)
+        ? roleTemplate.permissionsJson.filter((value): value is string => typeof value === "string")
+        : null,
+    },
+  );
+  if (!snapshot.decision.allow) {
     return NextResponse.redirect(
-      new URL("/access-restricted?reason=permission_denied", request.url),
+      new URL(`/access-restricted?reason=${snapshot.decision.denyReason}`, request.url),
     );
   }
   if (!app.baseUrl) {
@@ -62,9 +98,9 @@ export async function GET(
     eventCategory: "system",
     severity: "info",
     action: `Launched ${app.name} for ${org.name}`,
-    actorClerkUserId: access.context.clerkUserId,
-    actorEmail: access.context.userProfile.email,
-    actorUserProfileId: access.context.userProfile.id,
+    actorClerkUserId: context.clerkUserId,
+    actorEmail: context.userProfile.email,
+    actorUserProfileId: context.userProfile.id,
     customerOrganizationId: org.id,
     appRegistryId: app.id,
     resourceType: "AppLaunch",
@@ -77,4 +113,10 @@ export async function GET(
     target.searchParams.set("orgId", org.clerkOrgId);
   }
   return NextResponse.redirect(target);
+}
+
+function getIp(request: NextRequest): string | null {
+  const xff = request.headers.get("x-forwarded-for");
+  if (xff) return xff.split(",")[0]?.trim() ?? null;
+  return request.headers.get("x-real-ip");
 }

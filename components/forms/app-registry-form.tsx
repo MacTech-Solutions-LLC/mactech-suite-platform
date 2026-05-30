@@ -37,7 +37,7 @@ const CATEGORIES = [
   "admin",
   "other",
 ] as const;
-const STATUSES = ["active", "disabled", "development"] as const;
+const STATUSES = ["active", "disabled", "development", "inactive", "hidden", "suspended"] as const;
 
 export function AppRegistryForm({
   initial,
