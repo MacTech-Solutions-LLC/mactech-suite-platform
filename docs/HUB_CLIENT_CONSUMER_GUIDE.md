@@ -4,11 +4,46 @@
 
 ## Install
 
-This PR implements a local package at `packages/hub-client`. Publishing is intentionally not invented here. Options:
+Approved channel for the current phase: consume the Hub client through a workspace or pinned git dependency. Do not publish `@mactech/hub-client` until package ownership, npm scope, and release automation are approved.
 
-- publish `@mactech/hub-client` to the MacTech private npm registry once registry ownership is decided
-- consume via workspace or git dependency during phased migration
-- vendor only compiled package artifacts for apps that cannot join the workspace yet
+Current local package name: `@mactech/hub-client`.
+
+Required access model for private MacTech package installs:
+
+- Local development: `NODE_AUTH_TOKEN` or a user-level npm auth token with `read:packages`.
+- CI/Railway install: `NODE_AUTH_TOKEN` secret with `read:packages` for the package owner.
+- Publishing: not enabled for this package yet.
+
+Add to your app's `.npmrc`:
+
+```
+@mactech-solutions-llc:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
+```
+
+Do not use npm registry install instructions for `@mactech/hub-client` until publishing is approved. During development, install through the workspace package:
+
+```json
+{
+  "dependencies": {
+    "@mactech/hub-client": "workspace:*"
+  }
+}
+```
+
+See [GitHub Packages Setup](../CONTRIBUTING.md#github-packages-setup) for PAT generation instructions.
+
+### Before publishing v1.0.0
+
+Apps outside this workspace can add this repository as a submodule or checked-out sibling and consume the package by path while publishing is deferred:
+
+```json
+{
+  "dependencies": {
+    "@mactech/hub-client": "file:../mactech-suite-platform/packages/hub-client"
+  }
+}
+```
 
 Required app environment:
 
