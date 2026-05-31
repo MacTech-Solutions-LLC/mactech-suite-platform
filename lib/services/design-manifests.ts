@@ -19,11 +19,39 @@ import "server-only";
 import {
   ManifestSchema,
   type Manifest,
+  type Mood,
+  type Palette,
 } from "@mactech-solutions-llc/onboard";
 import { prisma } from "@/lib/db/prisma";
 
+export interface DesignManifestComponent {
+  name: string;
+  source?: string;
+}
+
+export interface DesignManifestOverride {
+  component: string;
+  reason: string;
+}
+
+export interface DesignManifest {
+  mood: Mood;
+  palette: Palette;
+  version?: string | number;
+  tokens_version: string;
+  generator?: string;
+  generated_at: string;
+  app: {
+    repo?: string | null;
+    deploy_url?: string | null;
+  };
+  components: DesignManifestComponent[];
+  overrides: DesignManifestOverride[];
+  capabilities?: string[];
+}
+
 interface CachedEntry {
-  manifest: Manifest | null;
+  manifest: DesignManifest | null;
   fetched_at: number;
   /** Last fetch error, if any. Surfaced in the UI as "invalid manifest"
    *  rather than re-thrown — the Design Surface degrades gracefully. */
@@ -39,7 +67,7 @@ export interface AppManifestRow {
   publicUrl: string | null;
   criticality: string;
   status: string;
-  manifest: Manifest | null;
+  manifest: DesignManifest | null;
   /** "ok" | "stale" (HTTP failure) | "invalid" (parse failure) |
    *  "not-onboarded" (404). */
   state: "ok" | "stale" | "invalid" | "not-onboarded";
@@ -91,7 +119,7 @@ export async function fetchManifestForApp(
     };
   }
 
-  let manifest: Manifest | null = null;
+  let manifest: DesignManifest | null = null;
   let error: string | null = null;
   try {
     const url = manifestUrlFor(app.publicUrl);
@@ -109,7 +137,7 @@ export async function fetchManifestForApp(
       const json: unknown = await res.json();
       const parsed = ManifestSchema.safeParse(json);
       if (parsed.success) {
-        manifest = parsed.data;
+        manifest = normalizeDesignManifest(parsed.data);
       } else {
         error = `parse: ${parsed.error.issues[0]?.message ?? "invalid schema"}`;
       }
@@ -172,7 +200,7 @@ export async function fetchAllManifests(): Promise<AppManifestRow[]> {
  *  governance action; ships in v0.5.1 as a building block. */
 export function findOverrides(rows: AppManifestRow[]): {
   app: string;
-  overrides: Manifest["overrides"];
+  overrides: DesignManifest["overrides"];
 }[] {
   return rows
     .filter((r) => r.manifest?.overrides?.length)
@@ -181,4 +209,78 @@ export function findOverrides(rows: AppManifestRow[]): {
 
 export function clearManifestCache(): void {
   cache.clear();
+}
+
+function normalizeDesignManifest(raw: unknown): DesignManifest {
+  const record = isRecord(raw) ? raw : {};
+  const app = isRecord(record.app) ? record.app : {};
+
+  return {
+    ...record,
+    mood: isMood(record.mood) ? record.mood : "vivid",
+    palette: isPalette(record.palette) ? record.palette : "cyan",
+    version: typeof record.version === "string" ? record.version : undefined,
+    tokens_version:
+      typeof record.tokens_version === "string" ? record.tokens_version : "unknown",
+    generator: typeof record.generator === "string" ? record.generator : undefined,
+    generated_at:
+      typeof record.generated_at === "string"
+        ? record.generated_at
+        : new Date(0).toISOString(),
+    app: {
+      repo: typeof app.repo === "string" ? app.repo : null,
+      deploy_url: typeof app.deploy_url === "string" ? app.deploy_url : null,
+    },
+    components: Array.isArray(record.components)
+      ? record.components.flatMap((component) => {
+          if (!isRecord(component) || typeof component.name !== "string") return [];
+          return [
+            {
+              name: component.name,
+              source: typeof component.source === "string" ? component.source : undefined,
+            },
+          ];
+        })
+      : [],
+    overrides: Array.isArray(record.overrides)
+      ? record.overrides.flatMap((override) => {
+          if (!isRecord(override) || typeof override.component !== "string") return [];
+          return [
+            {
+              component: override.component,
+              reason: typeof override.reason === "string" ? override.reason : "override",
+            },
+          ];
+        })
+      : [],
+    capabilities: Array.isArray(record.capabilities)
+      ? record.capabilities.filter(
+          (capability): capability is string => typeof capability === "string",
+        )
+      : undefined,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isMood(value: unknown): value is Mood {
+  return (
+    value === "vivid" ||
+    value === "quiet" ||
+    value === "editorial" ||
+    value === "industrial"
+  );
+}
+
+function isPalette(value: unknown): value is Palette {
+  return (
+    value === "cyan" ||
+    value === "forest" ||
+    value === "coral" ||
+    value === "safety" ||
+    value === "violet" ||
+    value === "slate"
+  );
 }
