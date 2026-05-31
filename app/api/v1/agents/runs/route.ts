@@ -59,26 +59,36 @@ export async function POST(request: NextRequest) {
     sourceLabel: string,
     apiKeyId: string | null,
   ) => {
-    const [sourceId, targetId] = await Promise.all([
-      appRegistryIdForKey(sourceLabel),
-      suiteAppRegistryId(),
-    ]);
-    void recordAppCall({
-      sourceLabel,
-      sourceAppRegistryId: sourceId,
-      targetAppRegistryId: targetId,
-      endpoint: "/api/v1/agents/runs",
-      method: "POST",
-      statusCode,
-      bytesIn,
-      apiKeyId,
-      durationMs: Date.now() - startedAt,
-    });
+    try {
+      const [sourceId, targetId] = await Promise.all([
+        appRegistryIdForKey(sourceLabel),
+        suiteAppRegistryId(),
+      ]);
+      await recordAppCall({
+        sourceLabel,
+        sourceAppRegistryId: sourceId,
+        targetAppRegistryId: targetId,
+        endpoint: "/api/v1/agents/runs",
+        method: "POST",
+        statusCode,
+        bytesIn,
+        apiKeyId,
+        durationMs: Date.now() - startedAt,
+      });
+    } catch (error) {
+      console.error("[recordTraffic] Failed to record app call:", {
+        statusCode,
+        sourceLabel,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   };
 
   const auth = await requireApiKey(request, "agents_trigger");
   if (!auth.ok) {
-    void recordTraffic(401, "anonymous", null);
+    recordTraffic(401, "anonymous", null).catch((error) => {
+      console.error("[recordTraffic] Background task failed:", error);
+    });
     return auth.response;
   }
   const sourceLabel = auth.apiKeyApp ?? auth.apiKeyName ?? "anonymous";
@@ -87,13 +97,17 @@ export async function POST(request: NextRequest) {
   try {
     body = (await request.json()) as Record<string, unknown>;
   } catch {
-    void recordTraffic(400, sourceLabel, auth.apiKeyId);
+    recordTraffic(400, sourceLabel, auth.apiKeyId).catch((error) => {
+      console.error("[recordTraffic] Background task failed:", error);
+    });
     return NextResponse.json({ ok: false, error: "bad_json" }, { status: 400 });
   }
 
   const requestText = body.request;
   if (typeof requestText !== "string" || requestText.trim().length === 0) {
-    void recordTraffic(400, sourceLabel, auth.apiKeyId);
+    recordTraffic(400, sourceLabel, auth.apiKeyId).catch((error) => {
+      console.error("[recordTraffic] Background task failed:", error);
+    });
     return NextResponse.json(
       { ok: false, error: "request_required" },
       { status: 400 },
@@ -102,7 +116,9 @@ export async function POST(request: NextRequest) {
 
   const intent = parseIntent(body.intent);
   if (!intent) {
-    void recordTraffic(400, sourceLabel, auth.apiKeyId);
+    recordTraffic(400, sourceLabel, auth.apiKeyId).catch((error) => {
+      console.error("[recordTraffic] Background task failed:", error);
+    });
     return NextResponse.json(
       { ok: false, error: "intent_required" },
       { status: 400 },
@@ -119,7 +135,9 @@ export async function POST(request: NextRequest) {
       apiKeyId: auth.apiKeyId ?? "unknown",
       apiKeyName: auth.apiKeyName,
     });
-    void recordTraffic(200, sourceLabel, auth.apiKeyId);
+    recordTraffic(200, sourceLabel, auth.apiKeyId).catch((error) => {
+      console.error("[recordTraffic] Background task failed:", error);
+    });
     return NextResponse.json({ ok: true, ...out });
   } catch (err) {
     if (err instanceof ExternalTriggerError) {
@@ -129,13 +147,17 @@ export async function POST(request: NextRequest) {
           : err.code === "execute_failed"
             ? 500
             : 400;
-      void recordTraffic(status, sourceLabel, auth.apiKeyId);
+      recordTraffic(status, sourceLabel, auth.apiKeyId).catch((error) => {
+        console.error("[recordTraffic] Background task failed:", error);
+      });
       return NextResponse.json(
         { ok: false, error: err.code, details: err.details ?? [] },
         { status },
       );
     }
-    void recordTraffic(500, sourceLabel, auth.apiKeyId);
+    recordTraffic(500, sourceLabel, auth.apiKeyId).catch((error) => {
+      console.error("[recordTraffic] Background task failed:", error);
+    });
     console.error("[api/v1/agents/runs]", err);
     return NextResponse.json({ ok: false, error: "trigger_failed" }, { status: 500 });
   }

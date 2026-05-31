@@ -32,7 +32,11 @@ export async function POST(request: NextRequest) {
   }
 
   const response = await canonicalAuditPost(request);
-  void recordTraffic(response.status, sourceLabel, bytesIn, Date.now() - startedAt);
+  recordTraffic(response.status, sourceLabel, bytesIn, Date.now() - startedAt).catch(
+    (error) => {
+      console.error("[recordTraffic] Background task failed:", error);
+    }
+  );
   return response;
 }
 
@@ -42,18 +46,26 @@ async function recordTraffic(
   bytesIn: number,
   durationMs: number,
 ) {
-  const [sourceId, targetId] = await Promise.all([
-    appRegistryIdForKey(sourceLabel),
-    suiteAppRegistryId(),
-  ]);
-  void recordAppCall({
-    sourceLabel,
-    sourceAppRegistryId: sourceId,
-    targetAppRegistryId: targetId,
-    endpoint: "/api/audit/ingest",
-    method: "POST",
-    statusCode,
-    bytesIn,
-    durationMs,
-  });
+  try {
+    const [sourceId, targetId] = await Promise.all([
+      appRegistryIdForKey(sourceLabel),
+      suiteAppRegistryId(),
+    ]);
+    await recordAppCall({
+      sourceLabel,
+      sourceAppRegistryId: sourceId,
+      targetAppRegistryId: targetId,
+      endpoint: "/api/audit/ingest",
+      method: "POST",
+      statusCode,
+      bytesIn,
+      durationMs,
+    });
+  } catch (error) {
+    console.error("[recordTraffic] Failed to record app call:", {
+      statusCode,
+      sourceLabel,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
