@@ -1049,9 +1049,14 @@ model OperationalRiskFlag {
   app AppRegistry? @relation(fields: [appRegistryId], references: [id], onDelete: SetNull)
 
   // Idempotency: at most one OPEN flag of a given (app, category) pair at
-  // a time. The evaluator finds an existing row instead of stacking new
-  // ones every reconciliation cycle.
-  @@unique([appRegistryId, category, status], name: "idempotent_open_flag")
+  // a time. Enforced by a partial unique index defined in migration
+  // 20260601000000_partial_unique_open_risk_flag — Prisma's schema DSL
+  // cannot express partial indexes, so this invariant is DB-only. Do NOT
+  // re-add @@unique([appRegistryId, category, status]) here: that earlier
+  // form incorrectly forbade more than one RESOLVED row per (app, category)
+  // and broke the resolve-then-reopen lifecycle, surfacing as a P2002
+  // during /command-center page render.
+  @@index([appRegistryId, category])
   @@index([severity])
   @@index([status])
   @@index([category])
