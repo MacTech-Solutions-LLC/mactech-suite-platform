@@ -12,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AppRegistryForm } from "@/components/forms/app-registry-form";
+import { AppRegistryDeleteDialog } from "@/components/forms/app-registry-delete-dialog";
 import { ExternalLink, Search } from "lucide-react";
 import Link from "next/link";
 import { prisma } from "@/lib/db/prisma";
@@ -25,6 +26,18 @@ export default async function AppRegistryPage() {
 
   const apps = await prisma.appRegistry.findMany({
     orderBy: { name: "asc" },
+    include: {
+      _count: {
+        select: {
+          entitlements: true,
+          sourceObjectRefs: true,
+          ownedObjectRefs: true,
+          repoLinks: true,
+          outgoingDependencies: true,
+          incomingDependencies: true,
+        },
+      },
+    },
   });
 
   return (
@@ -104,19 +117,34 @@ export default async function AppRegistryPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <AppRegistryForm
-                        triggerLabel="Edit"
-                        initial={{
-                          appKey: app.appKey,
-                          name: app.name,
-                          description: app.description,
-                          baseUrl: app.baseUrl,
-                          category: app.category,
-                          status: app.status,
-                          requiresOrgContext: app.requiresOrgContext,
-                          isInternalOnly: app.isInternalOnly,
-                        }}
-                      />
+                      <div className="flex items-center justify-end gap-1">
+                        <AppRegistryForm
+                          triggerLabel="Edit"
+                          initial={{
+                            appKey: app.appKey,
+                            name: app.name,
+                            description: app.description,
+                            baseUrl: app.baseUrl,
+                            category: app.category,
+                            status: app.status,
+                            requiresOrgContext: app.requiresOrgContext,
+                            isInternalOnly: app.isInternalOnly,
+                          }}
+                        />
+                        <AppRegistryDeleteDialog
+                          appKey={app.appKey}
+                          name={app.name}
+                          impact={{
+                            entitlements: app._count.entitlements,
+                            blockingReferences:
+                              app._count.sourceObjectRefs + app._count.ownedObjectRefs,
+                            repoLinks: app._count.repoLinks,
+                            dependencyEdges:
+                              app._count.outgoingDependencies +
+                              app._count.incomingDependencies,
+                          }}
+                        />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
