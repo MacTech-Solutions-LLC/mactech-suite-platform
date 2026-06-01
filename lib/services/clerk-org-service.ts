@@ -67,11 +67,16 @@ export interface OrgPublicMetadata {
   status: string;
   industry?: string | null;
   enabledApps: string[];
+  /** Training courses (CourseType values) this org is entitled to across all
+   *  its purchased packages. The cmmc-training-hub reads this to auto-assign
+   *  modules + roles to org members. Omitted/empty when no training purchased. */
+  trainingCourses?: string[];
 }
 
 export function buildPublicMetadata(
   org: CustomerOrganization,
   enabledEntitlements: Array<{ enabled: boolean; app: { appKey: string } }>,
+  trainingCourses: string[] = [],
 ): OrgPublicMetadata {
   return {
     mactechCustomerOrgId: org.id,
@@ -85,6 +90,7 @@ export function buildPublicMetadata(
     enabledApps: enabledEntitlements
       .filter((e) => e.enabled)
       .map((e) => e.app.appKey),
+    trainingCourses,
   };
 }
 

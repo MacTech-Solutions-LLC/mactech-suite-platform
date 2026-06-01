@@ -2,6 +2,16 @@ import { z } from "zod";
 
 export const BillingCycleEnum = z.enum(["one_time", "monthly", "quarterly", "annually"]);
 export const PackageStatusEnum = z.enum(["draft", "active", "archived"]);
+/** Training courses this package grants. Values mirror the cmmc-training-hub
+ *  `CourseType` enum exactly — they're written into the Clerk org publicMetadata
+ *  and the hub auto-assigns the matching courses on provisioning. */
+export const TrainingCourseEnum = z.enum([
+  "AT_001_GENERAL",
+  "AT_002_ROLE_BASED",
+  "AT_INSIDER_THREAT",
+  "IR_TABLETOP",
+]);
+export type TrainingCourse = z.infer<typeof TrainingCourseEnum>;
 export const EntitlementTierEnum = z.enum([
   "starter",
   "professional",
@@ -27,6 +37,9 @@ export const upsertPackageSchema = z.object({
   billingCycle: BillingCycleEnum,
   entitlementTier: EntitlementTierEnum.default("starter"),
   includedAppKeys: z.array(z.string()).default([]),
+  /** Training courses unlocked by this package (subset of CourseType). Stored
+   *  in Package.metadataJson.training.courses. */
+  trainingCourses: z.array(TrainingCourseEnum).default([]),
   status: PackageStatusEnum.default("draft"),
 });
 

@@ -22,6 +22,14 @@ const CYCLE_LABEL: Record<string, string> = {
   annually: "Annually",
 };
 
+/** Pull the package's granted training courses out of metadataJson. */
+function extractTrainingCourses(metadataJson: unknown): string[] {
+  const meta = (metadataJson ?? {}) as Record<string, unknown>;
+  const training = (meta.training ?? {}) as Record<string, unknown>;
+  const courses = training.courses;
+  return Array.isArray(courses) ? courses.filter((c): c is string => typeof c === "string") : [];
+}
+
 function formatPrice(cents: number, currency: string): string {
   try {
     return new Intl.NumberFormat("en-US", {
@@ -91,6 +99,7 @@ export default async function PackagesPage() {
             billingCycle: pkg.billingCycle,
             entitlementTier: pkg.entitlementTier,
             includedAppKeys: pkg.includedAppKeys,
+            trainingCourses: extractTrainingCourses(pkg.metadataJson),
             status: pkg.status,
           }}
         />

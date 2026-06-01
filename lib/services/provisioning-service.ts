@@ -105,6 +105,7 @@ export async function provisionOrder(orderId: string): Promise<ProvisionResult> 
         industry: null,
       } as never,
       [],
+      packageTrainingCourses(order.package.metadataJson),
     );
 
     clerkOrgId = null;
@@ -119,11 +120,15 @@ export async function provisionOrder(orderId: string): Promise<ProvisionResult> 
     if (clerkRes.ok) clerkOrgId = clerkRes.value.id;
 
     // 2c. CustomerOrganization
+    const intake = readIntake(order);
     org = await prisma.customerOrganization.create({
       data: {
         name: orgName,
         slug,
         legalName: order.buyerCompany ?? null,
+        domain: intake.companyDomain,
+        cageCode: intake.cageCode,
+        uei: intake.uei,
         primaryContactName: order.buyerName ?? null,
         primaryContactEmail: order.buyerEmail,
         customerType: "other",
@@ -175,16 +180,18 @@ export async function provisionOrder(orderId: string): Promise<ProvisionResult> 
       });
     }
 
-    // 6. Push enabled apps into Clerk publicMetadata
+    // 6. Push enabled apps + training entitlement into Clerk publicMetadata.
+    //    The training hub reads trainingCourses to auto-assign modules + roles.
     if (clerkOrgId) {
       const enabled = await prisma.productEntitlement.findMany({
         where: { customerOrganizationId: org.id, enabled: true },
         include: { app: { select: { appKey: true } } },
       });
+      const trainingCourses = await orgTrainingCourses(org.id, order.package.metadataJson);
       await tryClerk("updateOrganization (post-provision entitlements)", () =>
         updateClerkOrg({
           clerkOrgId,
-          publicMetadata: buildPublicMetadata(org, enabled),
+          publicMetadata: buildPublicMetadata(org, enabled, trainingCourses),
         }),
       );
     }
@@ -282,17 +289,80 @@ const FREE_EMAIL_DOMAINS = new Set([
   "aol.com", "proton.me", "protonmail.com", "gmx.com", "mail.com", "zoho.com",
 ]);
 
+/** Pull the formal intake captured at checkout off the order. */
+function readIntake(order: Order): {
+  companyDomain: string | null;
+  phone: string | null;
+  jobTitle: string | null;
+  cageCode: string | null;
+  uei: string | null;
+} {
+  const meta = (order.metadataJson ?? {}) as Record<string, unknown>;
+  const intake = (meta.intake ?? {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  return {
+    companyDomain: str(intake.companyDomain),
+    phone: str(intake.phone),
+    jobTitle: str(intake.jobTitle),
+    cageCode: str(intake.cageCode),
+    uei: str(intake.uei),
+  };
+}
+
+/** Training courses (CourseType values) a package grants, from its metadata. */
+function packageTrainingCourses(metadataJson: unknown): string[] {
+  const meta = (metadataJson ?? {}) as Record<string, unknown>;
+  const training = (meta.training ?? {}) as Record<string, unknown>;
+  const courses = training.courses;
+  return Array.isArray(courses) ? courses.filter((c): c is string => typeof c === "string") : [];
+}
+
+/** Union of training courses across all of the org's orders' packages, plus
+ *  the current order's package (which isn't linked to the org yet at the time
+ *  this runs during provisioning). */
+async function orgTrainingCourses(orgId: string, currentPackageMeta: unknown): Promise<string[]> {
+  const orders = await prisma.order.findMany({
+    where: { customerOrganizationId: orgId },
+    include: { package: { select: { metadataJson: true } } },
+  });
+  const set = new Set<string>(packageTrainingCourses(currentPackageMeta));
+  for (const o of orders) {
+    for (const c of packageTrainingCourses(o.package.metadataJson)) set.add(c);
+  }
+  return Array.from(set);
+}
+
 /**
  * The org a new buyer should join, or null to create a fresh one.
- *   1. By company name — case-insensitive match on legalName or name. Mirrors
- *      the QBO customer dedup (one company → one customer → one org).
- *   2. By corporate email domain — when there's no company name, two buyers
- *      sharing a non-free domain (e.g. @acme.com) belong to the same org.
- * Individuals (no company + a free email domain) always get their own org.
+ *   1. By explicit company domain captured at intake — matched against the
+ *      org's `domain` column. The strongest, most deliberate dedupe key.
+ *   2. By CAGE code — a unique DIB org identifier when supplied.
+ *   3. By company name — case-insensitive match on legalName or name.
+ *   4. By corporate email domain — two buyers sharing a non-free email
+ *      domain (e.g. @acme.com) belong to the same org.
+ * Individuals (no company/domain + a free email domain) get their own org.
  */
 async function findExistingOrgForBuyer(
   order: Order,
 ): Promise<CustomerOrganization | null> {
+  const intake = readIntake(order);
+
+  if (intake.companyDomain) {
+    const byDomain = await prisma.customerOrganization.findFirst({
+      where: { domain: { equals: intake.companyDomain, mode: "insensitive" } },
+      orderBy: { createdAt: "asc" },
+    });
+    if (byDomain) return byDomain;
+  }
+
+  if (intake.cageCode) {
+    const byCage = await prisma.customerOrganization.findFirst({
+      where: { cageCode: { equals: intake.cageCode, mode: "insensitive" } },
+      orderBy: { createdAt: "asc" },
+    });
+    if (byCage) return byCage;
+  }
+
   const company = order.buyerCompany?.trim();
   if (company) {
     const byName = await prisma.customerOrganization.findFirst({
@@ -307,13 +377,18 @@ async function findExistingOrgForBuyer(
     if (byName) return byName;
   }
 
-  const domain = order.buyerEmail.split("@")[1]?.toLowerCase();
-  if (domain && !FREE_EMAIL_DOMAINS.has(domain)) {
-    const byDomain = await prisma.customerOrganization.findFirst({
-      where: { primaryContactEmail: { endsWith: `@${domain}`, mode: "insensitive" } },
+  const emailDomain = intake.companyDomain ?? order.buyerEmail.split("@")[1]?.toLowerCase();
+  if (emailDomain && !FREE_EMAIL_DOMAINS.has(emailDomain)) {
+    const byEmail = await prisma.customerOrganization.findFirst({
+      where: {
+        OR: [
+          { domain: { equals: emailDomain, mode: "insensitive" } },
+          { primaryContactEmail: { endsWith: `@${emailDomain}`, mode: "insensitive" } },
+        ],
+      },
       orderBy: { createdAt: "asc" },
     });
-    if (byDomain) return byDomain;
+    if (byEmail) return byEmail;
   }
 
   return null;

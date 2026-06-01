@@ -20,6 +20,7 @@ export async function upsertPackage(rawInput: UpsertPackageInput) {
     ? await prisma.package.findUnique({ where: { id: input.id } })
     : await prisma.package.findUnique({ where: { sku: input.sku } });
 
+  const priorMeta = (previous?.metadataJson ?? {}) as Record<string, unknown>;
   const data = {
     sku: input.sku,
     name: input.name,
@@ -30,6 +31,8 @@ export async function upsertPackage(rawInput: UpsertPackageInput) {
     entitlementTier: input.entitlementTier,
     includedAppKeys: input.includedAppKeys,
     status: input.status,
+    // Preserve any existing metadata; (re)write the training course grant.
+    metadataJson: { ...priorMeta, training: { courses: input.trainingCourses } },
   };
 
   const pkg = previous

@@ -47,6 +47,16 @@ const STATUSES = [
   { value: "archived", label: "Archived" },
 ] as const;
 
+/** Training courses this package can grant (mirrors the training hub's
+ *  CourseType). Selecting any of these unlocks the matching modules + role
+ *  in the training hub when the order provisions. */
+const TRAINING_COURSES = [
+  { value: "AT_001_GENERAL", label: "General Awareness (AT-001)" },
+  { value: "AT_002_ROLE_BASED", label: "Role-Based (AT-002)" },
+  { value: "AT_INSIDER_THREAT", label: "Insider Threat" },
+  { value: "IR_TABLETOP", label: "IR Tabletop + AAR" },
+] as const;
+
 export type PackageFormInitial = {
   id: string;
   sku: string;
@@ -57,6 +67,7 @@ export type PackageFormInitial = {
   billingCycle: string;
   entitlementTier: string;
   includedAppKeys: string[];
+  trainingCourses: string[];
   status: string;
 };
 
@@ -74,6 +85,9 @@ export function PackageForm({
   const [pending, startTransition] = useTransition();
   const [selectedApps, setSelectedApps] = useState<string[]>(
     initial?.includedAppKeys ?? [],
+  );
+  const [selectedTrainingCourses, setSelectedTrainingCourses] = useState<string[]>(
+    initial?.trainingCourses ?? [],
   );
   const router = useRouter();
 
@@ -123,6 +137,7 @@ export function PackageForm({
               billingCycle: String(fd.get("billingCycle") || "monthly"),
               entitlementTier: String(fd.get("entitlementTier") || "starter"),
               includedAppKeys: selectedApps,
+              trainingCourses: selectedTrainingCourses,
               status: String(fd.get("status") || "draft"),
             };
             const parsed = upsertPackageSchema.safeParse(raw);
@@ -280,6 +295,38 @@ export function PackageForm({
                   );
                 })
               )}
+            </div>
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label>Training courses granted</Label>
+            <p className="text-xs text-muted-foreground">
+              Buyers of this package get these training modules + role in the training
+              hub on provisioning. Leave empty for non-training packages.
+            </p>
+            <div className="grid gap-1.5 rounded-md border border-border p-3 sm:grid-cols-2">
+              {TRAINING_COURSES.map((course) => {
+                const checked = selectedTrainingCourses.includes(course.value);
+                const id = `course-${course.value}`;
+                return (
+                  <label key={course.value} htmlFor={id} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      id={id}
+                      checked={checked}
+                      onCheckedChange={(c) =>
+                        setSelectedTrainingCourses((prev) =>
+                          c
+                            ? prev.includes(course.value)
+                              ? prev
+                              : [...prev, course.value]
+                            : prev.filter((v) => v !== course.value),
+                        )
+                      }
+                    />
+                    <span className="font-medium">{course.label}</span>
+                  </label>
+                );
+              })}
             </div>
           </div>
 

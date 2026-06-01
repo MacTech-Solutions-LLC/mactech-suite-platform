@@ -37,10 +37,29 @@ export type CheckoutInput = {
   buyerEmail: string;
   buyerName?: string | null;
   buyerCompany?: string | null;
+  /** Formal intake captured at checkout. Drives org records + dedupe and is
+   *  carried onto the Order so provisioning can populate the customer org.
+   *  companyDomain is the primary dedupe anchor (see provisioning-service). */
+  intake?: {
+    companyDomain?: string | null;
+    phone?: string | null;
+    jobTitle?: string | null;
+    cageCode?: string | null;
+    uei?: string | null;
+  } | null;
   /** Optional caller-supplied idempotency key. When provided, repeated
    *  POSTs with the same key return the original Order. */
   idempotencyKey?: string | null;
 };
+
+/** Normalize a company domain: strip scheme/path, lowercase, drop a leading
+ *  www. Returns null for blanks. Falls back to the email domain when absent. */
+function normalizeDomain(raw: string | null | undefined, email: string): string | null {
+  let d = (raw ?? "").trim().toLowerCase();
+  if (!d) d = email.split("@")[1] ?? "";
+  d = d.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].trim();
+  return d || null;
+}
 
 export type CheckoutResult =
   | {
@@ -93,7 +112,16 @@ export async function createCheckoutSession(input: CheckoutInput): Promise<Check
       status: "pending",
       totalCents: pkg.priceCents,
       currency: pkg.currency,
-      metadataJson: input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : undefined,
+      metadataJson: {
+        ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+        intake: {
+          companyDomain: normalizeDomain(input.intake?.companyDomain, input.buyerEmail),
+          phone: input.intake?.phone?.trim() || null,
+          jobTitle: input.intake?.jobTitle?.trim() || null,
+          cageCode: input.intake?.cageCode?.trim() || null,
+          uei: input.intake?.uei?.trim() || null,
+        },
+      },
       placedAt: new Date(),
     },
   });

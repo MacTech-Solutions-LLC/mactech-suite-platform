@@ -36,6 +36,16 @@ const CheckoutBodySchema = z.object({
   buyerEmail: z.string().email().max(254),
   buyerName: z.string().max(200).optional().nullable(),
   buyerCompany: z.string().max(200).optional().nullable(),
+  intake: z
+    .object({
+      companyDomain: z.string().max(253).optional().nullable(),
+      phone: z.string().max(40).optional().nullable(),
+      jobTitle: z.string().max(120).optional().nullable(),
+      cageCode: z.string().max(16).optional().nullable(),
+      uei: z.string().max(16).optional().nullable(),
+    })
+    .optional()
+    .nullable(),
   idempotencyKey: z.string().max(128).optional().nullable(),
 });
 
