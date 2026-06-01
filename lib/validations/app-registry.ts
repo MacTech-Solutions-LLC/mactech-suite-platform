@@ -39,3 +39,31 @@ export const upsertAppSchema = z.object({
 });
 
 export type UpsertAppInput = z.infer<typeof upsertAppSchema>;
+
+// Deleting an app from the registry is destructive (it cascades to
+// entitlements, health snapshots, repo links, dependency edges, …) so it is
+// gated behind a typed confirmation plus a fresh MFA challenge. `mfaCode` is a
+// TOTP or backup code the admin produces from their authenticator; the service
+// verifies it against Clerk before the row is removed.
+export const deleteAppSchema = z
+  .object({
+    appKey: z.string().min(2).max(60),
+    confirmAppKey: z.string().min(1),
+    mfaCode: z
+      .string()
+      .trim()
+      .transform((value) => value.replace(/[\s-]/g, ""))
+      .pipe(
+        z
+          .string()
+          .min(6, "Enter the 6-digit code from your authenticator (or a backup code).")
+          .max(16)
+          .regex(/^[a-zA-Z0-9]+$/, "MFA codes contain only letters and numbers."),
+      ),
+  })
+  .refine((data) => data.appKey === data.confirmAppKey, {
+    message: "The confirmation does not match the app key.",
+    path: ["confirmAppKey"],
+  });
+
+export type DeleteAppInput = z.infer<typeof deleteAppSchema>;
