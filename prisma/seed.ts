@@ -19,6 +19,11 @@ const prisma = new PrismaClient();
 // not rename them without coordinating with the corresponding sibling
 // app's audit client.
 //
+// growth-capture is canonical for Opportunity & Capture (legacy alias:
+// capture). Existing live DB rows keyed `capture` require a manual
+// registry retirement/migration before production seed re-run — no live
+// DB migration in Phase R-2b.
+//
 // Operational fields drive the Command Center: publicUrl + healthUrl
 // for the probe loop, repoFullName for repo intelligence (slice 2),
 // railwayServiceId for deployment intelligence (slice 3). Health URLs
@@ -28,23 +33,22 @@ const prisma = new PrismaClient();
 // flags them as `missing_health_endpoint`.
 const APP_FIXTURES = [
   {
-    appKey: "capture",
-    name: "MacTech Capture",
-    description: "Contract capture intelligence for federal pursuits.",
+    appKey: "growth-capture",
+    name: "Opportunity & Capture",
+    description:
+      "Opportunity discovery, qualification, pursuit execution, and capture package preparation. Legacy alias: capture.",
     category: "capture" as const,
-    baseUrl: "https://capture.mactechsolutionsllc.com",
+    baseUrl: "https://opportunities.mactechsolutionsllc.com",
     requiresOrgContext: true,
     isInternalOnly: false,
-    status: "active" as const,
-    publicUrl: "https://capture.mactechsolutionsllc.com",
-    healthUrl: "https://capture.mactechsolutionsllc.com/api/health",
-    buildInfoUrl: "https://capture.mactechsolutionsllc.com/api/build-info",
-    subdomain: "capture",
+    status: "development" as const,
+    publicUrl: "https://opportunities.mactechsolutionsllc.com",
+    subdomain: "opportunities",
     apexDomain: "mactechsolutionsllc.com",
     criticality: "high" as const,
-    lifecycle: "production" as const,
+    lifecycle: "development" as const,
     visibility: "customer" as const,
-    repoFullName: "WELCOMETOTHETRIBE/mactech-captureos",
+    repoFullName: "MacTech-Solutions-LLC/Opportunities",
     repoDefaultBranch: "main",
   },
   {
@@ -228,17 +232,18 @@ const APP_FIXTURES = [
   },
   {
     appKey: "opportunities",
-    name: "MacTech Opportunities",
-    description: "Federal opportunity intake, qualification, and pursuit ranking.",
+    name: "MacTech Opportunities (deprecated)",
+    description:
+      "Superseded by growth-capture (Opportunity & Capture). Retained as a hidden legacy registry row only.",
     category: "capture" as const,
     requiresOrgContext: true,
     isInternalOnly: false,
-    status: "development" as const,
+    status: "hidden" as const,
     publicUrl: "https://opportunities.mactechsolutionsllc.com",
     subdomain: "opportunities",
     apexDomain: "mactechsolutionsllc.com",
-    criticality: "medium" as const,
-    lifecycle: "development" as const,
+    criticality: "low" as const,
+    lifecycle: "deprecated" as const,
     visibility: "customer" as const,
     repoFullName: "MacTech-Solutions-LLC/Opportunities",
     repoDefaultBranch: "main",
@@ -644,19 +649,18 @@ const APP_DEPENDENCIES: Array<{
   criticality: "low" | "medium" | "high" | "mission_critical";
 }> = [
   // Suite is the auth provider for every customer-facing app.
-  { sourceAppKey: "capture", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "mission_critical" },
+  { sourceAppKey: "growth-capture", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "mission_critical" },
   { sourceAppKey: "codex", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "mission_critical" },
   { sourceAppKey: "training", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "mission_critical" },
   { sourceAppKey: "quality", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "mission_critical" },
   { sourceAppKey: "governance", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "mission_critical" },
   { sourceAppKey: "enclavewatch", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Auditor allowlist gated through Suite", criticality: "mission_critical" },
   { sourceAppKey: "cleard", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "high" },
-  { sourceAppKey: "opportunities", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "medium" },
   { sourceAppKey: "proposal", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "medium" },
   { sourceAppKey: "pricing", targetAppKey: "identity-command-center", dependencyType: "auth_provider", description: "Clerk SSO routed through Suite", criticality: "high" },
 
   // Suite ingests audit events from every sibling app.
-  { sourceAppKey: "capture", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "high" },
+  { sourceAppKey: "growth-capture", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "high" },
   { sourceAppKey: "codex", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "high" },
   { sourceAppKey: "training", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "high" },
   { sourceAppKey: "quality", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "high" },
@@ -668,15 +672,15 @@ const APP_DEPENDENCIES: Array<{
   { sourceAppKey: "training", targetAppKey: "codex", dependencyType: "training_source", description: "Evidence-of-training for control 3.2.x", criticality: "high" },
   { sourceAppKey: "enclavewatch", targetAppKey: "governance", dependencyType: "evidence_source", description: "Vault audit + drift evidence for governance posture", criticality: "mission_critical" },
   { sourceAppKey: "enclavewatch", targetAppKey: "codex", dependencyType: "vault_source", description: "Signed weekly review acknowledgements + control evidence", criticality: "mission_critical" },
-  { sourceAppKey: "capture", targetAppKey: "proposal", dependencyType: "capture_source", description: "Pursuit + capture data feeds proposal authoring", criticality: "high" },
+  { sourceAppKey: "growth-capture", targetAppKey: "proposal", dependencyType: "capture_source", description: "Pursuit + capture data feeds proposal authoring", criticality: "high" },
   { sourceAppKey: "quality", targetAppKey: "governance", dependencyType: "qms_source", description: "Document control / change records inform governance", criticality: "high" },
   { sourceAppKey: "codex", targetAppKey: "governance", dependencyType: "governance_source", description: "Control + clause knowledge powers governance workflows", criticality: "high" },
   { sourceAppKey: "governance", targetAppKey: "pricing", dependencyType: "governance_source", description: "Rate cards, clause risk, FRCS scope boundaries, and approval metadata feed PricingOS", criticality: "high" },
   { sourceAppKey: "pricing", targetAppKey: "proposal", dependencyType: "api_calls", description: "Approved price volume, BOE summary, Green Team metadata, and FRCS scope export feed ProposalOS", criticality: "high" },
-  { sourceAppKey: "opportunities", targetAppKey: "governance", dependencyType: "capture_source", description: "Opportunity FRCS and bid/no-bid signals feed GovernanceOS readiness review", criticality: "high" },
+  { sourceAppKey: "growth-capture", targetAppKey: "governance", dependencyType: "capture_source", description: "Opportunity FRCS and bid/no-bid signals feed GovernanceOS readiness review", criticality: "high" },
 
   // Suite is the registry/control shell for all apps.
-  { sourceAppKey: "identity-command-center", targetAppKey: "capture", dependencyType: "shared_component", description: "Suite tracks capture in AppRegistry + entitlements", criticality: "medium" },
+  { sourceAppKey: "identity-command-center", targetAppKey: "growth-capture", dependencyType: "shared_component", description: "Suite tracks growth-capture in AppRegistry + entitlements", criticality: "medium" },
   { sourceAppKey: "identity-command-center", targetAppKey: "codex", dependencyType: "shared_component", description: "Suite tracks codex in AppRegistry + entitlements", criticality: "medium" },
   { sourceAppKey: "identity-command-center", targetAppKey: "training", dependencyType: "shared_component", description: "Suite tracks training in AppRegistry + entitlements", criticality: "medium" },
   { sourceAppKey: "identity-command-center", targetAppKey: "quality", dependencyType: "shared_component", description: "Suite tracks quality in AppRegistry + entitlements", criticality: "medium" },
@@ -687,7 +691,6 @@ const APP_DEPENDENCIES: Array<{
   // Audit-ingest fanout for the apps the original seed missed. Every
   // sibling app POSTs to /api/audit/ingest with its own ApiKey.
   { sourceAppKey: "cleard", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "medium" },
-  { sourceAppKey: "opportunities", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "medium" },
   { sourceAppKey: "proposal", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "medium" },
   { sourceAppKey: "pricing", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "high" },
   { sourceAppKey: "vetted", targetAppKey: "identity-command-center", dependencyType: "api_calls", description: "POST /api/audit/ingest", criticality: "medium" },
@@ -711,13 +714,12 @@ const APP_DEPENDENCIES: Array<{
   // page (Railway API does not expose CRUD); currently set on QMS,
   // Governance, MacTech Training, and MacTech_Suite. Self-edge
   // (suite → suite) is omitted from the visual graph.
-  { sourceAppKey: "capture", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "high" },
+  { sourceAppKey: "growth-capture", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "high" },
   { sourceAppKey: "codex", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "high" },
   { sourceAppKey: "training", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub + Railway lifecycle webhooks → Suite ingest", criticality: "high" },
   { sourceAppKey: "quality", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub + Railway lifecycle webhooks → Suite ingest", criticality: "high" },
   { sourceAppKey: "governance", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub + Railway lifecycle webhooks → Suite ingest", criticality: "high" },
   { sourceAppKey: "enclavewatch", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "high" },
-  { sourceAppKey: "opportunities", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "medium" },
   { sourceAppKey: "proposal", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "medium" },
   { sourceAppKey: "pricing", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run to /api/webhooks/github", criticality: "high" },
   { sourceAppKey: "vetted", targetAppKey: "identity-command-center", dependencyType: "webhook_source", description: "GitHub push + workflow_run → /api/webhooks/github", criticality: "medium" },

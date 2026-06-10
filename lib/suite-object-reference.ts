@@ -1,6 +1,10 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import type { ApiKeyScope, Prisma, SuiteObjectReferenceVerificationStatus } from "@prisma/client";
+import {
+  canonicalAppKeysMatch,
+  resolveCanonicalAppKey,
+} from "@/lib/app-key-compat";
 import { prisma } from "@/lib/db/prisma";
 import { verifyApiKey } from "@/lib/services/api-key-service";
 import { appendInternalHubAuditEvent } from "@/lib/hub-audit";
@@ -73,17 +77,19 @@ export async function verifyObjectReferenceServiceRequest(
       "Service token is invalid, revoked, expired, or missing object_reference_write scope.",
     );
   }
-  if (key.appKey !== sourceAppKey) {
+  const canonicalSourceAppKey = resolveCanonicalAppKey(sourceAppKey);
+
+  if (key.appKey && !canonicalAppKeysMatch(key.appKey, sourceAppKey)) {
     return rejected("service_app_mismatch", "Service token appKey must match sourceAppKey.");
   }
 
   const [sourceApp, serviceIdentity] = await Promise.all([
     prisma.appRegistry.findUnique({
-      where: { appKey: sourceAppKey },
+      where: { appKey: canonicalSourceAppKey },
       select: { id: true, status: true },
     }),
     prisma.serviceIdentity.findUnique({
-      where: { appKey: sourceAppKey },
+      where: { appKey: canonicalSourceAppKey },
       select: { id: true, status: true },
     }),
   ]);
@@ -105,7 +111,7 @@ export async function verifyObjectReferenceServiceRequest(
     ok: true,
     keyId: key.id,
     keyName: key.name,
-    sourceAppKey,
+    sourceAppKey: canonicalSourceAppKey,
     serviceIdentityId: serviceIdentity.id,
   };
 }
@@ -264,9 +270,12 @@ async function validateHubReferences(input: {
   organizationId?: string | null;
   createdByHubUserId?: string | null;
 }) {
+  const canonicalSourceAppKey = resolveCanonicalAppKey(input.sourceAppKey);
+  const canonicalOwningAppKey = resolveCanonicalAppKey(input.owningAppKey);
+
   const [sourceApp, owningApp, tenantOrg, org, user] = await Promise.all([
-    prisma.appRegistry.findUnique({ where: { appKey: input.sourceAppKey }, select: { appKey: true, status: true } }),
-    prisma.appRegistry.findUnique({ where: { appKey: input.owningAppKey }, select: { appKey: true, status: true } }),
+    prisma.appRegistry.findUnique({ where: { appKey: canonicalSourceAppKey }, select: { appKey: true, status: true } }),
+    prisma.appRegistry.findUnique({ where: { appKey: canonicalOwningAppKey }, select: { appKey: true, status: true } }),
     input.tenantOrgId
       ? prisma.customerOrganization.findUnique({ where: { id: input.tenantOrgId }, select: { id: true, status: true } })
       : Promise.resolve(null),

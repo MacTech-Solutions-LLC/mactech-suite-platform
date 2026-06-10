@@ -3,6 +3,10 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { writeAuditLog, writeSecurityEvent } from "@/lib/audit";
 import {
+  canonicalAppKeysMatch,
+  resolveCanonicalAppKey,
+} from "@/lib/app-key-compat";
+import {
   DEFAULT_AUTHORITY_TTL_SECONDS,
   evaluateHubAuthorityRecords,
   type AuthorityEvaluationRecords,
@@ -37,16 +41,18 @@ export async function verifyHubServiceRequest(
     return rejected("missing_source_app", "service.sourceAppKey is required for Hub authority calls.");
   }
 
+  const canonicalSourceAppKey = resolveCanonicalAppKey(sourceAppKey);
+
   const [apiKey, sourceApp, serviceIdentity] = await Promise.all([
     findApiKey(token),
-    prisma.appRegistry.findUnique({ where: { appKey: sourceAppKey } }),
-    prisma.serviceIdentity.findUnique({ where: { appKey: sourceAppKey } }),
+    prisma.appRegistry.findUnique({ where: { appKey: canonicalSourceAppKey } }),
+    prisma.serviceIdentity.findUnique({ where: { appKey: canonicalSourceAppKey } }),
   ]);
 
   if (!apiKey) {
     return rejected("invalid_service_token", "Service token is invalid, revoked, expired, or missing app_authority_resolve scope.");
   }
-  if (apiKey.appKey !== sourceAppKey) {
+  if (apiKey.appKey && !canonicalAppKeysMatch(apiKey.appKey, sourceAppKey)) {
     return rejected("service_app_mismatch", "Service token appKey must match service.sourceAppKey.");
   }
   if (!sourceApp || sourceApp.status !== "active") {
@@ -68,7 +74,7 @@ export async function verifyHubServiceRequest(
     ok: true,
     keyId: apiKey.id,
     keyName: apiKey.name,
-    sourceAppKey,
+    sourceAppKey: canonicalSourceAppKey,
     serviceIdentityId: serviceIdentity.id,
   };
 }
@@ -80,8 +86,11 @@ export async function resolveHubAppAccess(
   const now = new Date();
   const orgLookup = input.requestedOrgId ?? input.tenantOrgId ?? null;
 
+  const canonicalAppKey = resolveCanonicalAppKey(input.appKey);
+  const authorityInput = { ...input, appKey: canonicalAppKey };
+
   const [app, user, org] = await Promise.all([
-    prisma.appRegistry.findUnique({ where: { appKey: input.appKey } }),
+    prisma.appRegistry.findUnique({ where: { appKey: canonicalAppKey } }),
     prisma.userProfile.findUnique({ where: { clerkUserId: input.clerkUserId } }),
     orgLookup ? findOrganization(orgLookup) : Promise.resolve(null),
   ]);
@@ -126,12 +135,12 @@ export async function resolveHubAppAccess(
     roleTemplatePermissions: parsePermissionArray(resolvedRoleTemplate?.permissionsJson),
   };
 
-  const snapshot = evaluateHubAuthorityRecords(input, records, {
+  const snapshot = evaluateHubAuthorityRecords(authorityInput, records, {
     now,
     ttlSeconds: DEFAULT_AUTHORITY_TTL_SECONDS,
   });
 
-  await auditAuthorityResolution(input, snapshot, service);
+  await auditAuthorityResolution(authorityInput, snapshot, service);
   return snapshot;
 }
 
