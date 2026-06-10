@@ -63,12 +63,17 @@ export async function proposalNextRoute(request: Request) {
   });
 }
 
-export async function captureRoute(request: Request) {
+export async function growthCaptureRoute(request: Request) {
   return hub.requireHubAppAccess({
     clerkUserId: request.headers.get("x-clerk-user-id") ?? "",
-    appKey: "capture",
+    appKey: "growth-capture",
     requestedOrgId: request.headers.get("x-mactech-org-id"),
   });
+}
+
+/** @deprecated Use growthCaptureRoute — `capture` is a legacy alias only. */
+export async function captureRoute(request: Request) {
+  return growthCaptureRoute(request);
 }
 
 export async function trainingRoute(request: Request) {

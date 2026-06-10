@@ -111,7 +111,7 @@ Use `snapshot.canonicalHubUserId`, `snapshot.canonicalOrganizationId`, `snapshot
 - `qms`
 - `pricing`
 - `proposal`
-- `capture`
+- `growth-capture` — **Opportunity & Capture** (canonical; legacy alias `capture`)
 - `training`
 - `workspace-gateway`
 - `codex-cui-vault`

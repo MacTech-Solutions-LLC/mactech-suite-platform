@@ -4,6 +4,10 @@ import type { ApiKeyScope, AuditCategory, AuditSeverity, Prisma } from "@prisma/
 import { prisma } from "@/lib/db/prisma";
 import { verifyApiKey } from "@/lib/services/api-key-service";
 import {
+  canonicalAppKeysMatch,
+  resolveCanonicalAppKey,
+} from "@/lib/app-key-compat";
+import {
   AUDIT_GENESIS_HASH,
   assertAuditMutationForbidden,
   buildAuditChainEvent,
@@ -65,17 +69,19 @@ export async function verifyAuditServiceRequest(
       "Service token is invalid, revoked, expired, or missing audit_ingest scope.",
     );
   }
-  if (key.appKey !== sourceAppKey) {
+  const canonicalSourceAppKey = resolveCanonicalAppKey(sourceAppKey);
+
+  if (key.appKey && !canonicalAppKeysMatch(key.appKey, sourceAppKey)) {
     return rejected("service_app_mismatch", "Service token appKey must match sourceAppKey.");
   }
 
   const [sourceApp, serviceIdentity] = await Promise.all([
     prisma.appRegistry.findUnique({
-      where: { appKey: sourceAppKey },
+      where: { appKey: canonicalSourceAppKey },
       select: { id: true, status: true, isInternalOnly: true },
     }),
     prisma.serviceIdentity.findUnique({
-      where: { appKey: sourceAppKey },
+      where: { appKey: canonicalSourceAppKey },
       select: { id: true, status: true },
     }),
   ]);
@@ -98,7 +104,7 @@ export async function verifyAuditServiceRequest(
     ok: true,
     keyId: key.id,
     keyName: key.name,
-    sourceAppKey,
+    sourceAppKey: canonicalSourceAppKey,
     serviceIdentityId: serviceIdentity.id,
   };
 }
@@ -239,9 +245,10 @@ async function appendAuditLogUnchecked(input: HubAuditAppendInput) {
 }
 
 async function validateCanonicalReferences(input: HubAuditAppendInput) {
+  const canonicalSourceAppKey = resolveCanonicalAppKey(input.sourceAppKey);
   const [sourceApp, actor, org, tenantOrg, objectRef] = await Promise.all([
     prisma.appRegistry.findUnique({
-      where: { appKey: input.sourceAppKey },
+      where: { appKey: canonicalSourceAppKey },
       select: { id: true, status: true },
     }),
     input.actorHubUserId
@@ -285,14 +292,17 @@ async function validateCanonicalReferences(input: HubAuditAppendInput) {
   if (input.tenantOrgId && !tenantOrg) {
     throw new AuditIngestRejectedError("invalid_tenant_org", "tenantOrgId must resolve to a Hub organization.", 403);
   }
-  if (input.suiteObjectReferenceId && (!objectRef || objectRef.sourceAppKey !== input.sourceAppKey)) {
+  if (
+    input.suiteObjectReferenceId &&
+    (!objectRef || !canonicalAppKeysMatch(objectRef.sourceAppKey, input.sourceAppKey))
+  ) {
     throw new AuditIngestRejectedError("invalid_object_reference", "suiteObjectReferenceId must resolve for the source app.", 403);
   }
 }
 
 async function appRegistryIdForKey(tx: Prisma.TransactionClient, appKey: string) {
   const app = await tx.appRegistry.findUnique({
-    where: { appKey },
+    where: { appKey: resolveCanonicalAppKey(appKey) },
     select: { id: true },
   });
   return app?.id ?? null;
