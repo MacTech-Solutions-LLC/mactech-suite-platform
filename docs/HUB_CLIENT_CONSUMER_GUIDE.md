@@ -120,6 +120,21 @@ Use `snapshot.canonicalHubUserId`, `snapshot.canonicalOrganizationId`, `snapshot
 
 Legacy compatibility keys currently seeded: `codex`, `quality`, `identity-command-center`.
 
+## Admin: Command Center API keys
+
+Issue keys at **`/admin/api-keys`** → **Issue API key**. Select the minimum scopes the consumer needs; bind the key to the consumer's canonical `appKey` when the service verifies `service.sourceAppKey`.
+
+### Opportunity & Capture (`growth-capture`)
+
+Hub-gated satellite apps require **both** scopes:
+
+| Scope | Endpoint |
+| --- | --- |
+| `app_authority_resolve` | `POST /api/hub/authority/resolve-app-access` |
+| `audit_ingest` | `POST /api/hub/audit/events` |
+
+Set **App tag** to `growth-capture`. Store the plaintext once in the consumer's deployment secret store as `MACTECH_HUB_SERVICE_TOKEN`. The backing `AppRegistry` and `ServiceIdentity` rows for `growth-capture` must be **active** before the consumer can pass Hub authority checks.
+
 ## Examples
 
 Compile-checked examples live in `packages/hub-client/examples/consumer-examples.ts` and cover Governance, QMS Express middleware, Pricing, Proposal, Opportunities/Capture, Training, MacKali, and Cyber Range export routes.

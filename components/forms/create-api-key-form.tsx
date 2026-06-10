@@ -28,6 +28,12 @@ const SCOPES = [
     description: "POST /api/audit/ingest — forward audit events.",
   },
   {
+    value: "app_authority_resolve",
+    label: "app_authority_resolve",
+    description:
+      "POST /api/hub/authority/resolve-app-access — Hub-gated app access for satellite apps.",
+  },
+  {
     value: "object_reference_write",
     label: "object_reference_write",
     description: "POST /api/hub/object-references/* - create, verify, and deprecate object references.",
