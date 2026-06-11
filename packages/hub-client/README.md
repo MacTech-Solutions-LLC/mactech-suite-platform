@@ -34,7 +34,9 @@ HUB_CLIENT="../mactech-suite-platform/packages/hub-client"
 if [ ! -d "$HUB_CLIENT" ]; then
   TMPDIR=$(mktemp -d)
   trap 'rm -rf "$TMPDIR"' EXIT
-  git clone --depth 1 https://github.com/MacTech-Solutions-LLC/mactech-suite-platform.git "$TMPDIR/mactech-suite-platform"
+  git clone --depth 1 --branch "${PLATFORM_BRANCH:-main}" \
+    "https://${GITHUB_TOKEN:+x-access-token:$GITHUB_TOKEN@}github.com/MacTech-Solutions-LLC/mactech-suite-platform.git" \
+    "$TMPDIR/mactech-suite-platform"
   mkdir -p ../mactech-suite-platform/packages
   cp -R "$TMPDIR/mactech-suite-platform/packages/hub-client" "$HUB_CLIENT"
 fi
@@ -52,7 +54,8 @@ npm run build
 **Notes:**
 
 - Use `npm ci --ignore-scripts` in the hub-client step so `prepare` does not run before `dist/` exists; then call `npm run build` explicitly.
-- Pin `mactech-suite-platform` clone to a ref (branch/tag/SHA) when reproducibility matters; `--depth 1` tracks default branch.
+- Set `PLATFORM_BRANCH` (branch or tag; default `main`) to pin the platform clone for reproducible or feature-branch builds. `--depth 1` does not clone a specific SHA — use a tag or branch ref instead.
+- Set `GITHUB_TOKEN` in CI when `mactech-suite-platform` is private; the clone URL injects `x-access-token` only when the variable is present.
 - Pair with `railway.json` `"buildCommand": "bash scripts/railway-build.sh"` and `nixpacks.toml` that skips default install when hub-client must be provisioned first (see greenfield `bizops`, `contracts-delivery`, `client-portal`).
 - Full variable and project setup: `mactech-suite-workspace-control/prompts/pre-tenant-speed-mode/RAILWAY_SATELLITE_SETUP.md`.
 
