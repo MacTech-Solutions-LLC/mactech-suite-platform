@@ -48,8 +48,8 @@ Run **before** `HUB_AUTHORITY_MODE=live` on any satellite whose UI or BFF makes 
 | Origin | `appKey` | Railway default (dual-host window) | 3g-01 gate |
 | --- | --- | --- | --- |
 | `https://bizops.mactechsolutionsllc.com` | `bizops` | `https://bizops-production-4d93.up.railway.app` | **PASS** — apply first |
-| `https://contracts.mactechsolutionsllc.com` | `contracts-delivery` | `https://contracts-production-e4b8.up.railway.app` | **PARTIAL** — defer until B3 hub-mock timeout fixed |
-| `https://portal.mactechsolutionsllc.com` | `client-portal` | `https://client-portal-production-aede.up.railway.app` | **PARTIAL** — defer until B4 Clerk protect-rewrite fixed |
+| `https://contracts.mactechsolutionsllc.com` | `contracts-delivery` | `https://contracts-production-e4b8.up.railway.app` | **PASS** — hub-mock fixed Phase 3h (#7) |
+| `https://portal.mactechsolutionsllc.com` | `client-portal` | `https://client-portal-production-aede.up.railway.app` | **PASS** — hub-mock fixed Phase 3h (#7) |
 
 Retain each satellite's Railway default URL in the allowlist during the dual-host verification window. Remove Railway defaults only after custom-domain traffic is stable (see [HUB_SATELLITE_CORS_CUTOVER.md](./HUB_SATELLITE_CORS_CUTOVER.md) step 5).
 
@@ -90,7 +90,7 @@ Execute only with Brian approval.
   - `https://bizops.mactechsolutionsllc.com`
   - `https://bizops-production-4d93.up.railway.app`
 - [ ] Add the same origins to Hub Clerk allowed origins (3g-02).
-- [ ] Update Hub `AppRegistry` row for `bizops`: `baseUrl` / `publicUrl` → `https://bizops.mactechsolutionsllc.com`.
+- [ ] Update Hub `AppRegistry` row for `bizops`: `baseUrl` → `https://bizops.mactechsolutionsllc.com`.
 - [ ] Redeploy Hub production service; wait for deploy healthy.
 
 ### Verify — curl (preflight)
@@ -104,7 +104,7 @@ curl -sS -D - -o /dev/null -X OPTIONS \
   "https://www.suite.mactechsolutionsllc.com/api/hub/authority/resolve-app-access" \
   -H "Origin: https://bizops.mactechsolutionsllc.com" \
   -H "Access-Control-Request-Method: POST" \
-  -H "Access-Control-Request-Headers: content-type,x-mactech-service-token"
+  -H "Access-Control-Request-Headers: content-type"
 ```
 
 **Pass signals:**
@@ -152,7 +152,7 @@ Expect health 200 and hub-mock 200 while `HUB_AUTHORITY_MODE=mock`.
 
 ## Apply procedure — contracts (step 2, after BizOps)
 
-**Gate:** BizOps CORS signed off; B3 contracts hub-mock timeout resolved (app-side, not DNS).
+**Gate:** BizOps CORS signed off; contracts hub-mock **PASS** on custom domain (Phase 3h #7).
 
 - [ ] Append to `MACTECH_HUB_ALLOWED_ORIGINS`:
   - `https://contracts.mactechsolutionsllc.com`
@@ -166,7 +166,7 @@ Expect health 200 and hub-mock 200 while `HUB_AUTHORITY_MODE=mock`.
 
 ## Apply procedure — portal (step 3, after contracts)
 
-**Gate:** B4 portal Clerk protect-rewrite on `/api/smoke/hub-mock` resolved.
+**Gate:** portal hub-mock **PASS** on custom domain (Phase 3h #7).
 
 - [ ] Append to `MACTECH_HUB_ALLOWED_ORIGINS`:
   - `https://portal.mactechsolutionsllc.com`
