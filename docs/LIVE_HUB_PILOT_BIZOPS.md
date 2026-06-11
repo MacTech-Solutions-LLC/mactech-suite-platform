@@ -58,6 +58,8 @@ Complete **before** any Railway secret or mode flip. Full detail in `docs/LIVE_H
   - **Scopes:** `app_authority_resolve` (required); `audit_ingest` if BizOps emits audit events.
   - **App tag:** `bizops` (matches `MACTECH_APP_KEY`).
   - **Status:** `active`; set `expiresAt` per rotation policy.
+- [ ] **Script (preferred):** `docs/HUB_SERVICE_TOKEN_ISSUANCE.md` — `railway run npx tsx scripts/issue-app-hub-token.ts bizops --dry-run` then issue without `--dry-run`.
+- [ ] **Manual fallback:** Hub admin → `/admin/api-keys` → Issue API key (same scopes + `bizops` app tag).
 - [ ] Copy plaintext token **once** into deployment secret store as `MACTECH_HUB_SERVICE_TOKEN` (never commit or paste in PR/chat).
 
 ### Satellite wiring (code — already on main)
