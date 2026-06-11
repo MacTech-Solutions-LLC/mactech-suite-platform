@@ -49,7 +49,7 @@ Complete **before** any Railway secret or mode flip. Full detail in `docs/LIVE_H
 - [ ] Set `status` to **`active`** (not `development` / `inactive`).
 - [ ] Confirm `isInternalOnly` is **`false`** (customer-facing satellite).
 - [ ] Confirm Railway `MACTECH_APP_KEY` is exactly **`contracts-delivery`** (see `canonical-app-keys.md` in control repo).
-- [ ] Update `baseUrl` / `publicUrl` to `https://contracts.mactechsolutionsllc.com` after DNS stable.
+- [ ] Update `baseUrl` to `https://contracts.mactechsolutionsllc.com` after DNS stable.
 
 ### ServiceIdentity
 
@@ -81,7 +81,7 @@ Complete **before** any Railway secret or mode flip. Full detail in `docs/LIVE_H
 
 - [ ] Hub production reachable at target `MACTECH_HUB_URL`.
 - [ ] **Staging slot** available on Contracts Railway project for token smoke test before production flip.
-- [ ] Custom-domain hub-mock timeout resolved (3g-01 B3 gate) before production live flip.
+- [ ] Custom-domain hub-mock **PASS** on `https://contracts.mactechsolutionsllc.com/api/smoke/hub-mock` (Phase 3h #7) before production live flip.
 
 ---
 
