@@ -11,8 +11,8 @@ Scoped runbook for live Hub authority cutover on **Client Portal**. BizOps remai
 - General cutover checklist: `docs/LIVE_HUB_CUTOVER_CHECKLIST.md`
 - Wiring and env var names: `docs/LIVE_HUB_AUTHORITY_WIRING.md`
 - Hub CORS / custom-domain order: `docs/HUB_SATELLITE_CORS_CUTOVER.md` (portal is step 3)
-- Client Portal smoke URLs (custom domain): `MacTech-Solutions-LLC/client-portal` → `docs/LIVE_HUB_PILOT.md`
-- BizOps first-pilot reference: `docs/LIVE_HUB_PILOT_BIZOPS.md`
+- Client Portal smoke URLs (custom domain): [client-portal `docs/LIVE_HUB_PILOT.md`](https://github.com/MacTech-Solutions-LLC/client-portal/blob/main/docs/LIVE_HUB_PILOT.md)
+- BizOps first-pilot reference: [docs/LIVE_HUB_PILOT_BIZOPS.md](./LIVE_HUB_PILOT_BIZOPS.md)
 
 **Safety:** No tokens, `.env` values, or Railway secret contents in git, PRs, or agent transcripts. Agents must **not** set `HUB_AUTHORITY_MODE=live` or write `MACTECH_HUB_SERVICE_TOKEN`.
 
@@ -44,7 +44,7 @@ Anonymous smoke curls for `/api/health` and `/api/smoke/hub-mock` require these 
 - `/api/smoke/hub-mock`
 - `/sign-in(.*)`, `/sign-up(.*)`, `/access-denied` (session flows)
 
-Without the API smoke exemptions, Clerk `protect-rewrite` returns **500** on hub-mock probes (Phase 3g **B4**). Confirm on `main` before cutover:
+Without the API smoke exemptions, Clerk `protect-rewrite` returns **500** on hub-mock probes (resolved Phase 3h [#7](https://github.com/MacTech-Solutions-LLC/client-portal/pull/7)). Confirm on `main` before cutover:
 
 ```typescript
 const isPublicRoute = createRouteMatcher([
@@ -70,7 +70,7 @@ Complete **before** any Railway secret or mode flip. Full detail in `docs/LIVE_H
 - [ ] Set `status` to **`active`** (not `development` / `inactive`).
 - [ ] Confirm `isInternalOnly` is **`false`** (customer-facing satellite).
 - [ ] Confirm Railway `MACTECH_APP_KEY` is exactly **`client-portal`** (see `canonical-app-keys.md` in control repo).
-- [ ] Update `baseUrl` / `publicUrl` to `https://portal.mactechsolutionsllc.com` after DNS stable.
+- [ ] Update `baseUrl` to `https://portal.mactechsolutionsllc.com` after DNS stable.
 
 ### ServiceIdentity
 
