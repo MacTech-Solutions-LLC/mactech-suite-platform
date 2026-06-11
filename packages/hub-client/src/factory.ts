@@ -23,6 +23,10 @@ function assertLiveConfig(live: HubClientConfig): void {
     throw new Error("createHubAuthorityClient: live mode requires live.sourceAppKey.");
   }
   if (!live.serviceToken?.trim()) {
+    console.warn(
+      `createHubAuthorityClient: live mode is active but ${SERVICE_TOKEN_ENV} is missing or empty. ` +
+        "Provision the Hub service token before cutover (see docs/LIVE_HUB_CUTOVER_CHECKLIST.md).",
+    );
     throw new Error(
       `createHubAuthorityClient: live mode requires live.serviceToken (${SERVICE_TOKEN_ENV}).`,
     );

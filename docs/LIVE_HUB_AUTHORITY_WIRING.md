@@ -6,6 +6,7 @@ Pre-tenant Speed Mode keeps **`HUB_AUTHORITY_MODE=mock`** on Railway dev until B
 
 **Related specs:**
 
+- **Cutover runbook (ordered steps):** `docs/LIVE_HUB_CUTOVER_CHECKLIST.md`
 - Serialization / consumer contract: `mactech-suite-workspace-control/docs/HUB_AUTH_CONTRACT_V1_SPEC.md` §6 (mock vs live)
 - Runtime Hub contract: `docs/HUB_AUTHORITY_CONTRACT_V1.md`
 - Package API: `packages/hub-client/README.md`
@@ -94,9 +95,25 @@ See also: `packages/hub-client/examples/live-mode-satellite.ts`.
 
 ---
 
+## Pilot satellite (recommended: BizOps)
+
+Use **one** greenfield satellite for the first live cutover before rolling the pattern suite-wide.
+
+| Candidate | `appKey` | Rationale |
+| --- | --- | --- |
+| **BizOps (recommended)** | `bizops` | Greenfield repo with documented `railway-build.sh` + hub-client provisioning; customer-facing but medium criticality; org-scoped routes exercise full `resolveAppAccess` path without Suite control-plane blast radius. |
+| Alternatives (later) | `contracts-delivery`, `client-portal` | Same greenfield Railway pattern; defer until BizOps pilot sign-off. |
+| Avoid first | `identity-command-center` | Hub itself — cut over consumers before the authority plane. |
+
+**Pilot sequence:** Follow `docs/LIVE_HUB_CUTOVER_CHECKLIST.md` for BizOps only. Confirm Hub `AppRegistry` row `bizops` is `active`, pilot org entitlement exists, ApiKey scoped to `app_authority_resolve`, then staging smoke test → production `HUB_AUTHORITY_MODE=live`.
+
+---
+
 ## Service token provisioning (Brian — Hub admin)
 
 Agents **document** this checklist; they do **not** provision production ApiKeys or Railway secrets.
+
+Full ordered steps: **`docs/LIVE_HUB_CUTOVER_CHECKLIST.md`** (AppRegistry, ApiKey scopes, env rollout, rollback, verification).
 
 1. **Confirm tenant** — first pilot org exists in Hub (org + membership synced from Clerk).
 2. **AppRegistry** — satellite `appKey` row is `active` and not internal-only.
