@@ -127,6 +127,49 @@ Authority evaluator (`lib/hub-authority-core.ts` → `entitlementIsCurrentlyUsab
 
 **Do not** run `npx prisma db seed` against production Hub without Brian.
 
+### Option D — Ops scripts (Brian / Railway only)
+
+TypeScript scripts under `scripts/` automate enablement, repair, and in-process authority smoke tests. **Brian only** — run via Railway with `DATABASE_URL` pointed at the target Hub database. Agents must **not** execute these against production.
+
+| Script | Purpose |
+| --- | --- |
+| `enable-pilot-bizops-entitlement.ts` | Activate `AppRegistry` bizops, bootstrap pilot `CustomerOrganization` if missing, upsert `ProductEntitlement` |
+| `repair-pilot-bizops-entitlement.ts` | Remove duplicate slug row, re-activate pilot org, re-upsert bizops entitlement |
+| `smoke-pilot-bizops-resolve.ts` | Call `resolveHubAppAccess` for allow + deny cases; exit `0` on pass |
+| `list-pilot-org-access.ts` | Diagnostic JSON: pilot org, entitlements, and `OrgUserAccess` members |
+
+**Enable (default pilot org baked into script):**
+
+```bash
+railway run npx tsx scripts/enable-pilot-bizops-entitlement.ts
+```
+
+**Enable for a specific Clerk org** (only when `--org-clerk-id` is passed):
+
+```bash
+railway run npx tsx scripts/enable-pilot-bizops-entitlement.ts --org-clerk-id org_xxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+**Repair after duplicate org bootstrap:**
+
+```bash
+railway run npx tsx scripts/repair-pilot-bizops-entitlement.ts
+```
+
+**Smoke `resolveHubAppAccess` (allow + deny):**
+
+```bash
+railway run npx tsx scripts/smoke-pilot-bizops-resolve.ts
+```
+
+**Diagnostic listing:**
+
+```bash
+railway run npx tsx scripts/list-pilot-org-access.ts
+```
+
+Scripts print JSON to stdout; non-zero exit on failure. Pilot Clerk IDs are hardcoded in script source for ops convenience — do not copy real IDs into this doc or commit prod row IDs.
+
 ---
 
 ## Verification — allow path
