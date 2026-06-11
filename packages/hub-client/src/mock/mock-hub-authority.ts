@@ -49,13 +49,14 @@ function buildDeniedSnapshot(
   user: HubUserProfile,
   org: HubOrganization | undefined,
   reason: string,
+  clerkOrgId?: string,
 ): HubAccessSnapshot {
   return {
     allowed: false,
     user,
     tenant: {
       organizationId: org?.id ?? "",
-      clerkOrgId: org?.clerkOrgId ?? undefined,
+      clerkOrgId: org?.clerkOrgId ?? clerkOrgId,
     },
     membership: {
       userId: user.id,
@@ -87,17 +88,18 @@ export function createMockHubAuthority(opts: MockHubAuthorityOptions): HubAuthor
           },
           undefined,
           "user_not_found",
+          input.clerkOrgId,
         );
       }
 
       const org = findOrg(fixtures.orgs, input.clerkOrgId);
       if (!org) {
-        return buildDeniedSnapshot(user, undefined, "organization_not_found");
+        return buildDeniedSnapshot(user, undefined, "organization_not_found", input.clerkOrgId);
       }
 
       const membership = findMembership(fixtures.memberships, user.id, org.id);
       if (!membership || membership.status !== "active") {
-        return buildDeniedSnapshot(user, org, "membership_inactive");
+        return buildDeniedSnapshot(user, org, "membership_inactive", input.clerkOrgId);
       }
 
       const entitlements = findEntitlements(fixtures.entitlements, input.appKey, org.id);

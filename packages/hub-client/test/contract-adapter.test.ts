@@ -57,6 +57,36 @@ test("toHubAccessSnapshot maps live snapshot to consumer view", () => {
   assert.deepEqual(adapted.entitlements[0]?.features, ["org:dashboard:view"]);
 });
 
+test("toHubAccessSnapshot handles incomplete live snapshot defensively", () => {
+  const adapted = toHubAccessSnapshot(
+    {
+      canonicalHubUserId: null,
+      clerkUserId: "user_clerk_123",
+      userStatus: null,
+      canonicalOrganizationId: null,
+      organizationStatus: null,
+      membershipId: null,
+      membershipStatus: null,
+      memberRoles: undefined as unknown as string[],
+      resolvedPermissions: undefined as unknown as string[],
+      appKey: "training",
+      appRegistryStatus: null,
+      productEntitlementStatus: null,
+      entitlementStartsAt: null,
+      entitlementExpiresAt: null,
+      planTier: null,
+      cache: undefined as unknown as HubAuthoritySnapshot["cache"],
+      decision: undefined as unknown as HubAuthoritySnapshot["decision"],
+    },
+    { clerkOrgId: "org_clerk_requested" },
+  );
+  assert.equal(adapted.allowed, false);
+  assert.equal(adapted.user.id, "");
+  assert.equal(adapted.tenant.clerkOrgId, "org_clerk_requested");
+  assert.equal(adapted.membership.role, "member");
+  assert.ok(adapted.resolvedAt);
+});
+
 test("toHubAccessSnapshot maps deny reason", () => {
   const adapted = toHubAccessSnapshot(
     liveSnapshot({
@@ -83,6 +113,19 @@ test("createMockHubAuthority allows entitled user", async () => {
   assert.equal(snapshot.allowed, true);
   assert.equal(snapshot.user.id, "hub_user_admin");
   assert.equal(snapshot.tenant.organizationId, "org_acme");
+});
+
+test("createMockHubAuthority preserves requested clerkOrgId on denied org lookup", async () => {
+  const client = createMockHubAuthority({ fixtures: DEFAULT_MOCK_FIXTURES });
+  const snapshot = await client.resolveAppAccess({
+    appKey: "training",
+    clerkUserId: "user_clerk_admin",
+    clerkOrgId: "org_clerk_unknown",
+    mode: "user_session",
+  });
+  assert.equal(snapshot.allowed, false);
+  assert.equal(snapshot.tenant.clerkOrgId, "org_clerk_unknown");
+  assert.equal(snapshot.reason, "organization_not_found");
 });
 
 test("createMockHubAuthority denies missing entitlement", async () => {

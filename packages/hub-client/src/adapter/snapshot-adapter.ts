@@ -25,16 +25,17 @@ export function toHubAccessSnapshot(
   live: HubAuthoritySnapshot,
   options?: { clerkOrgId?: string; subtenantId?: string },
 ): HubAccessSnapshot {
-  const allowed = live.decision.allow;
+  const allowed = live.decision?.allow ?? false;
   const organizationId = live.canonicalOrganizationId ?? "";
   const userId = live.canonicalHubUserId ?? "";
+  const resolvedPermissions = Array.isArray(live.resolvedPermissions) ? live.resolvedPermissions : [];
 
   const entitlements: HubAppEntitlement[] = [
     {
       appKey: live.appKey as MacTechAppKey,
       organizationId,
       status: mapEntitlementStatus(live.productEntitlementStatus),
-      features: live.resolvedPermissions.length > 0 ? [...live.resolvedPermissions] : undefined,
+      features: resolvedPermissions.length > 0 ? [...resolvedPermissions] : undefined,
     },
   ];
 
@@ -55,11 +56,11 @@ export function toHubAccessSnapshot(
     membership: {
       userId,
       organizationId,
-      role: live.memberRoles[0] ?? "member",
+      role: live.memberRoles?.[0] ?? "member",
       status: mapMembershipStatus(live.membershipStatus),
     },
     entitlements,
-    resolvedAt: live.cache.issuedAt,
-    reason: live.decision.denyReason ?? undefined,
+    resolvedAt: live.cache?.issuedAt ?? new Date().toISOString(),
+    reason: live.decision?.denyReason ?? undefined,
   };
 }

@@ -1,4 +1,4 @@
-import { createHubAuthorityClient } from "../src/index";
+import { createHubAuthorityClient, type MacTechAppKey } from "../src/index";
 
 export function createExampleAuthorityClient(appKey: string) {
   return createHubAuthorityClient({
@@ -12,7 +12,7 @@ export function createExampleAuthorityClient(appKey: string) {
 }
 
 export async function enforceAppAccess(
-  appKey: Parameters<ReturnType<typeof createExampleAuthorityClient>["resolveAppAccess"]>[0]["appKey"],
+  appKey: MacTechAppKey,
   clerkUserId: string,
   clerkOrgId?: string,
 ) {
