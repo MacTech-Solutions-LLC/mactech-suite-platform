@@ -36,6 +36,7 @@ type CliOptions = {
   help: boolean;
   name: string | null;
   description: string | null;
+  expiresDays: number | null;
 };
 
 function sha256(plaintext: string): string {
@@ -67,6 +68,7 @@ OPTIONS
   --scopes <list>      Comma-separated scopes (default: app_authority_resolve,audit_ingest)
   --name <string>      ApiKey display name (default: "<appKey> live authority (YYYY-MM-DD)")
   --description <text> Optional ApiKey description
+  --expires-days <num> Optional expiration in days (e.g., 30, 90)
 
 ENVIRONMENT
   DATABASE_URL         Required. Hub Postgres connection string.
@@ -110,6 +112,7 @@ function parseArgs(argv: string[]): CliOptions {
     help: false,
     name: null,
     description: null,
+    expiresDays: null,
   };
 
   const positional: string[] = [];
@@ -151,6 +154,15 @@ function parseArgs(argv: string[]): CliOptions {
         process.exit(1);
       }
       options.description = next;
+      continue;
+    }
+    if (arg === "--expires-days") {
+      const next = argv[++i];
+      if (!next || Number.isNaN(Number(next))) {
+        console.error("--expires-days requires a numeric value");
+        process.exit(1);
+      }
+      options.expiresDays = Number(next);
       continue;
     }
     if (arg.startsWith("-")) {
@@ -204,6 +216,9 @@ async function main() {
   const keyDescription =
     options.description ??
     `Ops script — scopes [${options.scopes.join(", ")}] for ${appKey}`;
+  const expiresAt = options.expiresDays
+    ? new Date(Date.now() + options.expiresDays * 24 * 60 * 60 * 1000)
+    : null;
 
   try {
     const [registry, serviceIdentity] = await Promise.all([
@@ -251,6 +266,7 @@ async function main() {
               description: keyDescription,
               scopes: options.scopes,
               status: "active",
+              expiresAt: expiresAt ? expiresAt.toISOString() : null,
             },
           },
           null,
@@ -271,6 +287,7 @@ async function main() {
         keyHash: hash,
         keyPrefix: prefix,
         status: "active",
+        expiresAt,
       },
     });
 
@@ -287,6 +304,7 @@ async function main() {
         prefix: row.keyPrefix,
         scopes: row.scopes,
         name: row.name,
+        expiresAt: row.expiresAt?.toISOString() ?? null,
         token: plaintext,
       }),
     );
