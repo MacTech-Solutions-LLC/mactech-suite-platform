@@ -10,6 +10,7 @@ Ordered steps for flipping a satellite from **`HUB_AUTHORITY_MODE=mock`** to **`
 - Satellite CORS / custom-domain origins: `docs/HUB_SATELLITE_CORS_CUTOVER.md`
 - Runtime contract: `docs/HUB_AUTHORITY_CONTRACT_V1.md`
 - Consumer adapter: `packages/hub-client/README.md`
+- Per-satellite pilot runbooks: `docs/LIVE_HUB_PILOT_BIZOPS.md` · `docs/LIVE_HUB_PILOT_PORTAL.md`
 
 **Safety:** No tokens, `.env` values, or Railway secret contents in git, PRs, or agent transcripts.
 
