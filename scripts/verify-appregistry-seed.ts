@@ -113,15 +113,16 @@ async function main() {
   if (failures > 0) {
     console.error(`\nFAILED: ${failures} check(s) did not pass.`);
     console.error("Run npm run db:seed against your dev DATABASE_URL, then retry.");
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
   console.log("\nPASSED: all greenfield AppRegistry keys verified.");
 }
 
 main()
+  .finally(() => prisma.$disconnect())
   .catch((err) => {
     console.error("Verification error:", err);
     process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+  });
