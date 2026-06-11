@@ -145,6 +145,32 @@ test("createHubAuthorityClient defaults to mock without live config", () => {
   assert.equal(typeof client.resolveAppAccess, "function");
 });
 
+test("createHubAuthorityClient rejects live mode without service token", () => {
+  assert.throws(
+    () =>
+      createHubAuthorityClient({
+        mode: "live",
+        live: {
+          hubBaseUrl: "https://hub.example.com",
+          sourceAppKey: "training",
+        },
+      }),
+    /MACTECH_HUB_SERVICE_TOKEN/,
+  );
+});
+
+test("createHubAuthorityClient accepts live mode with service token", () => {
+  const client = createHubAuthorityClient({
+    mode: "live",
+    live: {
+      hubBaseUrl: "https://hub.example.com",
+      sourceAppKey: "training",
+      serviceToken: "test-token",
+    },
+  });
+  assert.equal(typeof client.resolveAppAccess, "function");
+});
+
 test("createDefaultMockHubAuthority returns working client", async () => {
   const client = createDefaultMockHubAuthority();
   const snapshot = await client.resolveAppAccess({

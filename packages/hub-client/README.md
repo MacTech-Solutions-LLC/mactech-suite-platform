@@ -82,6 +82,8 @@ npm run build
 
 ## Mock vs live
 
+Full live wiring checklist, env var names, token provisioning, and failure modes: [`docs/LIVE_HUB_AUTHORITY_WIRING.md`](../../docs/LIVE_HUB_AUTHORITY_WIRING.md).
+
 ```typescript
 import { createHubAuthorityClient } from "@mactech/hub-client";
 
@@ -110,6 +112,7 @@ Per-app consumer patterns in `examples/`:
 - `pricing-consumer.ts`
 - `proposal-consumer.ts`
 - `portal-consumer.ts`
+- `live-mode-satellite.ts` — env-only live mode factory + protected route stub
 
 Legacy combined examples remain in `consumer-examples.ts` (live `createHubServiceClient` API).
 

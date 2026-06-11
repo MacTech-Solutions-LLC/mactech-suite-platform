@@ -13,6 +13,21 @@ export interface CreateHubAuthorityClientOptions {
 }
 
 const MODE_ENV = "HUB_AUTHORITY_MODE";
+const SERVICE_TOKEN_ENV = "MACTECH_HUB_SERVICE_TOKEN";
+
+function assertLiveConfig(live: HubClientConfig): void {
+  if (!live.hubBaseUrl?.trim()) {
+    throw new Error("createHubAuthorityClient: live mode requires live.hubBaseUrl (MACTECH_HUB_URL).");
+  }
+  if (!live.sourceAppKey?.trim()) {
+    throw new Error("createHubAuthorityClient: live mode requires live.sourceAppKey.");
+  }
+  if (!live.serviceToken?.trim()) {
+    throw new Error(
+      `createHubAuthorityClient: live mode requires live.serviceToken (${SERVICE_TOKEN_ENV}).`,
+    );
+  }
+}
 
 function resolveMode(explicit?: HubAuthorityMode): HubAuthorityMode {
   if (explicit) return explicit;
@@ -37,5 +52,6 @@ export function createHubAuthorityClient(options: CreateHubAuthorityClientOption
     throw new Error("createHubAuthorityClient: live mode requires options.live HubClientConfig.");
   }
 
+  assertLiveConfig(options.live);
   return createLiveHubAuthorityClient(options.live);
 }
