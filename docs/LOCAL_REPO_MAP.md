@@ -66,9 +66,10 @@ Remote: `https://github.com/MacTech-Solutions-LLC/Governance.git`
 
 ### QMS
 
-| Location | Status |
-|----------|--------|
-| `C:\MacTech-Suite-repos\QMS` | Active — use this |
+| Location | Branch | Status |
+|----------|--------|--------|
+| `C:\Users\MacTech_Git\QMS` | `main` | Current — same commit as MacTech-Suite-repos |
+| `C:\MacTech-Suite-repos\QMS` | `main` | Current — same commit |
 
 Remote: `https://github.com/MacTech-Solutions-LLC/QMS.git`
 
@@ -106,11 +107,14 @@ Remote: `https://github.com/MacTech-Solutions-LLC/enclavewatch.git`
 
 ### Training
 
-| Location | Status |
-|----------|--------|
-| `C:\MacTech-Suite-repos\mactech-training` | Active — use this |
+| Location | Branch | Status |
+|----------|--------|--------|
+| `C:\Users\MacTech_Git\MacTech_Training` | `recovery/training-db-merge-2026-06` | Active working copy — use this for Training dev |
+| `C:\MacTech-Suite-repos\mactech-training` | — | Secondary clone |
 
-Remote: `https://github.com/MacTech-Solutions-LLC/mactech-training.git` (or `bmacdonald417/MacTech_Training` — verify)
+Remote: `https://github.com/MacTech-Solutions-LLC/MacTech_Training.git`
+
+> **Note:** No `AGENTS.md` present yet — needs adding before Training dev resumes.
 
 ### Cyber Range (Internal Tool)
 
@@ -119,6 +123,24 @@ Remote: `https://github.com/MacTech-Solutions-LLC/mactech-training.git` (or `bma
 | `C:\Users\MacTech_Git\MacTech_Cyber_Range` | Active — internal tool, not customer-facing SaaS |
 
 Remote: `https://github.com/MacTech-Solutions-LLC/MacTech_Cyber_Range.git`
+
+---
+
+### G Drive Integration (non-git)
+
+| Location | Status |
+|----------|--------|
+| `C:\Users\MacTech_Git\G Drive Integration` | Planning/scripts folder — not a git repo |
+
+Not versioned. Contains Google Drive integration planning materials. Do not commit into suite repos directly.
+
+---
+
+## Not Part of MacTech Suite
+
+| Repo | Location | Notes |
+|------|----------|-------|
+| Carasta | `C:\Users\MacTech_Git\Carasta` | Separate product for a different client — unrelated to the suite |
 
 ---
 
