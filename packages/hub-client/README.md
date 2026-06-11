@@ -12,6 +12,50 @@ MacTech Suite Hub authority client for satellite apps. Clerk authenticates sessi
 
 Sibling checkout of `mactech-suite-platform` is required. `npm install` runs `prepare` → builds `dist/`.
 
+## Railway build contract (satellite repos)
+
+Satellite apps depend on `@mactech/hub-client` via a `file:` path. Railway git-only builds do not have a sibling checkout, so each satellite provisions hub-client during the build step.
+
+**Platform guarantee (this package):** `typescript`, `@types/node`, and `tsx` are declared `devDependencies`. A clean hub-client directory builds with:
+
+```bash
+npm ci && npm run build
+```
+
+No per-repo `npm install --no-save typescript @types/node` hacks are required once this package is on `main`.
+
+**Standard satellite `scripts/railway-build.sh`:**
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+HUB_CLIENT="../mactech-suite-platform/packages/hub-client"
+if [ ! -d "$HUB_CLIENT" ]; then
+  TMPDIR=$(mktemp -d)
+  trap 'rm -rf "$TMPDIR"' EXIT
+  git clone --depth 1 https://github.com/MacTech-Solutions-LLC/mactech-suite-platform.git "$TMPDIR/mactech-suite-platform"
+  mkdir -p ../mactech-suite-platform/packages
+  cp -R "$TMPDIR/mactech-suite-platform/packages/hub-client" "$HUB_CLIENT"
+fi
+
+(
+  cd "$HUB_CLIENT"
+  npm ci --ignore-scripts
+  npm run build
+)
+
+npm install --no-audit --cache /tmp/npm-app-cache
+npm run build
+```
+
+**Notes:**
+
+- Use `npm ci --ignore-scripts` in the hub-client step so `prepare` does not run before `dist/` exists; then call `npm run build` explicitly.
+- Pin `mactech-suite-platform` clone to a ref (branch/tag/SHA) when reproducibility matters; `--depth 1` tracks default branch.
+- Pair with `railway.json` `"buildCommand": "bash scripts/railway-build.sh"` and `nixpacks.toml` that skips default install when hub-client must be provisioned first (see greenfield `bizops`, `contracts-delivery`, `client-portal`).
+- Full variable and project setup: `mactech-suite-workspace-control/prompts/pre-tenant-speed-mode/RAILWAY_SATELLITE_SETUP.md`.
+
 ## Consumer API (Pre-Tenant Speed Mode)
 
 | Export | Purpose |
