@@ -7,6 +7,8 @@ export type MacTechAppKey =
   | "growth-capture"
   | "pricing"
   | "proposal"
+  | "bizops"
+  | "contracts-delivery"
   | "client-portal"
   | "workspace-gateway";
 
@@ -18,6 +20,8 @@ export const MACTECH_APP_KEYS: readonly MacTechAppKey[] = [
   "growth-capture",
   "pricing",
   "proposal",
+  "bizops",
+  "contracts-delivery",
   "client-portal",
   "workspace-gateway",
 ] as const;
