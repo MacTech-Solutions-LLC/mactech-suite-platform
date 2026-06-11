@@ -22,9 +22,10 @@ function createSatelliteHubClient() {
   });
 }
 
+const hub = createSatelliteHubClient();
+
 /** Protected route: Clerk session → Hub authority → domain handler. */
 export async function liveModeProtectedRoute(clerkUserId: string, clerkOrgId?: string) {
-  const hub = createSatelliteHubClient();
   const snapshot = await hub.resolveAppAccess({
     appKey: APP_KEY,
     clerkUserId,
