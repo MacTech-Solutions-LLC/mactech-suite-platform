@@ -7,6 +7,7 @@ Ordered steps for flipping a satellite from **`HUB_AUTHORITY_MODE=mock`** to **`
 **Related:**
 
 - Wiring pattern and env var names: `docs/LIVE_HUB_AUTHORITY_WIRING.md`
+- Satellite CORS / custom-domain origins: `docs/HUB_SATELLITE_CORS_CUTOVER.md`
 - Runtime contract: `docs/HUB_AUTHORITY_CONTRACT_V1.md`
 - Consumer adapter: `packages/hub-client/README.md`
 
@@ -81,8 +82,27 @@ On a **staging** deployment slot or one-off shell with live env injected:
 - [ ] Call as **non-entitled user** or wrong org → expect **403** with Hub `snapshot.reason` (not Clerk fallback).
 - [ ] Revert staging to `mock` if prod cutover is not yet scheduled.
 
+### 2.3a Hub CORS and custom-domain origins (required before production live flip)
+
+Complete **before** Phase 2.4 on the pilot satellite. Full runbook: `docs/HUB_SATELLITE_CORS_CUTOVER.md`.
+
+**Pilot order:** `bizops` first — do not flip contracts or portal in the same window.
+
+| Pilot `appKey` | Custom origin (Phase 3g) |
+| --- | --- |
+| `bizops` | `https://bizops.mactechsolutionsllc.com` |
+| `contracts-delivery` (later) | `https://contracts.mactechsolutionsllc.com` |
+| `client-portal` (later) | `https://portal.mactechsolutionsllc.com` |
+
+- [ ] **3g-01 gate:** Custom-domain smoke **PASS** on the pilot host (bizops: health, hub-mock, sign-in, TLS).
+- [ ] Brian adds the pilot satellite custom origin (+ Railway default URL during dual-host window) to Hub CORS / allowed-origin config on the Suite deployment.
+- [ ] Hub `AppRegistry` `baseUrl` / `publicUrl` updated to the custom origin for the pilot `appKey`.
+- [ ] Browser network tab check (describe only in runbook): no CORS preflight failure when protected routes trigger `resolve-app-access` from the satellite origin.
+- [ ] Leave `HUB_AUTHORITY_MODE=mock` on production until the above passes.
+
 ### 2.4 Production mode flip
 
+- [ ] Confirm Phase 2.3a (Hub CORS + custom-domain origins) is complete for this satellite.
 - [ ] Set `HUB_AUTHORITY_MODE=live` on production service.
 - [ ] Redeploy satellite.
 - [ ] Monitor startup logs for Hub client factory errors.
