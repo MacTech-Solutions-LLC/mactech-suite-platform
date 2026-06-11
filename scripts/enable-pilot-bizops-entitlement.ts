@@ -33,11 +33,16 @@ async function main() {
     console.error("Updated AppRegistry bizops -> active");
   }
 
-  let org = await prisma.customerOrganization.findFirst({
+  let org = await prisma.customerOrganization.findUnique({
     where: { clerkOrgId },
   });
 
   if (!org) {
+    if (clerkOrgId !== DEFAULT_PILOT_CLERK_ORG_ID) {
+      throw new Error(
+        `CustomerOrganization not found for clerkOrgId=${clerkOrgId}. Sync org from Clerk before enabling entitlement.`,
+      );
+    }
     org = await prisma.customerOrganization.create({
       data: {
         clerkOrgId,

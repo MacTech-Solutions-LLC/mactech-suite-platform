@@ -15,7 +15,7 @@ async function main() {
     await prisma.appRegistry.update({ where: { appKey: "bizops" }, data: { status: "active" } });
   }
 
-  const pilot = await prisma.customerOrganization.findFirst({
+  const pilot = await prisma.customerOrganization.findUnique({
     where: { clerkOrgId: PILOT_CLERK_ORG_ID },
   });
   if (!pilot) throw new Error("Pilot org not found");
@@ -25,8 +25,8 @@ async function main() {
     data: { status: "active" },
   });
 
-  const bad = await prisma.customerOrganization.findFirst({ where: { slug: BAD_SLUG } });
-  if (bad) {
+  const bad = await prisma.customerOrganization.findUnique({ where: { slug: BAD_SLUG } });
+  if (bad && bad.id !== pilot.id) {
     await prisma.productEntitlement.deleteMany({ where: { customerOrganizationId: bad.id } });
     await prisma.customerOrganization.delete({ where: { id: bad.id } });
     console.error("Removed duplicate pilot org row");
