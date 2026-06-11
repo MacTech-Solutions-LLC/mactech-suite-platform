@@ -8,8 +8,8 @@ Runbook for enabling Hub `ProductEntitlement` on the **first pilot Clerk org** s
 
 **Related:**
 
-- Live pilot cutover: `docs/LIVE_HUB_PILOT_BIZOPS.md` (verification §3.2)
-- Hub authority runtime: `docs/HUB_AUTHORITY_CONTRACT_V1.md`
+- Live pilot cutover: [docs/LIVE_HUB_PILOT_BIZOPS.md](./LIVE_HUB_PILOT_BIZOPS.md) (verification §3.2)
+- Hub authority runtime: [docs/HUB_AUTHORITY_CONTRACT_V1.md](./HUB_AUTHORITY_CONTRACT_V1.md)
 - Consumer snapshot shape: `mactech-suite-workspace-control/docs/HUB_AUTH_CONTRACT_V1_SPEC.md` §3
 
 **Safety:** Agents must **not** execute seed, SQL, or admin writes against production Hub. Brian performs all production enablement. Use placeholder Clerk org IDs in tickets (`org_...`); never commit real production org or entitlement row IDs.

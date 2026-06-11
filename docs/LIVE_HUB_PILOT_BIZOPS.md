@@ -131,7 +131,7 @@ curl -sS https://bizops-production-4d93.up.railway.app/api/health
 
 ### 3.2 `resolveAppAccess` smoke — protected route
 
-**Entitlement setup (Brian, pre-cutover):** `docs/PILOT_ORG_ENTITLEMENT.md` — enable `ProductEntitlement` for pilot org + `appKey: bizops`.
+**Entitlement setup (Brian, pre-cutover):** [docs/PILOT_ORG_ENTITLEMENT.md](./PILOT_ORG_ENTITLEMENT.md) — enable `ProductEntitlement` for pilot org + `appKey: bizops`.
 
 `/api/smoke/hub-mock` is **mock-only** (returns `skipped` when `hubMode` is `live`). Use authenticated protected surfaces instead.
 
