@@ -8,6 +8,7 @@ Ensure Hub accepts browser and server calls from greenfield **custom-domain orig
 
 **Related:**
 
+- **Production apply (Brian):** [docs/HUB_CORS_PRODUCTION_APPLY.md](./HUB_CORS_PRODUCTION_APPLY.md) — env var names, OPTIONS curl, rollback
 - Ordered live cutover: `docs/LIVE_HUB_CUTOVER_CHECKLIST.md`
 - 3g-01 smoke evidence: `mactech-suite-workspace-control/local-work-recovery/phase-3g-custom-domain-smoke-verify.md`
 - Hub authority wiring: `docs/LIVE_HUB_AUTHORITY_WIRING.md`
@@ -82,6 +83,8 @@ Greenfield seed fixtures intentionally leave `baseUrl` null until URLs stabilize
 ---
 
 ## Ordered rollout (bizops pilot first)
+
+Brian-executable steps, env var names, verification curl, and rollback: [docs/HUB_CORS_PRODUCTION_APPLY.md](./HUB_CORS_PRODUCTION_APPLY.md).
 
 Execute only with Brian approval per hostname. **Do not** batch all three satellites in one CORS window.
 
