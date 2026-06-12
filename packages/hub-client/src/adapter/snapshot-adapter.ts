@@ -1,7 +1,7 @@
 import type { HubAccessSnapshot } from "../types/authority-snapshot";
 import type { HubAppEntitlement } from "../types/entitlement";
 import type { MacTechAppKey } from "../types/app-key";
-import type { HubAuthoritySnapshot } from "../types";
+import type { HubAuthoritySnapshot, ContractAccessEntry } from "../types";
 
 function mapUserStatus(status: string | null): HubAccessSnapshot["user"]["status"] {
   if (status === "inactive") return "inactive";
@@ -60,6 +60,9 @@ export function toHubAccessSnapshot(
       status: mapMembershipStatus(live.membershipStatus),
     },
     entitlements,
+    contractAccess: Array.isArray(live.contractAccess)
+      ? (live.contractAccess as ContractAccessEntry[])
+      : [],
     resolvedAt: live.cache?.issuedAt ?? new Date().toISOString(),
     reason: live.decision?.denyReason ?? undefined,
   };

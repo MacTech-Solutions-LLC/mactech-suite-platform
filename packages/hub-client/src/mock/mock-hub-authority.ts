@@ -65,6 +65,7 @@ function buildDeniedSnapshot(
       status: "inactive",
     },
     entitlements: [],
+    contractAccess: [],
     resolvedAt: new Date().toISOString(),
     reason,
   };
@@ -116,6 +117,7 @@ export function createMockHubAuthority(opts: MockHubAuthorityOptions): HubAuthor
         },
         membership,
         entitlements: allowed ? entitlements : [],
+        contractAccess: [],
         resolvedAt: new Date().toISOString(),
         reason: allowed ? undefined : "entitlement_missing",
       };
