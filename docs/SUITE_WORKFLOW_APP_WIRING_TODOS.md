@@ -28,22 +28,29 @@ This is the follow-on implementation queue. These items are intentionally not wi
 - Produce Governance Readiness Snapshot references instead of forcing proposal-time live re-query.
 - Emit gate status events for screening, readiness, bid/no-bid, waivers, and contract handoff.
 - Keep clause risk, flowdowns, retention posture, and contract truth authoritative in Governance.
-- Read charge code setup and PoP boundaries from Finance through Hub proxy — no write access, no invoice visibility.
+- Read charge code setup and PoP boundaries from Finance through Hub proxy when Finance exists — no write access, no invoice visibility.
 - Push approval events, obligation flags, and clause exceptions to BizOps.
 
-## Finance (appKey: `finance`, formerly `pricing`)
+## PricingOS (appKey: `pricing`)
 
-- Own BOE, rate cards, indirect rates, commercial service pricing, invoice generation, and labor actuals reconciliation.
-- Emit `pricing.quote.created`, `pricing.quote.approved`, and invoice/burn rate events to Hub audit ledger.
-- Expose charge code and PoP boundary read APIs consumed by Governance and Contracts through Hub.
+- Own pricing math, rate snapshots, BOE, scenarios, proposed price, price volume, and Green Team approval.
+- Emit `pricing.request.created`, `pricing.scenario.created`, `pricing.green_team.approved`, and `pricing.volume.exported` events to Hub audit ledger.
+- Produce immutable approved pricing package references and hashes for ProposalOS.
+- Hand award assumptions to Finance as reference metadata only; do not own actuals, invoicing, payments, or reconciliation.
+
+## Finance (appKey: `finance`, planned/module until authorized)
+
+- Own actual accounting, QuickBooks, invoicing, payments, charge codes, revenue recognition support, reconciliation, and financial actuals.
+- Emit `finance.preaward_review.started`, `finance.charge_code_plan.created`, `finance.quickbooks_mapping.pending`, and invoice/burn-rate events to Hub audit ledger.
+- Expose charge code and PoP boundary read APIs consumed by Governance and Contracts through Hub once Finance is live.
 - QuickBooks handoff is a Hub-proxied call — Finance never holds the OAuth token directly.
 - Push invoice aging, burn rate vs. funded value, and rate alerts to BizOps.
 
 ## Proposal
 
 - Consume Growth & Capture and Governance references for kickoff.
-- Request pricing through a standard handoff packet to Finance.
-- Attach only approved Finance price-volume references and hashes.
+- Request pricing through a standard handoff packet to PricingOS.
+- Attach only approved PricingOS price-volume references and hashes.
 - Emit submission, receipt, award/loss, and post-award handoff events.
 - Push submission status, deadlines, and awarded/lost outcome to BizOps.
 

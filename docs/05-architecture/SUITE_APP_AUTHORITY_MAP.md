@@ -49,9 +49,10 @@ each state transition.
 
 | Satellite      | Hub concern                          | Satellite owns               |
 |----------------|--------------------------------------|------------------------------|
-| **Proposals**  | Award trigger → Hub issues contractId| Proposal packages, bid history|
-| **Accounting** | Finance connector, invoice events    | GL entries, invoices, payroll |
-| **HR**         | Onboarding connector, role grants    | Employee records, timesheets  |
+| **Proposals**  | Award trigger -> Hub issues contractId | Proposal packages, bid history |
+| **PricingOS**  | Approved price-package references, Green Team events | Pricing math, rate snapshots, BOE, scenarios, price volume |
+| **Finance**    | Finance connector, invoice events, charge-code status | GL entries, invoices, payments, payroll/actuals |
+| **HR / Training** | Onboarding connector, role/training grants | Employee records, assignments, completions |
 
 ### Connector Registry (OAuth / tenant bridges)
 
@@ -80,7 +81,8 @@ are not contract-scoped and do not change when contracts are awarded or closed.
 
 - Document binary content (QMS / Governance satellite storage)
 - Contract clause details, CLINs, or modification documents (Contracts satellite)
-- GL entries, invoices, or payroll data (Accounting satellite)
+- Pricing math, rate snapshots, BOE, pricing scenarios, or price-volume source data (PricingOS)
+- GL entries, invoices, payments, charge codes, payroll data, or financial actuals (Finance)
 - CMMC control evidence or SSP narrative (QMS satellite)
 
 ---
@@ -100,7 +102,8 @@ User authenticates → Hub issues session token
 Satellite receives token → reads relevant claims → applies local access logic
   Contracts:  token.contractAccess → filter to user's contracts
   QMS:        token.permissions   → gate document operations
-  Accounting: token.connectors    → resolve bridge credentials
+  PricingOS:  token.permissions   -> gate pricing, Green Team, and export operations
+  Finance:    token.connectors    -> resolve accounting bridge credentials
 ```
 
 Satellites fail closed: an expired token or missing claim results in 401/403,
