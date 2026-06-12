@@ -36,6 +36,7 @@ model Tenant {
 
   memberships Membership[]
   auditEvents AuditEvent[]
+  contracts   Contract[]
 
   @@index([externalId])
   @@index([slug])
@@ -54,6 +55,11 @@ model User {
 
   memberships Membership[]
   auditEvents AuditEvent[]
+
+  contractsCreated           Contract[]               @relation("ContractCreatedBy")
+  contractMemberships        ContractMembership[]     @relation("ContractMembershipUser")
+  grantedContractMemberships ContractMembership[]     @relation("ContractMembershipGrantedBy")
+  contractLifecycleEvents    ContractLifecycleEvent[] @relation("ContractLifecycleEventActor")
 
   @@index([externalId])
   @@index([email])
@@ -423,6 +429,7 @@ enum AuditCategory {
   evidence
   boundary
   capture
+  contract
   system
 }
 
@@ -877,6 +884,11 @@ enum ApiKeyScope {
   /// "requester" is a synthetic api-key:<id> identity, never matching a
   /// Clerk admin id).
   agents_trigger
+  /// Phase 1 Contract Registry — satellite read access (GET /api/hub/contracts/*).
+  contract_read
+  /// Phase 1 Contract Registry — satellite write access (POST create/award/lifecycle,
+  /// PATCH/DELETE membership). Proposals holds this to call POST /award.
+  contract_write
 }
 
 enum ServiceIdentityStatus {
@@ -2058,4 +2070,94 @@ model QuickbooksWebhookEvent {
   @@index([status])
   @@index([receivedAt])
   @@index([realmId])
+}
+
+// ─── Contract Registry (Phase 1 — thin Hub authority) ────────────────────────
+
+enum ContractStage {
+  PIPELINE
+  PROPOSAL
+  NEGOTIATION
+  ACTIVE
+  MOD
+  OPTION
+  CLOSEOUT
+}
+
+enum ContractMembershipRole {
+  OWNER
+  CONTRIBUTOR
+  VIEWER
+}
+
+enum ContractActorType {
+  USER
+  INTEGRATION
+  SYSTEM
+}
+
+/// Hub-issued contract identity. Thin authority record only — CLINs, mods,
+/// PoP, and signed documents live in the Contracts satellite.
+model Contract {
+  id           String        @id @default(cuid())
+  tenantId     String
+  stage        ContractStage @default(PIPELINE)
+  awardDate    DateTime?
+  farClause    String?
+  /// Opaque pointer to the Contracts satellite record (not validated by Hub).
+  satelliteRef String?
+  createdById  String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  tenant          Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy       User?                    @relation("ContractCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  members         ContractMembership[]
+  lifecycleEvents ContractLifecycleEvent[]
+
+  @@index([tenantId])
+  @@index([tenantId, stage])
+  @@index([awardDate])
+  @@index([createdAt])
+}
+
+model ContractMembership {
+  id          String                 @id @default(cuid())
+  contractId  String
+  userId      String
+  role        ContractMembershipRole @default(VIEWER)
+  grantedById String?
+  grantedAt   DateTime               @default(now())
+
+  contract  Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  user      User     @relation("ContractMembershipUser", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy User?    @relation("ContractMembershipGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@unique([contractId, userId])
+  @@index([contractId])
+  @@index([userId])
+  @@index([role])
+}
+
+/// Authoritative log of when each contract stage transition happened and who
+/// authorized it. evidenceRef is an opaque satellite artifact pointer.
+model ContractLifecycleEvent {
+  id           String            @id @default(cuid())
+  contractId   String
+  fromStage    ContractStage?
+  toStage      ContractStage
+  actorId      String?
+  actorType    ContractActorType @default(SYSTEM)
+  /// Opaque pointer to the satellite artifact that evidences this transition.
+  evidenceRef  String?
+  occurredAt   DateTime          @default(now())
+  note         String?
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  actor    User?    @relation("ContractLifecycleEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([contractId])
+  @@index([contractId, toStage])
+  @@index([occurredAt])
+  @@index([actorId])
 }
