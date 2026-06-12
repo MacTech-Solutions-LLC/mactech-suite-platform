@@ -34,6 +34,7 @@ export {
 } from "./mock/mock-hub-authority";
 export { DEFAULT_MOCK_FIXTURES } from "./mock/fixtures";
 export type {
+  ContractAccessEntry,
   HubAuditEventInput,
   HubAuditEventResult,
   HubAuthorityDecision,

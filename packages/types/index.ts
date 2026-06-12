@@ -247,3 +247,123 @@ export type FrcsCyberScopeProfile = {
   evidenceRefs?: string[];
   boundaryStatement: string;
 };
+
+// ============================================================================
+// SUITE WORKFLOW CONTRACTS
+// ============================================================================
+
+export type SuiteAppKey =
+  | "hub"
+  | "capture"
+  | "governance"
+  | "proposal"
+  | "pricing"
+  | "finance"
+  | "qms"
+  | "training"
+  | "codex_vault";
+
+export type SuiteWorkflowTemplateKey =
+  | "prime_federal_rfp"
+  | "subcontract_rfq"
+  | "quick_commercial_quote"
+  | "grant_sbir_sttr"
+  | "idiq_vehicle"
+  | "idiq_task_order"
+  | "sole_source_sdvosb"
+  | "teaming_mentor_protege"
+  | "cui_cmmc_codex"
+  | "iso_qms_compliance"
+  | "classified_cleared_support";
+
+export type SuiteWorkflowGateKey =
+  | "intake_completeness"
+  | "eligibility_readiness"
+  | "bid_no_bid"
+  | "technical_feasibility"
+  | "pricing_finance_readiness"
+  | "proposal_package_readiness"
+  | "executive_approval"
+  | "submission_receipt_capture"
+  | "award_loss_outcome"
+  | "post_award_handoff"
+  | "closeout_retention";
+
+export type SuiteWorkflowHealth =
+  | "healthy"
+  | "watch"
+  | "blocked"
+  | "waived"
+  | "late"
+  | "submitted"
+  | "won"
+  | "lost"
+  | "postaward"
+  | "closed";
+
+export type SuiteHandoffStatus =
+  | "draft"
+  | "pending_approval"
+  | "approved"
+  | "blocked"
+  | "waived"
+  | "sent"
+  | "accepted"
+  | "rejected"
+  | "superseded";
+
+export type SuiteHandoffType =
+  | "capture_to_governance_screen"
+  | "capture_to_proposal_kickoff"
+  | "governance_to_bid_no_bid"
+  | "governance_to_proposal_guidance"
+  | "proposal_to_pricing_request"
+  | "pricing_to_proposal_approved_volume"
+  | "proposal_to_governance_award_loss"
+  | "proposal_to_finance_preaward"
+  | "award_to_governance_contract"
+  | "award_to_finance_setup"
+  | "award_to_qms_workspace"
+  | "award_to_training_plan"
+  | "award_to_codex_vault_workspace";
+
+export type SuiteApproverKey = "brian_macdonald" | "patrick_caruso" | "james_adams";
+
+export type SuiteAIProvenance = {
+  sourceDocument: string;
+  sourceTextReference: string;
+  confidence: number;
+  modelOrTool: string;
+  humanReviewer: string | null;
+  approvalStatus: "draft" | "needs_review" | "reviewed" | "rejected";
+  finalVersionSnapshot: string | null;
+};
+
+export type SuiteWorkflowHandoffPacket = {
+  suiteObjectReferenceId: string;
+  workflowInstanceId: string;
+  sourceApp: SuiteAppKey;
+  targetApp: SuiteAppKey;
+  sourceRecordId: string;
+  sourceSnapshotId: string;
+  handoffType: SuiteHandoffType;
+  handoffStatus: SuiteHandoffStatus;
+  requiredApprovals: SuiteApproverKey[];
+  blockingDependencies: string[];
+  AIProvenance: SuiteAIProvenance[];
+  auditEvents: string[];
+};
+
+export type SuiteWorkflowDashboardStatus = {
+  workflowInstanceId: string;
+  suiteObjectReferenceId: string;
+  templateKey: SuiteWorkflowTemplateKey;
+  currentOwnerApp: SuiteAppKey;
+  health: SuiteWorkflowHealth;
+  currentGate: SuiteWorkflowGateKey;
+  openBlockingDependencies: string[];
+  requiredApprovals: SuiteApproverKey[];
+  nextDueAt: string | null;
+  lastEventType: string;
+  lastEventAt: string;
+};

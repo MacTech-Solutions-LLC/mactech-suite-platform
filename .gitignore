@@ -144,3 +144,6 @@ vite.config.ts.timestamp-*
 
 # IDE
 .vscode/
+
+# secrets-audit: env/key file hardening
+*.pem

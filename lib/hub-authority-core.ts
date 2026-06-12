@@ -39,6 +39,11 @@ export interface HubAuthorityRequest {
   } | null;
 }
 
+export interface ContractAccessEntry {
+  contractId: string;
+  role: "OWNER" | "CONTRIBUTOR" | "VIEWER";
+}
+
 export interface HubAuthoritySnapshot {
   canonicalHubUserId: string | null;
   clerkUserId: string;
@@ -49,6 +54,7 @@ export interface HubAuthoritySnapshot {
   membershipStatus: string | null;
   memberRoles: string[];
   resolvedPermissions: string[];
+  contractAccess: ContractAccessEntry[];
   appKey: string;
   appRegistryStatus: string | null;
   productEntitlementStatus: string | null;
@@ -121,6 +127,7 @@ export interface AuthorityEvaluationRecords {
   membership: CanonicalMembershipRecord | null;
   entitlement: CanonicalEntitlementRecord | null;
   roleTemplatePermissions?: string[] | null;
+  contractMemberships?: ContractAccessEntry[] | null;
 }
 
 export function evaluateHubAuthorityRecords(
@@ -228,6 +235,7 @@ function buildSnapshot(
     membershipStatus: records.membership?.status ?? null,
     memberRoles: records.membership?.role ? [records.membership.role] : [],
     resolvedPermissions: permissions,
+    contractAccess: allow ? (records.contractMemberships ?? []) : [],
     appKey: input.appKey,
     appRegistryStatus: records.app?.status ?? null,
     productEntitlementStatus: records.entitlement?.status ?? null,

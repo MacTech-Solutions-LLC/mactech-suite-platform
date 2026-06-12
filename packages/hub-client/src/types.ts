@@ -21,6 +21,11 @@ export type HubAuthorityRequest = {
   } | null;
 };
 
+export type ContractAccessEntry = {
+  contractId: string;
+  role: "OWNER" | "CONTRIBUTOR" | "VIEWER";
+};
+
 export type HubAuthoritySnapshot = {
   canonicalHubUserId: string | null;
   clerkUserId: string;
@@ -37,6 +42,7 @@ export type HubAuthoritySnapshot = {
   entitlementStartsAt: string | null;
   entitlementExpiresAt: string | null;
   planTier: string | null;
+  contractAccess?: ContractAccessEntry[] | null;
   cache: {
     issuedAt: string;
     expiresAt: string;

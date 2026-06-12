@@ -95,9 +95,9 @@ export async function resolveHubAppAccess(
     orgLookup ? findOrganization(orgLookup) : Promise.resolve(null),
   ]);
 
-  const [membership, entitlement] =
+  const [membershipEntitlementPair, contractMemberships] = await Promise.all([
     app?.requiresOrgContext && user && org
-      ? await Promise.all([
+      ? Promise.all([
           prisma.orgUserAccess.findUnique({
             where: {
               customerOrganizationId_userProfileId: {
@@ -115,7 +115,19 @@ export async function resolveHubAppAccess(
             },
           }),
         ])
-      : [null, null];
+      : Promise.resolve([null, null] as [null, null]),
+    user
+      ? prisma.contractMembership.findMany({
+          where: {
+            userProfileId: user.id,
+            contract: { stage: { not: "CLOSEOUT" } },
+          },
+          select: { contractId: true, role: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const [membership, entitlement] = membershipEntitlementPair;
 
   const resolvedRoleTemplate =
     membership && !Array.isArray(membership.permissionsJson)
@@ -133,6 +145,7 @@ export async function resolveHubAppAccess(
     membership,
     entitlement,
     roleTemplatePermissions: parsePermissionArray(resolvedRoleTemplate?.permissionsJson),
+    contractMemberships: contractMemberships.map((m) => ({ contractId: m.contractId, role: m.role })),
   };
 
   const snapshot = evaluateHubAuthorityRecords(authorityInput, records, {
