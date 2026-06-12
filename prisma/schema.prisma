@@ -2085,9 +2085,18 @@ enum ContractStage {
 }
 
 enum ContractMembershipRole {
+  // Deprecated generic tier (Phase 1). Retained until existing rows are
+  // migrated to the role-specific values below (rollout Step 4); do not assign.
   OWNER
   CONTRIBUTOR
   VIEWER
+
+  // SUITE_PERMISSION_MATRIX §3 contract-scoped roles.
+  CONTRACT_OWNER
+  COR
+  PM
+  KEY_PERSONNEL
+  SUBCONTRACTOR
 }
 
 enum ContractActorType {
