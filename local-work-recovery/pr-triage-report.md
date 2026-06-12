@@ -29,7 +29,7 @@ Review method: `/gemini review` was triggered on all 22 open PRs, but Gemini Cod
 | contracts-delivery | #10 | Prisma data layer + contractAccess[] | HELD (open, unmerged) | Per Brian's hold. Not merged, not closed, branch untouched. |
 | Proposal | #8 | Phase B — design system | superseded (open) | Subset of #9. |
 | Proposal | #9 | /api/build-info (superset) | merged | `8a5fd69`. Hygiene green. |
-| Proposal | #10 | Hub Contract Registry on WIN award | HELD (open, unmerged) | Per Brian's hold. Local repo has unpushed wave commit `d213af9` (gitignore hardening) on this branch — intentionally NOT pushed to avoid touching a held PR. |
+| Proposal | #10 | Hub Contract Registry on WIN award | HELD — **MERGED BY CONCURRENT ACTOR (incident)** | On Brian's hold list; the triage agent never merged, closed, or touched it (local wave commit `d213af9` intentionally left unpushed). Merged at 04:41:12Z (`9713e98`) under the shared credential by a concurrent agent or manual action — see incident addendum below. |
 
 ## BLOCKERs found and resolution
 
@@ -43,8 +43,17 @@ Review method: `/gemini review` was triggered on all 22 open PRs, but Gemini Cod
 - bizops/contracts-delivery depend on `@mactech/hub-client` via `file:../mactech-suite-platform/packages/hub-client` (pre-existing, not introduced by this wave) — breaks standalone clones; Proposal's vendored approach is the better pattern. Needs follow-up lane.
 - QMS, Opportunities, bizops, contracts-delivery have no CI checks configured — "all checks green" was vacuously satisfied; local tsc used where feasible.
 
+## INCIDENT ADDENDUM — Proposal #10 merged by concurrent actor
+
+During final verification, held PR **Proposal #10** was found MERGED (`9713e98`, 2026-06-12T04:41:12Z, account `bmacdonald417`). The triage agent issued **no** merge against Proposal #10 (its Proposal action was `gh pr merge 9` at 04:36:28Z only). A concurrent agent or manual action on the same credential merged it mid-wave. Mitigations:
+
+- `MACTECH_HUB_CONTRACT_TOKEN` remains unprovisioned; the merged code fails closed without it, so the Proposal→Hub contract handoff stays dormant.
+- No revert performed — reverting main requires Brian's authorization. Decision needed: revert `9713e98` or ratify.
+- If Railway auto-deploys Proposal `main`, this commit is now in the deploy line — review before any deploy action.
+- Incident comment posted on the PR.
+
 ## Safety confirmations
 
-- Held PRs Proposal #10, contracts-delivery #10, Governance #20 remain OPEN and UNMERGED; no branch deletions, no closed PRs anywhere.
-- `MACTECH_HUB_CONTRACT_TOKEN` was never provisioned or referenced.
+- Held PRs contracts-delivery #10 and Governance #20 remain OPEN and UNMERGED; Proposal #10 was merged by a concurrent actor, NOT this lane (see addendum). No branch deletions and no closed PRs by this lane anywhere.
+- `MACTECH_HUB_CONTRACT_TOKEN` was never provisioned or referenced by this lane.
 - No deploys, no migrations applied, no env/production config changes, no Railway/Vercel/Clerk/DNS access.
