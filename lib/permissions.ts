@@ -117,9 +117,62 @@ export const ORG_PERMISSIONS = {
   REPORTS_EXPORT: "org:reports:export",
   AUDIT_VIEW: "org:audit:view",
   SETTINGS_MANAGE: "org:settings:manage",
+
+  // ── Suite app domains (SUITE_PERMISSION_MATRIX v1) ──────────────────────
+  // Proposals (Proposal app)
+  PROPOSALS_READ: "org:proposals:read",
+  PROPOSALS_WRITE: "org:proposals:write",
+  PROPOSALS_SUBMIT: "org:proposals:submit",
+  // QMS (quality)
+  QMS_READ: "org:qms:read",
+  QMS_WRITE: "org:qms:write",
+  QMS_REVIEW_READ: "org:qms:review:read",
+  QMS_REVIEW_APPROVE: "org:qms:review:approve",
+  // Finance (formerly Pricing)
+  FINANCE_READ: "org:finance:read",
+  FINANCE_WRITE: "org:finance:write",
+  FINANCE_RATES_READ: "org:finance:rates:read",
+  FINANCE_RATES_WRITE: "org:finance:rates:write",
+  FINANCE_INVOICE_READ: "org:finance:invoice:read",
+  FINANCE_INVOICE_CREATE: "org:finance:invoice:create",
+  FINANCE_INVOICE_APPROVE: "org:finance:invoice:approve",
+  // Contracts (Contracts & Delivery) — org-level visibility; per-contract
+  // detail is gated by the contract:* namespace below.
+  CONTRACTS_READ: "org:contracts:read",
+  CONTRACTS_WRITE: "org:contracts:write",
+  CONTRACTS_MOD_MANAGE: "org:contracts:mod:manage",
+  // Training
+  TRAINING_READ: "org:training:read",
+  TRAINING_ASSIGN: "org:training:assign",
+  TRAINING_CERTIFY: "org:training:certify",
+  // Connectors — SENSITIVE: owner-default. Never grant below customer_owner
+  // in platform defaults (BizOps UI highlights these). See matrix §5.
+  CONNECTORS_AI_MANAGE: "org:connectors:ai:manage",
+  CONNECTORS_QUICKBOOKS_MANAGE: "org:connectors:quickbooks:manage",
 } as const;
 
 export type OrgPermission = (typeof ORG_PERMISSIONS)[keyof typeof ORG_PERMISSIONS];
+
+// ──────────────────────────────────────────────────────────────────────────────
+// CONTRACT-SCOPED PERMISSIONS (`contract:*` namespace)
+// Distinct from org:* — granted via contractMembership (Phase 1), resolved
+// per-contract. Effective contract perm = org-role perms + contract-scoped
+// role perms for that specific contract. See SUITE_PERMISSION_MATRIX §3.
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const CONTRACT_PERMISSIONS = {
+  DOCS_READ: "contract:docs:read",
+  DOCS_WRITE: "contract:docs:write",
+  CDRL_READ: "contract:cdrl:read",
+  CDRL_UPDATE: "contract:cdrl:update",
+  FINANCE_READ: "contract:finance:read",
+  FINANCE_WRITE: "contract:finance:write",
+  MOD_APPROVE: "contract:mod:approve",
+  MEMBERSHIP_MANAGE: "contract:membership:manage",
+} as const;
+
+export type ContractPermission =
+  (typeof CONTRACT_PERMISSIONS)[keyof typeof CONTRACT_PERMISSIONS];
 
 // ──────────────────────────────────────────────────────────────────────────────
 // ROLE → PERMISSION MAPPINGS
@@ -237,25 +290,14 @@ export const CUSTOMER_ROLE_DEFINITIONS: Array<{
     key: "customer_admin",
     name: "Customer Admin",
     description: "Manages users, roles, and access across enabled MacTech apps.",
-    permissions: [
-      ORG_PERMISSIONS.DASHBOARD_VIEW,
-      ORG_PERMISSIONS.USERS_VIEW,
-      ORG_PERMISSIONS.USERS_INVITE,
-      ORG_PERMISSIONS.USERS_REMOVE,
-      ORG_PERMISSIONS.ROLES_ASSIGN,
-      ORG_PERMISSIONS.VAULT_READ,
-      ORG_PERMISSIONS.VAULT_WRITE,
-      ORG_PERMISSIONS.EVIDENCE_READ,
-      ORG_PERMISSIONS.EVIDENCE_CREATE,
-      ORG_PERMISSIONS.EVIDENCE_APPROVE,
-      ORG_PERMISSIONS.BOUNDARY_READ,
-      ORG_PERMISSIONS.BOUNDARY_WRITE,
-      ORG_PERMISSIONS.CAPTURE_READ,
-      ORG_PERMISSIONS.CAPTURE_WRITE,
-      ORG_PERMISSIONS.REPORTS_EXPORT,
-      ORG_PERMISSIONS.AUDIT_VIEW,
-      ORG_PERMISSIONS.SETTINGS_MANAGE,
-    ],
+    // Matrix §2: all customer_owner permissions EXCEPT vault:admin and the
+    // owner-only connector management. Filter keeps it in sync as domains grow.
+    permissions: Object.values(ORG_PERMISSIONS).filter(
+      (p) =>
+        p !== ORG_PERMISSIONS.VAULT_ADMIN &&
+        p !== ORG_PERMISSIONS.CONNECTORS_AI_MANAGE &&
+        p !== ORG_PERMISSIONS.CONNECTORS_QUICKBOOKS_MANAGE,
+    ),
   },
   {
     key: "compliance_manager",
@@ -271,6 +313,9 @@ export const CUSTOMER_ROLE_DEFINITIONS: Array<{
       ORG_PERMISSIONS.BOUNDARY_READ,
       ORG_PERMISSIONS.REPORTS_EXPORT,
       ORG_PERMISSIONS.AUDIT_VIEW,
+      // Matrix §2: compliance extends into QMS review (CDRL compliance overlap)
+      ORG_PERMISSIONS.QMS_READ,
+      ORG_PERMISSIONS.QMS_REVIEW_READ,
     ],
   },
   {
@@ -298,12 +343,18 @@ export const CUSTOMER_ROLE_DEFINITIONS: Array<{
       ORG_PERMISSIONS.EVIDENCE_CREATE,
       ORG_PERMISSIONS.VAULT_READ,
       ORG_PERMISSIONS.BOUNDARY_READ,
+      // Matrix §2: read QMS + Proposals where evidence feeds compliance matrices
+      ORG_PERMISSIONS.QMS_READ,
+      ORG_PERMISSIONS.PROPOSALS_READ,
     ],
   },
+  // DEPRECATED — superseded by the four audit-type variants below. Retained
+  // so existing `auditor` assignments keep resolving until they are migrated
+  // to a specific variant (rollout Step 4 analogue). Do not assign to new users.
   {
     key: "auditor",
-    name: "Auditor",
-    description: "Read-only access to evidence, audit logs, and reports for assessment review.",
+    name: "Auditor (deprecated)",
+    description: "Deprecated generic auditor. Use a cmmc_l2/iso9001/iso27001/dcaa variant.",
     permissions: [
       ORG_PERMISSIONS.DASHBOARD_VIEW,
       ORG_PERMISSIONS.EVIDENCE_READ,
@@ -311,6 +362,65 @@ export const CUSTOMER_ROLE_DEFINITIONS: Array<{
       ORG_PERMISSIONS.BOUNDARY_READ,
       ORG_PERMISSIONS.REPORTS_EXPORT,
       ORG_PERMISSIONS.AUDIT_VIEW,
+    ],
+  },
+  // Matrix §2 — Auditor family. Each variant is read-only and scoped to its
+  // audit type (org:audit:view is filtered per role in the query layer — see
+  // Step 5 of the rollout plan).
+  {
+    key: "cmmc_l2_auditor",
+    name: "CMMC Level 2 Auditor",
+    description: "Read-only access for CMMC L2 assessment: access control + evidence.",
+    permissions: [
+      ORG_PERMISSIONS.DASHBOARD_VIEW,
+      ORG_PERMISSIONS.EVIDENCE_READ,
+      ORG_PERMISSIONS.EVIDENCE_EXPORT,
+      ORG_PERMISSIONS.BOUNDARY_READ,
+      ORG_PERMISSIONS.VAULT_READ,
+      ORG_PERMISSIONS.AUDIT_VIEW,
+      ORG_PERMISSIONS.REPORTS_EXPORT,
+    ],
+  },
+  {
+    key: "iso27001_auditor",
+    name: "ISO 27001 Auditor",
+    description: "Security-focused ISO; overlaps CMMC L2 (access control + evidence).",
+    permissions: [
+      ORG_PERMISSIONS.DASHBOARD_VIEW,
+      ORG_PERMISSIONS.EVIDENCE_READ,
+      ORG_PERMISSIONS.EVIDENCE_EXPORT,
+      ORG_PERMISSIONS.BOUNDARY_READ,
+      ORG_PERMISSIONS.VAULT_READ,
+      ORG_PERMISSIONS.AUDIT_VIEW,
+      ORG_PERMISSIONS.REPORTS_EXPORT,
+    ],
+  },
+  {
+    key: "iso9001_auditor",
+    name: "ISO 9001 Auditor",
+    description: "Read-only access for ISO 9001 quality audit: QMS doc/review history.",
+    permissions: [
+      ORG_PERMISSIONS.DASHBOARD_VIEW,
+      ORG_PERMISSIONS.EVIDENCE_READ,
+      ORG_PERMISSIONS.EVIDENCE_EXPORT,
+      ORG_PERMISSIONS.QMS_READ,
+      ORG_PERMISSIONS.QMS_REVIEW_READ,
+      ORG_PERMISSIONS.AUDIT_VIEW,
+      ORG_PERMISSIONS.REPORTS_EXPORT,
+    ],
+  },
+  {
+    key: "dcaa_auditor",
+    name: "DCAA Auditor",
+    description: "Read-only access for DCAA: timekeeping + financial transactions.",
+    permissions: [
+      ORG_PERMISSIONS.DASHBOARD_VIEW,
+      ORG_PERMISSIONS.FINANCE_READ,
+      ORG_PERMISSIONS.FINANCE_INVOICE_READ,
+      ORG_PERMISSIONS.FINANCE_RATES_READ,
+      ORG_PERMISSIONS.CONTRACTS_READ,
+      ORG_PERMISSIONS.AUDIT_VIEW,
+      ORG_PERMISSIONS.REPORTS_EXPORT,
     ],
   },
   {
@@ -323,6 +433,163 @@ export const CUSTOMER_ROLE_DEFINITIONS: Array<{
       ORG_PERMISSIONS.VAULT_READ,
       ORG_PERMISSIONS.BOUNDARY_READ,
       ORG_PERMISSIONS.CAPTURE_READ,
+      // Matrix §2: baseline cross-app read (finance intentionally excluded)
+      ORG_PERMISSIONS.CONTRACTS_READ,
+      ORG_PERMISSIONS.PROPOSALS_READ,
+      ORG_PERMISSIONS.QMS_READ,
+    ],
+  },
+
+  // ── New operational roles (Matrix §2) ───────────────────────────────────
+  {
+    key: "capture_manager",
+    name: "Capture Manager",
+    description: "Owns pipeline / bid-no-bid; reads proposals for handoff.",
+    permissions: [
+      ORG_PERMISSIONS.DASHBOARD_VIEW,
+      ORG_PERMISSIONS.CAPTURE_READ,
+      ORG_PERMISSIONS.CAPTURE_WRITE,
+      ORG_PERMISSIONS.PROPOSALS_READ,
+    ],
+  },
+  {
+    key: "proposal_manager",
+    name: "Proposal Manager",
+    description: "Owns proposal development and submission; reads capture + QMS.",
+    permissions: [
+      ORG_PERMISSIONS.DASHBOARD_VIEW,
+      ORG_PERMISSIONS.PROPOSALS_READ,
+      ORG_PERMISSIONS.PROPOSALS_WRITE,
+      ORG_PERMISSIONS.PROPOSALS_SUBMIT,
+      ORG_PERMISSIONS.CAPTURE_READ,
+      ORG_PERMISSIONS.QMS_READ,
+    ],
+  },
+  {
+    key: "qms_manager",
+    name: "QMS Manager",
+    description: "Owns quality management: controlled docs and review approvals.",
+    permissions: [
+      ORG_PERMISSIONS.DASHBOARD_VIEW,
+      ORG_PERMISSIONS.QMS_READ,
+      ORG_PERMISSIONS.QMS_WRITE,
+      ORG_PERMISSIONS.QMS_REVIEW_APPROVE,
+      ORG_PERMISSIONS.EVIDENCE_READ,
+      ORG_PERMISSIONS.EVIDENCE_CREATE,
+    ],
+  },
+  {
+    key: "finance_manager",
+    name: "Finance Manager",
+    description: "Owns rates and invoicing. Connector management stays owner-only.",
+    permissions: [
+      ORG_PERMISSIONS.DASHBOARD_VIEW,
+      ORG_PERMISSIONS.FINANCE_READ,
+      ORG_PERMISSIONS.FINANCE_RATES_WRITE,
+      ORG_PERMISSIONS.FINANCE_INVOICE_CREATE,
+      ORG_PERMISSIONS.FINANCE_INVOICE_APPROVE,
+      ORG_PERMISSIONS.REPORTS_EXPORT,
+    ],
+  },
+  {
+    key: "contracts_manager",
+    name: "Contracts Manager",
+    description: "Owns awarded-contract records, CLINs, and mods.",
+    permissions: [
+      ORG_PERMISSIONS.DASHBOARD_VIEW,
+      ORG_PERMISSIONS.CONTRACTS_READ,
+      ORG_PERMISSIONS.CONTRACTS_WRITE,
+      ORG_PERMISSIONS.CONTRACTS_MOD_MANAGE,
+      ORG_PERMISSIONS.REPORTS_EXPORT,
+    ],
+  },
+  {
+    key: "training_manager",
+    name: "Training Manager",
+    description: "Owns training assignments and certifications.",
+    permissions: [
+      ORG_PERMISSIONS.DASHBOARD_VIEW,
+      ORG_PERMISSIONS.TRAINING_READ,
+      ORG_PERMISSIONS.TRAINING_ASSIGN,
+      ORG_PERMISSIONS.TRAINING_CERTIFY,
+      ORG_PERMISSIONS.USERS_VIEW,
+    ],
+  },
+  {
+    key: "program_manager",
+    name: "Program Manager",
+    description:
+      "Cross-cutting read across delivery areas; write is granted per-contract, not here.",
+    permissions: [
+      ORG_PERMISSIONS.DASHBOARD_VIEW,
+      ORG_PERMISSIONS.FINANCE_READ,
+      ORG_PERMISSIONS.CONTRACTS_READ,
+      ORG_PERMISSIONS.PROPOSALS_READ,
+      ORG_PERMISSIONS.QMS_READ,
+      ORG_PERMISSIONS.TRAINING_READ,
+    ],
+  },
+];
+
+// ──────────────────────────────────────────────────────────────────────────────
+// CONTRACT-SCOPED ROLE DEFINITIONS (Matrix §3)
+// Attach via contractMembership, NOT the org role table. Effective permission
+// on Contract X = org-role perms + the contract-scoped perms below for X.
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const CONTRACT_ROLE_DEFINITIONS: Array<{
+  key: string;
+  name: string;
+  description: string;
+  permissions: ContractPermission[];
+}> = [
+  {
+    key: "contract_owner",
+    name: "Contract Owner",
+    description: "Full authority on the contract incl. finance, mods, membership.",
+    permissions: Object.values(CONTRACT_PERMISSIONS),
+  },
+  {
+    key: "contract_cor",
+    name: "COR",
+    description: "Contracting Officer's Rep: read docs/finance, update CDRLs.",
+    permissions: [
+      CONTRACT_PERMISSIONS.DOCS_READ,
+      CONTRACT_PERMISSIONS.CDRL_READ,
+      CONTRACT_PERMISSIONS.CDRL_UPDATE,
+      CONTRACT_PERMISSIONS.FINANCE_READ,
+    ],
+  },
+  {
+    key: "contract_pm",
+    name: "Program Manager (contract)",
+    description: "Delivery lead: write docs, update CDRLs, read finance.",
+    permissions: [
+      CONTRACT_PERMISSIONS.DOCS_READ,
+      CONTRACT_PERMISSIONS.DOCS_WRITE,
+      CONTRACT_PERMISSIONS.CDRL_READ,
+      CONTRACT_PERMISSIONS.CDRL_UPDATE,
+      CONTRACT_PERMISSIONS.FINANCE_READ,
+    ],
+  },
+  {
+    key: "contract_key_personnel",
+    name: "Key Personnel",
+    description: "Read docs + assigned CDRLs; update assigned CDRLs.",
+    permissions: [
+      CONTRACT_PERMISSIONS.DOCS_READ,
+      CONTRACT_PERMISSIONS.CDRL_READ,
+      CONTRACT_PERMISSIONS.CDRL_UPDATE,
+    ],
+  },
+  {
+    key: "contract_subcontractor",
+    name: "Subcontractor",
+    description: "Scoped to assigned docs/CDRLs only (Clerk guest org).",
+    permissions: [
+      CONTRACT_PERMISSIONS.DOCS_READ,
+      CONTRACT_PERMISSIONS.CDRL_READ,
+      CONTRACT_PERMISSIONS.CDRL_UPDATE,
     ],
   },
 ];
