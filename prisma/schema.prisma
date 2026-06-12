@@ -36,7 +36,6 @@ model Tenant {
 
   memberships Membership[]
   auditEvents AuditEvent[]
-  contracts   Contract[]
 
   @@index([externalId])
   @@index([slug])
@@ -531,6 +530,7 @@ model CustomerOrganization {
   webhookSubscriptions WebhookSubscription[]
   orders               Order[]
   subscriptions        Subscription[]
+  contracts            Contract[]
 
   @@index([clerkOrgId])
   @@index([slug])
@@ -2099,24 +2099,24 @@ enum ContractActorType {
 /// Hub-issued contract identity. Thin authority record only — CLINs, mods,
 /// PoP, and signed documents live in the Contracts satellite.
 model Contract {
-  id           String        @id @default(cuid())
-  tenantId     String
-  stage        ContractStage @default(PIPELINE)
-  awardDate    DateTime?
-  farClause    String?
+  id             String        @id @default(cuid())
+  organizationId String
+  stage          ContractStage @default(PIPELINE)
+  awardDate      DateTime?
+  farClause      String?
   /// Opaque pointer to the Contracts satellite record (not validated by Hub).
-  satelliteRef String?
-  createdById  String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  satelliteRef   String?
+  createdById    String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  tenant          Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  organization    CustomerOrganization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdBy       UserProfile?             @relation("ContractCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   members         ContractMembership[]
   lifecycleEvents ContractLifecycleEvent[]
 
-  @@index([tenantId])
-  @@index([tenantId, stage])
+  @@index([organizationId])
+  @@index([organizationId, stage])
   @@index([awardDate])
   @@index([createdAt])
 }

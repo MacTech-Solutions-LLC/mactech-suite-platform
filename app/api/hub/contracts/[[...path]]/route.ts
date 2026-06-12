@@ -13,7 +13,7 @@ type RouteContext = { params: Promise<{ path?: string[] }> };
 // ─── Zod schemas ─────────────────────────────────────────────────────────────
 
 const createContractSchema = z.object({
-  tenantId: z.string().cuid(),
+  organizationId: z.string().cuid(),
   stage: z.nativeEnum(ContractStage).default('PIPELINE'),
   farClause: z.string().max(100).optional().nullable(),
   satelliteRef: z.string().max(200).optional().nullable(),
@@ -191,14 +191,14 @@ async function handleCreate(
     );
   }
 
-  const { tenantId, stage, farClause, satelliteRef, createdById, initialMembers } = parsed.data;
+  const { organizationId, stage, farClause, satelliteRef, createdById, initialMembers } = parsed.data;
 
-  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } });
-  if (!tenant) return NextResponse.json({ error: 'Tenant not found' }, { status: 404 });
+  const org = await prisma.customerOrganization.findUnique({ where: { id: organizationId }, select: { id: true } });
+  if (!org) return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
 
   const contract = await prisma.$transaction(async (tx) => {
     const c = await tx.contract.create({
-      data: { tenantId, stage, farClause, satelliteRef, createdById },
+      data: { organizationId, stage, farClause, satelliteRef, createdById },
     });
 
     await tx.contractLifecycleEvent.create({
@@ -233,7 +233,7 @@ async function handleCreate(
     action: 'CONTRACT_CREATED',
     resourceType: 'Contract',
     resourceId: contract.id,
-    metadata: { tenantId, stage, callerApp: callerApp(auth) },
+    metadata: { organizationId, stage, callerApp: callerApp(auth) },
     ipAddress: ip(request),
   }).catch(console.error);
 
