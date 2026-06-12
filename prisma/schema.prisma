@@ -56,11 +56,6 @@ model User {
   memberships Membership[]
   auditEvents AuditEvent[]
 
-  contractsCreated           Contract[]               @relation("ContractCreatedBy")
-  contractMemberships        ContractMembership[]     @relation("ContractMembershipUser")
-  grantedContractMemberships ContractMembership[]     @relation("ContractMembershipGrantedBy")
-  contractLifecycleEvents    ContractLifecycleEvent[] @relation("ContractLifecycleEventActor")
-
   @@index([externalId])
   @@index([email])
   @@index([isActive])
@@ -483,6 +478,11 @@ model UserProfile {
   orgAccess OrgUserAccess[]
   auditLogs AuditLog[]      @relation("AuditActor")
   suiteObjectReferences SuiteObjectReference[] @relation("SuiteObjectReferenceCreatedByUser")
+
+  contractsCreated           Contract[]               @relation("ContractCreatedBy")
+  contractMemberships        ContractMembership[]     @relation("ContractMembershipUserProfile")
+  grantedContractMemberships ContractMembership[]     @relation("ContractMembershipGrantedBy")
+  contractLifecycleEvents    ContractLifecycleEvent[] @relation("ContractLifecycleEventActor")
 
   @@index([email])
   @@index([clerkUserId])
@@ -2111,7 +2111,7 @@ model Contract {
   updatedAt    DateTime      @updatedAt
 
   tenant          Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  createdBy       User?                    @relation("ContractCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy       UserProfile?             @relation("ContractCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   members         ContractMembership[]
   lifecycleEvents ContractLifecycleEvent[]
 
@@ -2122,20 +2122,20 @@ model Contract {
 }
 
 model ContractMembership {
-  id          String                 @id @default(cuid())
-  contractId  String
-  userId      String
-  role        ContractMembershipRole @default(VIEWER)
-  grantedById String?
-  grantedAt   DateTime               @default(now())
+  id            String                 @id @default(cuid())
+  contractId    String
+  userProfileId String
+  role          ContractMembershipRole @default(VIEWER)
+  grantedById   String?
+  grantedAt     DateTime               @default(now())
 
-  contract  Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  user      User     @relation("ContractMembershipUser", fields: [userId], references: [id], onDelete: Cascade)
-  grantedBy User?    @relation("ContractMembershipGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+  contract    Contract     @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  userProfile UserProfile  @relation("ContractMembershipUserProfile", fields: [userProfileId], references: [id], onDelete: Cascade)
+  grantedBy   UserProfile? @relation("ContractMembershipGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
 
-  @@unique([contractId, userId])
+  @@unique([contractId, userProfileId])
   @@index([contractId])
-  @@index([userId])
+  @@index([userProfileId])
   @@index([role])
 }
 
@@ -2153,8 +2153,8 @@ model ContractLifecycleEvent {
   occurredAt   DateTime          @default(now())
   note         String?
 
-  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  actor    User?    @relation("ContractLifecycleEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+  contract Contract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  actor    UserProfile?  @relation("ContractLifecycleEventActor", fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([contractId])
   @@index([contractId, toStage])

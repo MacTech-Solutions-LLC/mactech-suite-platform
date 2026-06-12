@@ -21,7 +21,7 @@ const createContractSchema = z.object({
   initialMembers: z
     .array(
       z.object({
-        userId: z.string().cuid(),
+        userProfileId: z.string().cuid(),
         role: z.nativeEnum(ContractMembershipRole).default('VIEWER'),
       }),
     )
@@ -46,7 +46,7 @@ const lifecycleEventSchema = z.object({
 });
 
 const grantMemberSchema = z.object({
-  userId: z.string().cuid(),
+  userProfileId: z.string().cuid(),
   role: z.nativeEnum(ContractMembershipRole).default('VIEWER'),
   grantedById: z.string().cuid().optional().nullable(),
 });
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
     where: { id: contractId },
     include: {
       members: {
-        select: { id: true, userId: true, role: true, grantedById: true, grantedAt: true },
+        select: { id: true, userProfileId: true, role: true, grantedById: true, grantedAt: true },
       },
     },
   });
@@ -149,12 +149,12 @@ export async function DELETE(request: NextRequest, ctx: RouteContext) {
   }
 
   const existing = await prisma.contractMembership.findUnique({
-    where: { contractId_userId: { contractId, userId } },
+    where: { contractId_userProfileId: { contractId, userProfileId: userId } },
   });
   if (!existing) return NextResponse.json({ error: 'Membership not found' }, { status: 404 });
 
   await prisma.contractMembership.delete({
-    where: { contractId_userId: { contractId, userId } },
+    where: { contractId_userProfileId: { contractId, userProfileId: userId } },
   });
 
   await writeAuditLog({
@@ -163,7 +163,7 @@ export async function DELETE(request: NextRequest, ctx: RouteContext) {
     action: 'CONTRACT_MEMBER_REMOVED',
     resourceType: 'ContractMembership',
     resourceId: `${contractId}:${userId}`,
-    metadata: { contractId, userId, callerApp: callerApp(auth) },
+    metadata: { contractId, userProfileId: userId, callerApp: callerApp(auth) },
     ipAddress: ip(request),
   }).catch(console.error);
 
@@ -216,7 +216,7 @@ async function handleCreate(
       await tx.contractMembership.createMany({
         data: initialMembers.map((m) => ({
           contractId: c.id,
-          userId: m.userId,
+          userProfileId: m.userProfileId,
           role: m.role,
           grantedById: createdById,
         })),
@@ -393,11 +393,11 @@ async function handleGrantMember(
   if (!contract) return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
 
   const membership = await prisma.contractMembership.upsert({
-    where: { contractId_userId: { contractId, userId: parsed.data.userId } },
+    where: { contractId_userProfileId: { contractId, userProfileId: parsed.data.userProfileId } },
     update: { role: parsed.data.role, grantedById: parsed.data.grantedById },
     create: {
       contractId,
-      userId: parsed.data.userId,
+      userProfileId: parsed.data.userProfileId,
       role: parsed.data.role,
       grantedById: parsed.data.grantedById,
     },
@@ -409,7 +409,7 @@ async function handleGrantMember(
     action: 'CONTRACT_MEMBER_GRANTED',
     resourceType: 'ContractMembership',
     resourceId: membership.id,
-    metadata: { contractId, userId: parsed.data.userId, role: parsed.data.role, callerApp: callerApp(auth) },
+    metadata: { contractId, userProfileId: parsed.data.userProfileId, role: parsed.data.role, callerApp: callerApp(auth) },
     ipAddress: ip(request),
   }).catch(console.error);
 
