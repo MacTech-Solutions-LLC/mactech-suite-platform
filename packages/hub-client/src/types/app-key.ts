@@ -5,12 +5,14 @@ export type MacTechAppKey =
   | "qms"
   | "governance"
   | "growth-capture"
-  | "pricing"
+  | "finance"
   | "proposal"
   | "bizops"
   | "contracts-delivery"
   | "client-portal"
-  | "workspace-gateway";
+  | "workspace-gateway"
+  /** @deprecated Use "finance" — legacy alias retained for DB compatibility during migration */
+  | "pricing";
 
 export const MACTECH_APP_KEYS: readonly MacTechAppKey[] = [
   "hub",
@@ -18,12 +20,14 @@ export const MACTECH_APP_KEYS: readonly MacTechAppKey[] = [
   "qms",
   "governance",
   "growth-capture",
-  "pricing",
+  "finance",
   "proposal",
   "bizops",
   "contracts-delivery",
   "client-portal",
   "workspace-gateway",
+  // legacy alias — remove after DB migration retires the pricing row
+  "pricing",
 ] as const;
 
 export function isMacTechAppKey(value: string): value is MacTechAppKey {
