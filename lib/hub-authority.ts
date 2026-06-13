@@ -89,14 +89,26 @@ export async function resolveHubAppAccess(
   const canonicalAppKey = resolveCanonicalAppKey(input.appKey);
   const authorityInput = { ...input, appKey: canonicalAppKey };
 
-  const [app, user, org] = await Promise.all([
-    prisma.appRegistry.findUnique({ where: { appKey: canonicalAppKey } }),
-    prisma.userProfile.findUnique({ where: { clerkUserId: input.clerkUserId } }),
-    orgLookup ? findOrganization(orgLookup) : Promise.resolve(null),
-  ]);
+  const user = await prisma.userProfile.findUnique({ where: { clerkUserId: input.clerkUserId } });
+  const activeOrgCount = user
+    ? await prisma.orgUserAccess.count({
+        where: { userProfileId: user.id, status: "active" },
+      })
+    : 0;
 
-  const [membershipEntitlementPair, contractMemberships] = await Promise.all([
-    app?.requiresOrgContext && user && org
+  let org = orgLookup ? await findOrganization(orgLookup) : null;
+  if (!org && user && !user.isInternalMacTechUser) {
+    org = await resolveSoleTenantOrganization(user.id);
+  }
+
+  const resolvedAuthorityInput: HubAuthorityRequest = {
+    ...authorityInput,
+    tenantOrgId: authorityInput.tenantOrgId ?? authorityInput.requestedOrgId ?? org?.id ?? null,
+  };
+
+  const [app, membershipEntitlementPair, contractMemberships] = await Promise.all([
+    prisma.appRegistry.findUnique({ where: { appKey: canonicalAppKey } }),
+    user && org
       ? Promise.all([
           prisma.orgUserAccess.findUnique({
             where: {
@@ -106,14 +118,20 @@ export async function resolveHubAppAccess(
               },
             },
           }),
-          prisma.productEntitlement.findUnique({
-            where: {
-              customerOrganizationId_appRegistryId: {
-                customerOrganizationId: org.id,
-                appRegistryId: app.id,
-              },
-            },
-          }),
+          prisma.appRegistry
+            .findUnique({ where: { appKey: canonicalAppKey }, select: { id: true } })
+            .then((appRow) =>
+              appRow
+                ? prisma.productEntitlement.findUnique({
+                    where: {
+                      customerOrganizationId_appRegistryId: {
+                        customerOrganizationId: org!.id,
+                        appRegistryId: appRow.id,
+                      },
+                    },
+                  })
+                : null,
+            ),
         ])
       : Promise.resolve([null, null] as [null, null]),
     user
@@ -148,13 +166,31 @@ export async function resolveHubAppAccess(
     contractMemberships: contractMemberships.map((m) => ({ contractId: m.contractId, role: m.role })),
   };
 
-  const snapshot = evaluateHubAuthorityRecords(authorityInput, records, {
+  const snapshot = evaluateHubAuthorityRecords(resolvedAuthorityInput, records, {
     now,
     ttlSeconds: DEFAULT_AUTHORITY_TTL_SECONDS,
   });
 
-  await auditAuthorityResolution(authorityInput, snapshot, service);
-  return snapshot;
+  await auditAuthorityResolution(resolvedAuthorityInput, snapshot, service);
+  return {
+    ...snapshot,
+    sessionContext: {
+      isInternalMacTechUser: user?.isInternalMacTechUser ?? false,
+      boundClerkOrgId: org?.clerkOrgId ?? null,
+      activeOrganizationCount: activeOrgCount,
+    },
+  };
+}
+
+async function resolveSoleTenantOrganization(userProfileId: string) {
+  const memberships = await prisma.orgUserAccess.findMany({
+    where: { userProfileId, status: "active" },
+    include: { customerOrganization: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const active = memberships.filter((m) => m.customerOrganization.status === "active");
+  if (active.length !== 1) return null;
+  return active[0]!.customerOrganization;
 }
 
 async function findOrganization(orgLookup: string) {

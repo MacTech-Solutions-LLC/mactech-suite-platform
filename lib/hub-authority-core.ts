@@ -74,6 +74,11 @@ export interface HubAuthoritySnapshot {
     denyReason: HubAuthorityDenyReason | null;
     requiredRemediation: string | null;
   };
+  sessionContext?: {
+    isInternalMacTechUser: boolean;
+    boundClerkOrgId: string | null;
+    activeOrganizationCount: number;
+  };
 }
 
 export interface AuthorityRecordBase {

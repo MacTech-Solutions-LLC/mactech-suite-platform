@@ -51,6 +51,12 @@ export type HubAuthoritySnapshot = {
     authorityHash: string;
   };
   decision: HubAuthorityDecision;
+  /** Org UX hints for satellites (DR-2026-06-13-01). */
+  sessionContext?: {
+    isInternalMacTechUser: boolean;
+    boundClerkOrgId: string | null;
+    activeOrganizationCount: number;
+  };
 };
 
 export type HubAuditEventInput = {
