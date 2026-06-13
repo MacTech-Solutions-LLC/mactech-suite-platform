@@ -2,6 +2,7 @@ import type { HubAccessSnapshot } from "../types/authority-snapshot";
 import type { HubAppEntitlement } from "../types/entitlement";
 import type { MacTechAppKey } from "../types/app-key";
 import type { HubAuthoritySnapshot, ContractAccessEntry } from "../types";
+import { deriveSuiteOrgContextUx } from "../org-context/ux";
 
 function mapUserStatus(status: string | null): HubAccessSnapshot["user"]["status"] {
   if (status === "inactive") return "inactive";
@@ -51,7 +52,7 @@ export function toHubAccessSnapshot(
     tenant: {
       organizationId,
       subtenantId: options?.subtenantId,
-      clerkOrgId: options?.clerkOrgId,
+      clerkOrgId: options?.clerkOrgId ?? live.sessionContext?.boundClerkOrgId ?? undefined,
     },
     membership: {
       userId,
@@ -65,5 +66,6 @@ export function toHubAccessSnapshot(
       : [],
     resolvedAt: live.cache?.issuedAt ?? new Date().toISOString(),
     reason: live.decision?.denyReason ?? undefined,
+    orgContext: deriveSuiteOrgContextUx(live.sessionContext ?? null),
   };
 }

@@ -55,6 +55,12 @@ export type { HubAppEntitlement } from "./types/entitlement";
 export type { HubAccessSnapshot } from "./types/authority-snapshot";
 export type { ApiError, ApiResponse, ApiSuccess } from "./types/api-envelope";
 export {
+  deriveSuiteOrgContextUx,
+  type HubSessionContext,
+  type SuiteOrgContextMode,
+  type SuiteOrgContextUx,
+} from "./org-context/ux";
+export {
   HUB_AUTH_DENIED,
   HUB_UNAVAILABLE,
   VALIDATION_ERROR,

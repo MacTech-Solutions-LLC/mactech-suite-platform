@@ -1,4 +1,5 @@
 import type { HubAppEntitlement } from "./entitlement";
+import type { SuiteOrgContextUx } from "../org-context/ux";
 import type { HubOrgMembership } from "./access";
 import type { HubTenantContext } from "./tenant-context";
 import type { HubUserProfile } from "./user";
@@ -18,4 +19,6 @@ export interface HubAccessSnapshot {
   contractAccess: ContractAccessEntry[];
   resolvedAt: string;
   reason?: string;
+  /** Derived org UX policy for Clerk/session binding (DR-2026-06-13-01). */
+  orgContext?: SuiteOrgContextUx;
 }
