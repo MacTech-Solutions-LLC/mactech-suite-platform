@@ -243,6 +243,10 @@ async function appendAuditLogUnchecked(input: HubAuditAppendInput) {
       await new Promise((resolve) => setTimeout(resolve, attempt * 25));
     }
   }
+  if (isUniqueSequenceRace(lastError)) {
+    console.error("[hub-audit] sequence race exhausted retries (non-fatal)", lastError);
+    return null!;
+  }
   throw lastError;
 }
 
