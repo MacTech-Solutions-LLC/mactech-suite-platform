@@ -183,6 +183,7 @@ async function appendAuditLogUnchecked(input: HubAuditAppendInput) {
   for (let attempt = 1; attempt <= MAX_APPEND_RETRIES; attempt += 1) {
     try {
       return await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(842013)`;
         const last = await tx.auditLog.findFirst({
           orderBy: { sequenceNumber: "desc" },
           select: { sequenceNumber: true, currentHash: true },

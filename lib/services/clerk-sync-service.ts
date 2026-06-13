@@ -337,11 +337,15 @@ export async function deleteMembershipFromClerk(membership: ClerkMembershipPaylo
 }
 
 export async function logWebhookEvent(eventType: string, ok: boolean, metadata: object) {
-  await writeAuditLog({
-    eventType: `clerk_webhook.${eventType}`,
-    eventCategory: "system",
-    severity: ok ? "info" : "warning",
-    action: `Clerk webhook ${eventType}: ${ok ? "processed" : "rejected"}`,
-    metadata,
-  });
+  try {
+    await writeAuditLog({
+      eventType: `clerk_webhook.${eventType}`,
+      eventCategory: "system",
+      severity: ok ? "info" : "warning",
+      action: `Clerk webhook ${eventType}: ${ok ? "processed" : "rejected"}`,
+      metadata,
+    });
+  } catch (error) {
+    console.error("[clerk-webhook] audit log failed (non-fatal):", error);
+  }
 }
