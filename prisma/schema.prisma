@@ -733,7 +733,7 @@ model OrgUserAccess {
 
 model AuditLog {
   id                     String        @id @default(cuid())
-  sequenceNumber         Int           @unique @default(autoincrement())
+  sequenceNumber         Int           @unique
   previousHash           String
   currentHash            String        @unique
   canonicalPayloadHash   String

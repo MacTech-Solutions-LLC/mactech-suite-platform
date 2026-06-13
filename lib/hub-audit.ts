@@ -17,7 +17,7 @@ import {
   type CanonicalAuditEventInput,
 } from "@/lib/hub-audit-core";
 
-const MAX_APPEND_RETRIES = 3;
+const MAX_APPEND_RETRIES = 12;
 const DEFAULT_SIGNER_IDENTITY = "hub-audit";
 
 export interface VerifiedAuditService {
@@ -239,6 +239,7 @@ async function appendAuditLogUnchecked(input: HubAuditAppendInput) {
     } catch (error) {
       lastError = error;
       if (!isUniqueSequenceRace(error)) break;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 25));
     }
   }
   throw lastError;
