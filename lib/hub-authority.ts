@@ -10,6 +10,7 @@ import {
   DEFAULT_AUTHORITY_TTL_SECONDS,
   evaluateHubAuthorityRecords,
   type AuthorityEvaluationRecords,
+  type ContractAccessEntry,
   type HubAuthorityRequest,
   type HubAuthoritySnapshot,
 } from "@/lib/hub-authority-core";
@@ -163,7 +164,10 @@ export async function resolveHubAppAccess(
     membership,
     entitlement,
     roleTemplatePermissions: parsePermissionArray(resolvedRoleTemplate?.permissionsJson),
-    contractMemberships: contractMemberships.map((m) => ({ contractId: m.contractId, role: m.role })),
+    contractMemberships: contractMemberships.map((m) => ({
+      contractId: m.contractId,
+      role: normalizeContractAccessRole(m.role),
+    })),
   };
 
   const snapshot = evaluateHubAuthorityRecords(resolvedAuthorityInput, records, {
@@ -279,6 +283,14 @@ async function findApiKey(plaintext: string) {
   if (apiKey.expiresAt && apiKey.expiresAt <= new Date()) return null;
   if (!apiKey.scopes.includes("app_authority_resolve")) return null;
   return apiKey;
+}
+
+function normalizeContractAccessRole(
+  role: string,
+): ContractAccessEntry["role"] {
+  if (role === "OWNER" || role === "CONTRIBUTOR" || role === "VIEWER") return role;
+  if (role === "CONTRACT_OWNER") return "OWNER";
+  return "CONTRIBUTOR";
 }
 
 function parsePermissionArray(value: unknown): string[] | null {
