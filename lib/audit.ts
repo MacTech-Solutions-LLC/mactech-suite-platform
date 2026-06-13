@@ -43,25 +43,38 @@ export async function writeAuditLog(input: WriteAuditLogInput) {
       })
     : null;
 
-  return appendInternalHubAuditEvent({
-    sourceAppKey: app?.appKey ?? "hub",
-    eventType: input.eventType,
-    eventCategory: input.eventCategory,
-    severity: input.severity ?? "info",
-    action: input.action,
-    actorHubUserId: input.actorUserProfileId ?? null,
-    actorClerkUserId: input.actorClerkUserId ?? null,
-    actorEmail: input.actorEmail ?? null,
-    organizationId: input.customerOrganizationId ?? null,
-    tenantOrgId: input.customerOrganizationId ?? null,
-    appRegistryId: input.appRegistryId ?? null,
-    objectType: input.resourceType ?? null,
-    objectId: input.resourceId ?? null,
-    ipAddress: input.ipAddress ?? null,
-    userAgent: input.userAgent ?? null,
-    requestId: input.requestId ?? null,
-    metadataJson: input.metadata ?? null,
-  });
+  try {
+    return await appendInternalHubAuditEvent({
+      sourceAppKey: app?.appKey ?? "hub",
+      eventType: input.eventType,
+      eventCategory: input.eventCategory,
+      severity: input.severity ?? "info",
+      action: input.action,
+      actorHubUserId: input.actorUserProfileId ?? null,
+      actorClerkUserId: input.actorClerkUserId ?? null,
+      actorEmail: input.actorEmail ?? null,
+      organizationId: input.customerOrganizationId ?? null,
+      tenantOrgId: input.customerOrganizationId ?? null,
+      appRegistryId: input.appRegistryId ?? null,
+      objectType: input.resourceType ?? null,
+      objectId: input.resourceId ?? null,
+      ipAddress: input.ipAddress ?? null,
+      userAgent: input.userAgent ?? null,
+      requestId: input.requestId ?? null,
+      metadataJson: input.metadata ?? null,
+    });
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as { code?: string }).code === "P2002"
+    ) {
+      console.error("[audit] sequence race swallowed (non-fatal):", input.eventType);
+      return null;
+    }
+    throw error;
+  }
 }
 
 export interface WriteSecurityEventInput {
