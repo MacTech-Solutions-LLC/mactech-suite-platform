@@ -4,12 +4,19 @@ export const BillingCycleEnum = z.enum(["one_time", "monthly", "quarterly", "ann
 export const PackageStatusEnum = z.enum(["draft", "active", "archived"]);
 /** Training courses this package grants. Values mirror the cmmc-training-hub
  *  `CourseType` enum exactly — they're written into the Clerk org publicMetadata
- *  and the hub auto-assigns the matching courses on provisioning. */
+ *  and the hub auto-assigns the matching courses on provisioning.
+ *
+ *  Note: CISSP_PRACTICE_EXAM is a PAID FEATURE with no Course content row in
+ *  the hub. The hub gates the /programs/cissp/practice-exam route on
+ *  Tenant.entitledCourseTypes (populated from public_metadata) directly.
+ *  Free CISSP training (the 19 slices) remains free and is not gated by any
+ *  entitlement; only the practice exam requires this SKU. */
 export const TrainingCourseEnum = z.enum([
   "AT_001_GENERAL",
   "AT_002_ROLE_BASED",
   "AT_INSIDER_THREAT",
   "IR_TABLETOP",
+  "CISSP_PRACTICE_EXAM",
 ]);
 export type TrainingCourse = z.infer<typeof TrainingCourseEnum>;
 export const EntitlementTierEnum = z.enum([

@@ -49,12 +49,18 @@ const STATUSES = [
 
 /** Training courses this package can grant (mirrors the training hub's
  *  CourseType). Selecting any of these unlocks the matching modules + role
- *  in the training hub when the order provisions. */
+ *  in the training hub when the order provisions.
+ *
+ *  CISSP_PRACTICE_EXAM is a paid feature (no Course content) — selecting it
+ *  unlocks the /programs/cissp/practice-exam route in the hub. Standard
+ *  tier is $25/user; DVOSB / SDVOSB tier is $15/user (create separate SKUs
+ *  at the appropriate priceMajor for each). */
 const TRAINING_COURSES = [
   { value: "AT_001_GENERAL", label: "General Awareness (AT-001)" },
   { value: "AT_002_ROLE_BASED", label: "Role-Based (AT-002)" },
   { value: "AT_INSIDER_THREAT", label: "Insider Threat" },
   { value: "IR_TABLETOP", label: "IR Tabletop + AAR" },
+  { value: "CISSP_PRACTICE_EXAM", label: "CISSP Practice Exam (paid)" },
 ] as const;
 
 export type PackageFormInitial = {
