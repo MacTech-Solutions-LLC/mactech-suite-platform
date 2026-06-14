@@ -165,7 +165,13 @@ export function evaluateHubAuthorityRecords(
     return deny(input, records, "internal_app_forbidden", "Internal-only apps require an active MacTech platform user.", now, ttlSeconds);
   }
 
+  const internalUser = isInternalUser(records.user);
+
   if (records.app.requiresOrgContext) {
+    if (internalUser) {
+      return buildSnapshot(input, records, true, null, null, now, ttlSeconds);
+    }
+
     if (!input.requestedOrgId && !input.tenantOrgId) {
       return deny(input, records, "org_context_required", "Pass a canonical Hub org id, Clerk org id, or tenant org id.", now, ttlSeconds);
     }
@@ -191,7 +197,7 @@ export function evaluateHubAuthorityRecords(
           : "entitlement_inactive";
       return deny(input, records, reason, "Enable, unsuspend, or renew the app entitlement.", now, ttlSeconds);
     }
-    if (resolvePermissions(records).length === 0 && !isInternalUser(records.user)) {
+    if (resolvePermissions(records).length === 0) {
       return deny(input, records, "role_resolution_failed", "Attach permissionsJson or a matching Hub RoleTemplate.", now, ttlSeconds);
     }
   }

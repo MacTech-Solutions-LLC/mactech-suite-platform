@@ -72,6 +72,26 @@ test("allows an active user, org, membership, app, and entitlement", () => {
   assert.equal(snapshot.cache.authorityHash, hashAuthoritySnapshot(snapshot));
 });
 
+test("allows internal MacTech operators without per-org product entitlements", () => {
+  const snapshot = evaluateHubAuthorityRecords(
+    request,
+    {
+      ...baseRecords,
+      user: {
+        ...baseRecords.user!,
+        isInternalMacTechUser: true,
+        platformRole: "mactech_super_admin",
+      },
+      entitlement: null,
+    },
+    { now },
+  );
+
+  assert.equal(snapshot.decision.allow, true);
+  assert.equal(snapshot.decision.denyReason, null);
+  assert.equal(snapshot.canonicalOrganizationId, "org_123");
+});
+
 test("revoked user denied", () => {
   const snapshot = evaluateHubAuthorityRecords(
     request,
