@@ -48,20 +48,61 @@ const STATUSES = [
 ] as const;
 
 /** Training courses this package can grant (mirrors the training hub's
- *  CourseType). Selecting any of these unlocks the matching modules + role
- *  in the training hub when the order provisions.
+ *  CourseType). Two kinds:
  *
- *  CISSP_PRACTICE_EXAM is a paid feature (no Course content) — selecting it
- *  unlocks the /programs/cissp/practice-exam route in the hub. Standard
- *  tier is $25/user; DVOSB / SDVOSB tier is $15/user (create separate SKUs
- *  at the appropriate priceMajor for each). */
-const TRAINING_COURSES = [
-  { value: "AT_001_GENERAL", label: "General Awareness (AT-001)" },
-  { value: "AT_002_ROLE_BASED", label: "Role-Based (AT-002)" },
-  { value: "AT_INSIDER_THREAT", label: "Insider Threat" },
-  { value: "IR_TABLETOP", label: "IR Tabletop + AAR" },
-  { value: "CISSP_PRACTICE_EXAM", label: "CISSP Practice Exam (paid)" },
-] as const;
+ *  - "training-content" — actual Course rows in the training hub with
+ *    learner-facing content. Selecting these creates Assignment rows for
+ *    every member of the buying org on provisioning.
+ *
+ *  - "paid-feature" — entitlement markers for hub routes that gate on
+ *    Tenant.entitledCourseTypes (no Course content). Currently just
+ *    CISSP_PRACTICE_EXAM (which unlocks /programs/cissp/practice-exam in
+ *    the hub). The 19 CISSP training slices remain free regardless.
+ *
+ *  Rendered as two grouped sections so admins can't accidentally treat a
+ *  paid-feature SKU as "more awareness training." */
+type TrainingCourseDef = {
+  value: string;
+  label: string;
+  kind: "training-content" | "paid-feature";
+  /** Inline helper shown under the label — only used for paid features. */
+  helper?: string;
+  /** Pricing hint shown as a chip — only used for paid features. */
+  pricingHint?: string;
+};
+
+const TRAINING_COURSES: ReadonlyArray<TrainingCourseDef> = [
+  // ── Awareness training (actual Course content in the hub) ──
+  {
+    value: "AT_001_GENERAL",
+    label: "General Awareness (AT-001)",
+    kind: "training-content",
+  },
+  {
+    value: "AT_002_ROLE_BASED",
+    label: "Role-Based (AT-002)",
+    kind: "training-content",
+  },
+  {
+    value: "AT_INSIDER_THREAT",
+    label: "Insider Threat",
+    kind: "training-content",
+  },
+  {
+    value: "IR_TABLETOP",
+    label: "IR Tabletop + AAR",
+    kind: "training-content",
+  },
+  // ── Paid features (no Course content; gates a hub route) ──
+  {
+    value: "CISSP_PRACTICE_EXAM",
+    label: "CISSP Practice Exam",
+    kind: "paid-feature",
+    pricingHint: "$25 standard · $15 DVOSB",
+    helper:
+      "Unlocks /programs/cissp/practice-exam in the training hub. The 19 CISSP training slices stay free regardless. Create separate SKUs for the two pricing tiers (priceMajor 25 and 15).",
+  },
+];
 
 export type PackageFormInitial = {
   id: string;
@@ -310,29 +351,97 @@ export function PackageForm({
               Buyers of this package get these training modules + role in the training
               hub on provisioning. Leave empty for non-training packages.
             </p>
-            <div className="grid gap-1.5 rounded-md border border-border p-3 sm:grid-cols-2">
-              {TRAINING_COURSES.map((course) => {
-                const checked = selectedTrainingCourses.includes(course.value);
-                const id = `course-${course.value}`;
-                return (
-                  <label key={course.value} htmlFor={id} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      id={id}
-                      checked={checked}
-                      onCheckedChange={(c) =>
-                        setSelectedTrainingCourses((prev) =>
-                          c
-                            ? prev.includes(course.value)
-                              ? prev
-                              : [...prev, course.value]
-                            : prev.filter((v) => v !== course.value),
-                        )
-                      }
-                    />
-                    <span className="font-medium">{course.label}</span>
-                  </label>
-                );
-              })}
+
+            {/* Awareness training — actual Course content */}
+            <div className="mt-2">
+              <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Awareness training
+              </p>
+              <div className="grid gap-1.5 rounded-md border border-border p-3 sm:grid-cols-2">
+                {TRAINING_COURSES.filter((c) => c.kind === "training-content").map(
+                  (course) => {
+                    const checked = selectedTrainingCourses.includes(course.value);
+                    const id = `course-${course.value}`;
+                    return (
+                      <label
+                        key={course.value}
+                        htmlFor={id}
+                        className="flex items-center gap-2 text-sm"
+                      >
+                        <Checkbox
+                          id={id}
+                          checked={checked}
+                          onCheckedChange={(c) =>
+                            setSelectedTrainingCourses((prev) =>
+                              c
+                                ? prev.includes(course.value)
+                                  ? prev
+                                  : [...prev, course.value]
+                                : prev.filter((v) => v !== course.value),
+                            )
+                          }
+                        />
+                        <span className="font-medium">{course.label}</span>
+                      </label>
+                    );
+                  },
+                )}
+              </div>
+            </div>
+
+            {/* Paid features — gate a hub route, no Course content */}
+            <div className="mt-3">
+              <p className="mb-1.5 flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-wider text-amber-500/90">
+                Paid features
+                <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px] font-medium normal-case tracking-normal text-amber-400">
+                  separate SKU per pricing tier
+                </span>
+              </p>
+              <div className="grid gap-2.5 rounded-md border border-amber-500/30 bg-amber-500/[0.04] p-3">
+                {TRAINING_COURSES.filter((c) => c.kind === "paid-feature").map(
+                  (course) => {
+                    const checked = selectedTrainingCourses.includes(course.value);
+                    const id = `course-${course.value}`;
+                    return (
+                      <label
+                        key={course.value}
+                        htmlFor={id}
+                        className="flex items-start gap-2.5 text-sm cursor-pointer"
+                      >
+                        <Checkbox
+                          id={id}
+                          checked={checked}
+                          onCheckedChange={(c) =>
+                            setSelectedTrainingCourses((prev) =>
+                              c
+                                ? prev.includes(course.value)
+                                  ? prev
+                                  : [...prev, course.value]
+                                : prev.filter((v) => v !== course.value),
+                            )
+                          }
+                          className="mt-0.5"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-baseline gap-2">
+                            <span className="font-medium">{course.label}</span>
+                            {course.pricingHint ? (
+                              <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-mono text-amber-400">
+                                {course.pricingHint}
+                              </span>
+                            ) : null}
+                          </div>
+                          {course.helper ? (
+                            <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                              {course.helper}
+                            </p>
+                          ) : null}
+                        </div>
+                      </label>
+                    );
+                  },
+                )}
+              </div>
             </div>
           </div>
 
