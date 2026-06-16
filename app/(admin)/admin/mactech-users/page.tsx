@@ -13,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PlatformUserActions } from "@/components/forms/platform-user-actions";
+import { InviteMacTechAdminButton } from "@/components/forms/invite-mactech-admin-button";
 import { initialsFor, relativeTime } from "@/lib/utils";
 import { prisma } from "@/lib/db/prisma";
 import {
@@ -20,12 +21,7 @@ import {
   getCurrentAuthContext,
 } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS, platformRoleLabel } from "@/lib/permissions";
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, AlertTriangle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +30,7 @@ export default async function MacTechUsersPage() {
   const ctx = await getCurrentAuthContext();
   const selfId = ctx?.userProfile.id;
 
-  const [profiles, allOrgs] = await Promise.all([
+  const [profiles, allOrgs, internalOrg] = await Promise.all([
     prisma.userProfile.findMany({
       where: { isInternalMacTechUser: true },
       orderBy: [{ status: "asc" }, { lastSeenAt: "desc" }],
@@ -45,26 +41,89 @@ export default async function MacTechUsersPage() {
       select: { id: true, name: true, slug: true },
       orderBy: { name: "asc" },
     }),
+    prisma.customerOrganization.findFirst({
+      where: { isInternalMacTech: true },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        clerkOrgId: true,
+        status: true,
+        domain: true,
+        _count: { select: { orgUserAccess: true } },
+      },
+    }),
   ]);
+
+  const canInvite = Boolean(internalOrg?.clerkOrgId);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="MacTech Admins"
         description="Internal MacTech employees with platform-level authority across the suite."
+        actions={canInvite ? <InviteMacTechAdminButton /> : null}
       />
 
-      <Alert variant="info">
-        <ShieldCheck className="h-4 w-4" />
-        <AlertTitle>Promotions are audited</AlertTitle>
-        <AlertDescription>
-          Use the row menu to change a user&apos;s platform role or suspend
-          access. Every change is recorded in the central audit log. To grant
-          platform access to a user who is not yet internal, find them under{" "}
-          <span className="font-mono">/admin/users</span> and use the row menu
-          there.
-        </AlertDescription>
-      </Alert>
+      {/* Internal-org identity card — visually distinct from customer orgs.
+          Cyan ring + shield mark establish "this is us, not a customer." */}
+      {internalOrg ? (
+        <Card className="border-primary/40 ring-1 ring-primary/20">
+          <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold">{internalOrg.name}</span>
+                  <Badge variant="default" className="text-[10px]">
+                    Internal · MacTech
+                  </Badge>
+                  <StatusBadge status={internalOrg.status} />
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground font-mono">
+                  <span>/{internalOrg.slug}</span>
+                  {internalOrg.clerkOrgId ? (
+                    <span title="Clerk organization ID">
+                      clerk:{internalOrg.clerkOrgId.slice(0, 18)}…
+                    </span>
+                  ) : (
+                    <span className="text-warning">no Clerk org linked</span>
+                  )}
+                  {internalOrg.domain ? <span>@{internalOrg.domain}</span> : null}
+                  <span>
+                    {internalOrg._count.orgUserAccess} member
+                    {internalOrg._count.orgUserAccess === 1 ? "" : "s"}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="text-xs text-muted-foreground sm:text-right">
+              The single source of truth for the MacTech operator plane.
+              <br />
+              Every other org is a customer.
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border-destructive/40 ring-1 ring-destructive/20">
+          <CardContent className="flex items-start gap-3 p-4">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-destructive" />
+            <div className="space-y-1 text-sm">
+              <div className="font-semibold text-destructive">
+                No internal MacTech organization configured
+              </div>
+              <p className="text-muted-foreground">
+                Mark one CustomerOrganization row with{" "}
+                <span className="font-mono">isInternalMacTech=true</span> so the
+                operator plane has a home org. Until then, invites here will
+                fail.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="p-0">

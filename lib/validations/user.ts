@@ -65,6 +65,26 @@ export type ResendCustomerInvitationInput = z.infer<
   typeof resendCustomerInvitationSchema
 >;
 
+/** PlatformRoleEnum minus "none" — "none" is the revocation sentinel,
+ *  not a role you can invite a new admin into. */
+export const MacTechPlatformRoleEnum = z.enum([
+  "mactech_super_admin",
+  "mactech_admin",
+  "mactech_support",
+  "mactech_auditor",
+  "mactech_read_only",
+  "cui_auditor",
+]);
+
+export const inviteMacTechAdminSchema = z.object({
+  email: z.string().email(),
+  firstName: z.string().max(100).optional().or(z.literal("")),
+  lastName: z.string().max(100).optional().or(z.literal("")),
+  platformRole: MacTechPlatformRoleEnum,
+});
+
+export type InviteMacTechAdminInput = z.infer<typeof inviteMacTechAdminSchema>;
+
 export const addUserToOrgSchema = z.object({
   userProfileId: z.string().min(1),
   customerOrganizationId: z.string().min(1),

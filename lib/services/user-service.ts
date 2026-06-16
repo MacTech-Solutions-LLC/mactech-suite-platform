@@ -3,12 +3,14 @@
 import { prisma } from "@/lib/db/prisma";
 import {
   inviteCustomerUserSchema,
+  inviteMacTechAdminSchema,
   updateOrgUserAccessSchema,
   updatePlatformUserSchema,
   removeOrgUserAccessSchema,
   addUserToOrgSchema,
   resendCustomerInvitationSchema,
   type InviteCustomerUserInput,
+  type InviteMacTechAdminInput,
   type UpdateOrgUserAccessInput,
   type UpdatePlatformUserInput,
   type RemoveOrgUserAccessInput,
@@ -762,4 +764,131 @@ export async function updatePlatformUser(rawInput: UpdatePlatformUserInput) {
   }
 
   return after;
+}
+
+/**
+ * Invite a new MacTech admin: bind them to the internal MacTech
+ * Solutions org (CustomerOrganization where isInternalMacTech=true),
+ * send a Clerk org invitation so they can set a password, then flip
+ * the UserProfile to internal+platform-role in one step. This is the
+ * only entry point for adding someone to the operator plane — every
+ * change is audit-logged with eventCategory='user'.
+ */
+export async function inviteMacTechAdmin(rawInput: InviteMacTechAdminInput) {
+  const ctx = await requirePlatformPermission(
+    PLATFORM_PERMISSIONS.MACTECH_USERS_MANAGE,
+  );
+  const input = inviteMacTechAdminSchema.parse(rawInput);
+
+  const internalOrg = await prisma.customerOrganization.findFirst({
+    where: { isInternalMacTech: true },
+  });
+  if (!internalOrg) {
+    throw new Error(
+      "No internal MacTech organization is configured. Mark a CustomerOrganization row with isInternalMacTech=true and try again.",
+    );
+  }
+  if (!internalOrg.clerkOrgId) {
+    throw new Error(
+      `Internal org '${internalOrg.name}' is not linked to Clerk yet. Provision its Clerk organization first.`,
+    );
+  }
+  if (!clerkConfigured()) {
+    throw new Error(
+      "Clerk is not configured on this environment — cannot send an invitation email.",
+    );
+  }
+
+  const profile = await ensureUserProfileByEmail({
+    email: input.email,
+    firstName: input.firstName || undefined,
+    lastName: input.lastName || undefined,
+  });
+
+  // customer_owner maps to Clerk org "admin" — the right starting
+  // posture for a MacTech employee who manages their own home org.
+  const ownerRole = CUSTOMER_ROLE_DEFINITIONS.find(
+    (r) => r.key === "customer_owner",
+  );
+  if (!ownerRole) {
+    throw new Error("customer_owner role definition missing from permissions matrix.");
+  }
+
+  const invitation = await tryClerk("createOrganizationInvitation", () =>
+    createClerkInvitation({
+      clerkOrgId: internalOrg.clerkOrgId!,
+      emailAddress: input.email,
+      inviterUserId: ctx.clerkUserId,
+      role: localRoleToClerkRole(ownerRole.key),
+      redirectUrl: `${env.NEXT_PUBLIC_APP_URL}/sign-up`,
+    }),
+  );
+  if (!invitation.ok) {
+    throw new Error(`Failed to send Clerk invitation: ${invitation.error}`);
+  }
+
+  const access = await prisma.orgUserAccess.upsert({
+    where: {
+      customerOrganizationId_userProfileId: {
+        customerOrganizationId: internalOrg.id,
+        userProfileId: profile.id,
+      },
+    },
+    update: {
+      role: ownerRole.key,
+      permissionsJson: ownerRole.permissions as unknown as object,
+      status: "invited",
+    },
+    create: {
+      customerOrganizationId: internalOrg.id,
+      userProfileId: profile.id,
+      role: ownerRole.key,
+      permissionsJson: ownerRole.permissions as unknown as object,
+      status: "invited",
+    },
+  });
+
+  const promoted = await prisma.userProfile.update({
+    where: { id: profile.id },
+    data: {
+      isInternalMacTechUser: true,
+      platformRole: input.platformRole,
+    },
+  });
+
+  const auditEntry = await writeAuditLog({
+    eventType: "platform_user.invited",
+    eventCategory: "user",
+    severity: "info",
+    action: `Invited ${input.email} as MacTech ${input.platformRole}`,
+    actorClerkUserId: ctx.clerkUserId,
+    actorEmail: ctx.userProfile.email,
+    actorUserProfileId: ctx.userProfile.id,
+    customerOrganizationId: internalOrg.id,
+    resourceType: "UserProfile",
+    resourceId: promoted.id,
+    metadata: {
+      invitedEmail: input.email,
+      platformRole: input.platformRole,
+      clerkInvitationId: invitation.value.id,
+      clerkOrgId: internalOrg.clerkOrgId,
+    },
+  });
+
+  if (auditEntry) {
+    void dispatchWebhookEvent({
+      eventType: "platform_user.invited",
+      eventId: auditEntry.id,
+      customerOrganizationId: internalOrg.id,
+      payload: {
+        orgId: internalOrg.id,
+        clerkOrgId: internalOrg.clerkOrgId,
+        email: input.email,
+        platformRole: input.platformRole,
+        clerkInvitationId: invitation.value.id,
+      },
+    });
+  }
+
+  return { profile: promoted, access, clerkInvitationId: invitation.value.id };
 }
