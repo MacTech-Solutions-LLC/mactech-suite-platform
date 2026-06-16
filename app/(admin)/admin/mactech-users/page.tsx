@@ -14,6 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PlatformUserActions } from "@/components/forms/platform-user-actions";
 import { InviteMacTechAdminButton } from "@/components/forms/invite-mactech-admin-button";
+import { ReconcileClerkButton } from "@/components/forms/reconcile-clerk-button";
+import { CustomerOrgActions } from "@/components/forms/customer-org-actions";
 import { initialsFor, relativeTime } from "@/lib/utils";
 import { prisma } from "@/lib/db/prisma";
 import {
@@ -21,7 +23,7 @@ import {
   getCurrentAuthContext,
 } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS, platformRoleLabel } from "@/lib/permissions";
-import { ShieldCheck, AlertTriangle } from "lucide-react";
+import { ShieldCheck, AlertTriangle, ScrollText, Settings2 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -43,17 +45,14 @@ export default async function MacTechUsersPage() {
     }),
     prisma.customerOrganization.findFirst({
       where: { isInternalMacTech: true },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        clerkOrgId: true,
-        status: true,
-        domain: true,
-        _count: { select: { orgUserAccess: true } },
-      },
     }),
   ]);
+
+  const internalOrgMemberCount = internalOrg
+    ? await prisma.orgUserAccess.count({
+        where: { customerOrganizationId: internalOrg.id },
+      })
+    : 0;
 
   const canInvite = Boolean(internalOrg?.clerkOrgId);
 
@@ -66,43 +65,72 @@ export default async function MacTechUsersPage() {
       />
 
       {/* Internal-org identity card — visually distinct from customer orgs.
-          Cyan ring + shield mark establish "this is us, not a customer." */}
+          Cyan ring + shield mark establish "this is us, not a customer."
+          Exposes the same actions (edit, audit, sync) the customer-org
+          detail page would, so operators don't need to leave this page. */}
       {internalOrg ? (
         <Card className="border-primary/40 ring-1 ring-primary/20">
-          <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
-                <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-              </div>
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-semibold">{internalOrg.name}</span>
-                  <Badge variant="default" className="text-[10px]">
-                    Internal · MacTech
-                  </Badge>
-                  <StatusBadge status={internalOrg.status} />
+          <CardContent className="space-y-4 p-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <ShieldCheck className="h-5 w-5" aria-hidden="true" />
                 </div>
-                <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground font-mono">
-                  <span>/{internalOrg.slug}</span>
-                  {internalOrg.clerkOrgId ? (
-                    <span title="Clerk organization ID">
-                      clerk:{internalOrg.clerkOrgId.slice(0, 18)}…
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold">
+                      {internalOrg.name}
                     </span>
-                  ) : (
-                    <span className="text-warning">no Clerk org linked</span>
-                  )}
-                  {internalOrg.domain ? <span>@{internalOrg.domain}</span> : null}
-                  <span>
-                    {internalOrg._count.orgUserAccess} member
-                    {internalOrg._count.orgUserAccess === 1 ? "" : "s"}
-                  </span>
+                    <Badge variant="default" className="text-[10px]">
+                      Internal · MacTech
+                    </Badge>
+                    <StatusBadge status={internalOrg.status} />
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground font-mono">
+                    <span>/{internalOrg.slug}</span>
+                    {internalOrg.clerkOrgId ? (
+                      <span title="Clerk organization ID">
+                        clerk:{internalOrg.clerkOrgId.slice(0, 18)}…
+                      </span>
+                    ) : (
+                      <span className="text-warning">no Clerk org linked</span>
+                    )}
+                    {internalOrg.domain ? <span>@{internalOrg.domain}</span> : null}
+                    <span>
+                      {internalOrgMemberCount} member
+                      {internalOrgMemberCount === 1 ? "" : "s"}
+                    </span>
+                  </div>
                 </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
+                {internalOrg.clerkOrgId ? (
+                  <ReconcileClerkButton
+                    customerOrganizationId={internalOrg.id}
+                    variant="outline"
+                    size="sm"
+                  />
+                ) : null}
+                <CustomerOrgActions org={internalOrg} />
               </div>
             </div>
-            <div className="text-xs text-muted-foreground sm:text-right">
-              The single source of truth for the MacTech operator plane.
-              <br />
-              Every other org is a customer.
+            <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3 text-xs">
+              <Link
+                href={`/admin/audit-logs?orgId=${internalOrg.id}`}
+                className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
+              >
+                <ScrollText className="h-3.5 w-3.5" /> Audit trail
+              </Link>
+              <Link
+                href={`/admin/customer-orgs/${internalOrg.id}/entitlements`}
+                className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
+                title="Entitlements are informational for the internal org — operators inherit access via isInternalMacTechUser"
+              >
+                <Settings2 className="h-3.5 w-3.5" /> Entitlements
+              </Link>
+              <span className="ml-auto text-muted-foreground">
+                The single source of truth for the MacTech operator plane.
+              </span>
             </div>
           </CardContent>
         </Card>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/lib/db/prisma";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { CustomerOrgTabs } from "./tabs";
 import { CustomerOrgActions } from "@/components/forms/customer-org-actions";
 import { ClerkLinkageCard } from "@/components/cards/clerk-linkage-card";
+import { ReconcileClerkButton } from "@/components/forms/reconcile-clerk-button";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,13 @@ export default async function CustomerOrgDetailLayout({
     where: { id: params.orgId },
   });
   if (!org) notFound();
+
+  // The internal MacTech org has its own dedicated surface at
+  // /admin/mactech-users. Sending operators there avoids two divergent
+  // edit paths and keeps "this is us, not a customer" unambiguous.
+  if (org.isInternalMacTech) {
+    redirect("/admin/mactech-users");
+  }
 
   return (
     <div className="space-y-6">
@@ -49,7 +57,16 @@ export default async function CustomerOrgDetailLayout({
             {org.clerkOrgId && ` · Clerk ${org.clerkOrgId.slice(0, 14)}…`}
           </p>
         </div>
-        <CustomerOrgActions org={org} />
+        <div className="flex flex-wrap items-center gap-2">
+          {org.clerkOrgId ? (
+            <ReconcileClerkButton
+              customerOrganizationId={org.id}
+              variant="outline"
+              size="sm"
+            />
+          ) : null}
+          <CustomerOrgActions org={org} />
+        </div>
       </div>
 
       <ClerkLinkageCard

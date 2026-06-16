@@ -341,6 +341,62 @@ export async function deleteClerkMembership(input: {
   }
 }
 
+export interface ListClerkOrgMembersInput {
+  clerkOrgId: string;
+}
+
+export interface ClerkOrgMember {
+  clerkMembershipId: string;
+  clerkUserId: string;
+  role: string;
+  emailAddress: string | null;
+}
+
+/**
+ * Snapshot of every member currently in a Clerk organization. Used by
+ * the reconcile flow to detect drift between Clerk and our local
+ * OrgUserAccess rows. Paginates through all results so callers don't
+ * have to (Clerk's default page size is 100; org sizes here are well
+ * under that, but we paginate defensively anyway).
+ */
+export async function listClerkOrgMembers(
+  input: ListClerkOrgMembersInput,
+): Promise<ClerkOrgMember[]> {
+  const client = await clerk();
+  const collected: ClerkOrgMember[] = [];
+  let offset = 0;
+  const limit = 100;
+  try {
+    while (true) {
+      const res = await client.organizations.getOrganizationMembershipList({
+        organizationId: input.clerkOrgId,
+        limit,
+        offset,
+      });
+      const data = res?.data ?? [];
+      for (const m of data) {
+        const pub = m.publicUserData as
+          | { userId?: string; identifier?: string | null }
+          | undefined;
+        collected.push({
+          clerkMembershipId: m.id,
+          clerkUserId: pub?.userId ?? "",
+          role: m.role,
+          emailAddress: pub?.identifier ?? null,
+        });
+      }
+      if (data.length < limit) break;
+      offset += limit;
+    }
+  } catch (err) {
+    throw new ClerkSyncError(
+      `Clerk getOrganizationMembershipList failed: ${explain(err)}`,
+      err,
+    );
+  }
+  return collected;
+}
+
 export interface UpdateClerkLogoInput {
   clerkOrgId: string;
   uploaderUserId: string;

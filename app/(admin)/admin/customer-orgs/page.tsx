@@ -37,7 +37,12 @@ export default async function CustomerOrgsPage({
   const level = readParam(searchParams, "level");
   const type = readParam(searchParams, "type");
 
-  const where: Prisma.CustomerOrganizationWhereInput = {};
+  // Internal MacTech org lives at /admin/mactech-users with its own
+  // dedicated identity card + invite flow. It must not appear in the
+  // customer list — operators would mistake it for a tenant.
+  const where: Prisma.CustomerOrganizationWhereInput = {
+    isInternalMacTech: false,
+  };
   if (q) {
     where.OR = [
       { name: { contains: q, mode: "insensitive" } },

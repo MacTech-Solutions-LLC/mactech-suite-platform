@@ -21,12 +21,13 @@ import { writeAuditLog } from "@/lib/audit";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS, CUSTOMER_ROLE_DEFINITIONS } from "@/lib/permissions";
 import { clerkConfigured, env } from "@/lib/env";
-import { localRoleToClerkRole } from "@/lib/clerk-role-map";
+import { clerkRoleToDefaultLocalRole, localRoleToClerkRole } from "@/lib/clerk-role-map";
 import {
   createClerkInvitation,
   createClerkMembership,
   createClerkSignInToken,
   deleteClerkMembership,
+  listClerkOrgMembers,
   listPendingOrgInvitations,
   revokeOrgInvitation,
   tryClerk,
@@ -764,6 +765,248 @@ export async function updatePlatformUser(rawInput: UpdatePlatformUserInput) {
   }
 
   return after;
+}
+
+/**
+ * Reconcile a CustomerOrganization's member list against the truth
+ * in Clerk. Three drift cases:
+ *
+ *   - in DB, not in Clerk  → remove the local OrgUserAccess row.
+ *       Common after someone is removed via the Clerk dashboard
+ *       directly, or after a Clerk org is deleted (we keep the local
+ *       rows from going stale).
+ *   - in Clerk, not in DB  → ensure UserProfile by clerkUserId / email
+ *       and create OrgUserAccess with a default role
+ *       (customer_admin if Clerk role is org:admin, else
+ *       read_only_user). Operator can promote afterwards.
+ *   - in both             → no-op. Role drift is NOT auto-fixed here
+ *       because the local role is the source of truth for fine-grained
+ *       permissions, and Clerk only knows admin/member.
+ *
+ * Idempotent: re-running with a clean state is a zero-effect read.
+ * Audit-logs every change so the trail tells the truth about why a
+ * row appeared or disappeared.
+ *
+ * Gating: caller must hold either MACTECH_USERS_MANAGE (for the
+ * internal org) or CUSTOMER_USERS_INVITE (for a customer org).
+ */
+export async function reconcileOrgMembersWithClerk(
+  customerOrganizationId: string,
+): Promise<{
+  removed: number;
+  added: number;
+  unchanged: number;
+  warnings: string[];
+}> {
+  if (!customerOrganizationId) {
+    throw new Error("customerOrganizationId is required.");
+  }
+
+  const org = await prisma.customerOrganization.findUnique({
+    where: { id: customerOrganizationId },
+  });
+  if (!org) throw new Error("Customer organization not found.");
+
+  // Permission gate scales with whose org this is. Internal MacTech
+  // org → MACTECH_USERS_MANAGE; any customer org → CUSTOMER_USERS_INVITE
+  // (the permission held by anyone who can change membership).
+  const ctx = await requirePlatformPermission(
+    org.isInternalMacTech
+      ? PLATFORM_PERMISSIONS.MACTECH_USERS_MANAGE
+      : PLATFORM_PERMISSIONS.CUSTOMER_USERS_INVITE,
+  );
+
+  if (!clerkConfigured()) {
+    throw new Error("Clerk is not configured on this environment.");
+  }
+  if (!org.clerkOrgId) {
+    throw new Error(
+      `'${org.name}' is not linked to Clerk — nothing to reconcile against.`,
+    );
+  }
+
+  const [clerkMembers, dbRows] = await Promise.all([
+    listClerkOrgMembers({ clerkOrgId: org.clerkOrgId }),
+    prisma.orgUserAccess.findMany({
+      where: { customerOrganizationId: org.id },
+      include: { userProfile: true },
+    }),
+  ]);
+
+  const clerkByUserId = new Map(clerkMembers.map((m) => [m.clerkUserId, m]));
+  const dbByClerkUserId = new Map(
+    dbRows
+      .filter(
+        (r) =>
+          r.userProfile.clerkUserId &&
+          !r.userProfile.clerkUserId.startsWith("pending_"),
+      )
+      .map((r) => [r.userProfile.clerkUserId, r]),
+  );
+
+  const warnings: string[] = [];
+  let removed = 0;
+  let added = 0;
+  let unchanged = 0;
+
+  // In DB, not in Clerk → drop the OrgUserAccess row.
+  for (const row of dbRows) {
+    const realClerkId =
+      row.userProfile.clerkUserId &&
+      !row.userProfile.clerkUserId.startsWith("pending_")
+        ? row.userProfile.clerkUserId
+        : null;
+
+    // "pending_" placeholders are users we've invited but who haven't
+    // accepted yet — they won't appear in Clerk's member list. Leave
+    // those rows alone unless the local status has gone stale (we
+    // don't probe Clerk invitations here; that's a separate sync).
+    if (!realClerkId) {
+      unchanged += 1;
+      continue;
+    }
+
+    if (clerkByUserId.has(realClerkId)) {
+      unchanged += 1;
+      continue;
+    }
+
+    await prisma.orgUserAccess.delete({ where: { id: row.id } });
+    removed += 1;
+    const auditEntry = await writeAuditLog({
+      eventType: "customer_user.reconciled_removed",
+      eventCategory: "user",
+      severity: "warning",
+      action: `Reconcile: removed ${row.userProfile.email} from ${org.name} (no Clerk membership found)`,
+      actorClerkUserId: ctx.clerkUserId,
+      actorEmail: ctx.userProfile.email,
+      actorUserProfileId: ctx.userProfile.id,
+      customerOrganizationId: org.id,
+      resourceType: "OrgUserAccess",
+      resourceId: row.id,
+      metadata: {
+        clerkOrgId: org.clerkOrgId,
+        removedEmail: row.userProfile.email,
+        previousRole: row.role,
+        previousStatus: row.status,
+      },
+    });
+    if (auditEntry) {
+      void dispatchWebhookEvent({
+        eventType: "customer_user.reconciled_removed",
+        eventId: auditEntry.id,
+        customerOrganizationId: org.id,
+        payload: {
+          orgId: org.id,
+          clerkOrgId: org.clerkOrgId,
+          email: row.userProfile.email,
+          previousRole: row.role,
+        },
+      });
+    }
+  }
+
+  // In Clerk, not in DB → upsert UserProfile + create OrgUserAccess.
+  for (const m of clerkMembers) {
+    if (!m.clerkUserId) {
+      warnings.push(
+        `Skipped a Clerk membership with no public userId (likely revoked) — emailAddress=${m.emailAddress ?? "?"}`,
+      );
+      continue;
+    }
+    if (dbByClerkUserId.has(m.clerkUserId)) continue;
+
+    if (!m.emailAddress) {
+      warnings.push(
+        `Skipped Clerk membership ${m.clerkUserId} — Clerk did not expose an email address.`,
+      );
+      continue;
+    }
+
+    const profile = await prisma.userProfile.upsert({
+      where: { email: m.emailAddress },
+      update: { clerkUserId: m.clerkUserId },
+      create: {
+        email: m.emailAddress,
+        clerkUserId: m.clerkUserId,
+        isInternalMacTechUser: org.isInternalMacTech,
+        platformRole: "none",
+        status: "active",
+      },
+    });
+
+    const localRole = clerkRoleToDefaultLocalRole(m.role);
+    const roleDef = CUSTOMER_ROLE_DEFINITIONS.find((r) => r.key === localRole);
+
+    const access = await prisma.orgUserAccess.upsert({
+      where: {
+        customerOrganizationId_userProfileId: {
+          customerOrganizationId: org.id,
+          userProfileId: profile.id,
+        },
+      },
+      update: {
+        clerkMembershipId: m.clerkMembershipId,
+        status: "active",
+      },
+      create: {
+        customerOrganizationId: org.id,
+        userProfileId: profile.id,
+        role: localRole,
+        permissionsJson: (roleDef?.permissions ?? []) as unknown as object,
+        status: "active",
+        clerkMembershipId: m.clerkMembershipId,
+      },
+    });
+    added += 1;
+
+    // Internal org membership implies operator status. We leave the
+    // platformRole at "none" by default — the operator can promote
+    // via the platform-role dialog. But the isInternalMacTechUser
+    // flag must be true so the user appears on /admin/mactech-users.
+    if (org.isInternalMacTech && !profile.isInternalMacTechUser) {
+      await prisma.userProfile.update({
+        where: { id: profile.id },
+        data: { isInternalMacTechUser: true },
+      });
+    }
+
+    const auditEntry = await writeAuditLog({
+      eventType: "customer_user.reconciled_added",
+      eventCategory: "user",
+      severity: "info",
+      action: `Reconcile: added ${m.emailAddress} to ${org.name} (existed in Clerk as ${m.role})`,
+      actorClerkUserId: ctx.clerkUserId,
+      actorEmail: ctx.userProfile.email,
+      actorUserProfileId: ctx.userProfile.id,
+      customerOrganizationId: org.id,
+      resourceType: "OrgUserAccess",
+      resourceId: access.id,
+      metadata: {
+        clerkOrgId: org.clerkOrgId,
+        addedEmail: m.emailAddress,
+        clerkRole: m.role,
+        defaultLocalRole: localRole,
+        clerkMembershipId: m.clerkMembershipId,
+      },
+    });
+    if (auditEntry) {
+      void dispatchWebhookEvent({
+        eventType: "customer_user.reconciled_added",
+        eventId: auditEntry.id,
+        customerOrganizationId: org.id,
+        payload: {
+          orgId: org.id,
+          clerkOrgId: org.clerkOrgId,
+          email: m.emailAddress,
+          clerkRole: m.role,
+          defaultLocalRole: localRole,
+        },
+      });
+    }
+  }
+
+  return { removed, added, unchanged, warnings };
 }
 
 /**

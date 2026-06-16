@@ -23,3 +23,19 @@ export function localRoleToClerkRole(localRole: string): "org:admin" | "org:memb
 export function isClerkAdminRole(localRole: string): boolean {
   return CLERK_ADMIN_ROLES.has(localRole);
 }
+
+/**
+ * Inverse of localRoleToClerkRole — picks a sensible default MacTech
+ * customer role when we only know the Clerk role (e.g. during a
+ * reconcile when we're creating a local row from a Clerk-only member).
+ *
+ * "org:admin" → customer_admin (NOT customer_owner — owner is the
+ *   billing-and-everything role, granted explicitly, not by default)
+ * "org:member" → read_only_user
+ *
+ * The operator can promote afterwards in the membership sheet.
+ */
+export function clerkRoleToDefaultLocalRole(clerkRole: string): string {
+  if (clerkRole === "org:admin") return "customer_admin";
+  return "read_only_user";
+}
