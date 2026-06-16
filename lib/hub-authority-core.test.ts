@@ -72,6 +72,23 @@ test("allows an active user, org, membership, app, and entitlement", () => {
   assert.equal(snapshot.cache.authorityHash, hashAuthoritySnapshot(snapshot));
 });
 
+test("authority hash covers optional session context fields", () => {
+  const snapshot = evaluateHubAuthorityRecords(request, baseRecords, { now });
+  const withSessionContext = {
+    ...snapshot,
+    cache: { ...snapshot.cache },
+    sessionContext: {
+      isInternalMacTechUser: false,
+      boundClerkOrgId: "org_clerk_123",
+      activeOrganizationCount: 1,
+    },
+  };
+  withSessionContext.cache.authorityHash = hashAuthoritySnapshot(withSessionContext);
+
+  assert.equal(withSessionContext.cache.authorityHash, hashAuthoritySnapshot(withSessionContext));
+  assert.notEqual(withSessionContext.cache.authorityHash, snapshot.cache.authorityHash);
+});
+
 test("allows internal MacTech operators without per-org product entitlements", () => {
   const snapshot = evaluateHubAuthorityRecords(
     request,

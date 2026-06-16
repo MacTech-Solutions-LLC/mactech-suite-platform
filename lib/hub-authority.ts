@@ -9,6 +9,7 @@ import {
 import {
   DEFAULT_AUTHORITY_TTL_SECONDS,
   evaluateHubAuthorityRecords,
+  hashAuthoritySnapshot,
   type AuthorityEvaluationRecords,
   type ContractAccessEntry,
   type HubAuthorityRequest,
@@ -175,15 +176,19 @@ export async function resolveHubAppAccess(
     ttlSeconds: DEFAULT_AUTHORITY_TTL_SECONDS,
   });
 
-  await auditAuthorityResolution(resolvedAuthorityInput, snapshot, service);
-  return {
+  const returnedSnapshot: HubAuthoritySnapshot = {
     ...snapshot,
+    cache: { ...snapshot.cache },
     sessionContext: {
       isInternalMacTechUser: user?.isInternalMacTechUser ?? false,
       boundClerkOrgId: org?.clerkOrgId ?? null,
       activeOrganizationCount: activeOrgCount,
     },
   };
+  returnedSnapshot.cache.authorityHash = hashAuthoritySnapshot(returnedSnapshot);
+
+  await auditAuthorityResolution(resolvedAuthorityInput, returnedSnapshot, service);
+  return returnedSnapshot;
 }
 
 async function resolveSoleTenantOrganization(userProfileId: string) {
