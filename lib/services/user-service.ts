@@ -1017,7 +1017,38 @@ export async function reconcileOrgMembersWithClerk(
  * only entry point for adding someone to the operator plane — every
  * change is audit-logged with eventCategory='user'.
  */
-export async function inviteMacTechAdmin(rawInput: InviteMacTechAdminInput) {
+export type InviteMacTechAdminResult =
+  | {
+      ok: true;
+      clerkInvitationId: string;
+      email: string;
+      platformRole: string;
+    }
+  | {
+      ok: false;
+      error: string;
+      /** Stable hint the client can branch on (e.g. show "Upgrade Clerk plan"
+       *  guidance when membership_limit_reached). */
+      reason:
+        | "no_internal_org"
+        | "internal_org_unlinked"
+        | "clerk_not_configured"
+        | "role_definition_missing"
+        | "clerk_membership_limit"
+        | "clerk_rejected"
+        | "already_member";
+    };
+
+/**
+ * Server actions return values; throws are redacted as opaque
+ * "Server Components render error" in production. Expected failures
+ * (Clerk plan limits, missing config, already a member) are surfaced
+ * via the result so the operator sees the actual cause. Genuinely
+ * unexpected exceptions (Prisma corruption, network) still throw.
+ */
+export async function inviteMacTechAdmin(
+  rawInput: InviteMacTechAdminInput,
+): Promise<InviteMacTechAdminResult> {
   const ctx = await requirePlatformPermission(
     PLATFORM_PERMISSIONS.MACTECH_USERS_MANAGE,
   );
@@ -1027,19 +1058,27 @@ export async function inviteMacTechAdmin(rawInput: InviteMacTechAdminInput) {
     where: { isInternalMacTech: true },
   });
   if (!internalOrg) {
-    throw new Error(
-      "No internal MacTech organization is configured. Mark a CustomerOrganization row with isInternalMacTech=true and try again.",
-    );
+    return {
+      ok: false,
+      reason: "no_internal_org",
+      error:
+        "No internal MacTech organization is configured. Mark a CustomerOrganization row with isInternalMacTech=true and try again.",
+    };
   }
   if (!internalOrg.clerkOrgId) {
-    throw new Error(
-      `Internal org '${internalOrg.name}' is not linked to Clerk yet. Provision its Clerk organization first.`,
-    );
+    return {
+      ok: false,
+      reason: "internal_org_unlinked",
+      error: `Internal org '${internalOrg.name}' is not linked to Clerk yet. Provision its Clerk organization first.`,
+    };
   }
   if (!clerkConfigured()) {
-    throw new Error(
-      "Clerk is not configured on this environment — cannot send an invitation email.",
-    );
+    return {
+      ok: false,
+      reason: "clerk_not_configured",
+      error:
+        "Clerk is not configured on this environment — cannot send an invitation email.",
+    };
   }
 
   const profile = await ensureUserProfileByEmail({
@@ -1054,7 +1093,11 @@ export async function inviteMacTechAdmin(rawInput: InviteMacTechAdminInput) {
     (r) => r.key === "customer_owner",
   );
   if (!ownerRole) {
-    throw new Error("customer_owner role definition missing from permissions matrix.");
+    return {
+      ok: false,
+      reason: "role_definition_missing",
+      error: "customer_owner role definition missing from permissions matrix.",
+    };
   }
 
   const invitation = await tryClerk("createOrganizationInvitation", () =>
@@ -1067,7 +1110,22 @@ export async function inviteMacTechAdmin(rawInput: InviteMacTechAdminInput) {
     }),
   );
   if (!invitation.ok) {
-    throw new Error(`Failed to send Clerk invitation: ${invitation.error}`);
+    const lower = invitation.error.toLowerCase();
+    const reason: Extract<
+      InviteMacTechAdminResult,
+      { ok: false }
+    >["reason"] =
+      lower.includes("limit") &&
+      (lower.includes("membership") || lower.includes("organization"))
+        ? "clerk_membership_limit"
+        : lower.includes("already") || lower.includes("duplicate")
+          ? "already_member"
+          : "clerk_rejected";
+    return {
+      ok: false,
+      reason,
+      error: invitation.error,
+    };
   }
 
   const access = await prisma.orgUserAccess.upsert({
@@ -1133,5 +1191,10 @@ export async function inviteMacTechAdmin(rawInput: InviteMacTechAdminInput) {
     });
   }
 
-  return { profile: promoted, access, clerkInvitationId: invitation.value.id };
+  return {
+    ok: true,
+    clerkInvitationId: invitation.value.id,
+    email: promoted.email,
+    platformRole: input.platformRole,
+  };
 }

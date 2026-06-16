@@ -85,16 +85,33 @@ export function InviteMacTechAdminButton() {
             setError(null);
             startTransition(async () => {
               try {
-                await inviteMacTechAdmin({
+                const r = await inviteMacTechAdmin({
                   email,
                   firstName,
                   lastName,
                   platformRole,
                 });
-                setOpen(false);
-                reset();
-                router.refresh();
+                if (r.ok) {
+                  setOpen(false);
+                  reset();
+                  router.refresh();
+                  return;
+                }
+                // Server returned a structured failure — surface the real
+                // Clerk reason instead of letting Next.js redact it.
+                if (r.reason === "clerk_membership_limit") {
+                  setError(
+                    `${r.error}\n\nYour Clerk plan limits MacTech Solutions to N memberships including pending invitations. Either upgrade the Clerk plan, revoke a pending invitation, or remove an existing member before retrying.`,
+                  );
+                } else if (r.reason === "already_member") {
+                  setError(
+                    `${r.error}\n\nUse /admin/users to manage the existing membership instead.`,
+                  );
+                } else {
+                  setError(r.error);
+                }
               } catch (err) {
+                // Genuinely unexpected — still show whatever leaked through.
                 setError(err instanceof Error ? err.message : "Invite failed");
               }
             });
@@ -158,7 +175,7 @@ export function InviteMacTechAdminButton() {
           </div>
 
           {error && (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <div className="whitespace-pre-line rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
             </div>
           )}
