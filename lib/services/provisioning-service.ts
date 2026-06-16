@@ -267,17 +267,21 @@ export async function provisionOrder(orderId: string): Promise<ProvisionResult> 
     },
   });
 
-  void dispatchWebhookEvent({
-    eventType: "customer_org.provisioned",
-    eventId: auditEntry.id,
-    customerOrganizationId: org.id,
-    payload: {
-      orderId: order.id,
-      packageSku: order.package.sku,
-      buyerEmail: order.buyerEmail,
-      enabledApps: order.package.includedAppKeys,
-    },
-  });
+  if (auditEntry) {
+
+    void dispatchWebhookEvent({
+      eventType: "customer_org.provisioned",
+      eventId: auditEntry.id,
+      customerOrganizationId: org.id,
+      payload: {
+        orderId: order.id,
+        packageSku: order.package.sku,
+        buyerEmail: order.buyerEmail,
+        enabledApps: order.package.includedAppKeys,
+      },
+    });
+
+  }
 
   return { ok: true, customerOrganizationId: org.id, clerkOrgId, invited };
 }

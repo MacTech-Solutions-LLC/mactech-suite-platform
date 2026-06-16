@@ -125,25 +125,27 @@ export async function upsertProductEntitlement(rawInput: UpsertEntitlementInput)
   });
 
   // Fire-and-forget webhook dispatch — failures don't block the mutation.
-  void dispatchWebhookEvent({
-    eventType,
-    eventId: auditEntry.id,
-    customerOrganizationId: org.id,
-    payload: {
-      appKey: app.appKey,
-      appName: app.name,
-      enabled: input.enabled,
-      plan: input.plan,
-      status: input.status,
-      maxUsers: input.maxUsers ?? null,
-      startsAt: input.startsAt ?? null,
-      expiresAt: input.expiresAt ?? null,
-      previousPlan: previous?.plan ?? null,
-      previousStatus: previous?.status ?? null,
-      customerOrgClerkId: org.clerkOrgId,
-      customerOrgName: org.name,
-    },
-  });
+  if (auditEntry) {
+    void dispatchWebhookEvent({
+      eventType,
+      eventId: auditEntry.id,
+      customerOrganizationId: org.id,
+      payload: {
+        appKey: app.appKey,
+        appName: app.name,
+        enabled: input.enabled,
+        plan: input.plan,
+        status: input.status,
+        maxUsers: input.maxUsers ?? null,
+        startsAt: input.startsAt ?? null,
+        expiresAt: input.expiresAt ?? null,
+        previousPlan: previous?.plan ?? null,
+        previousStatus: previous?.status ?? null,
+        customerOrgClerkId: org.clerkOrgId,
+        customerOrgName: org.name,
+      },
+    });
+  }
 
   return updated;
 }

@@ -86,6 +86,16 @@ export async function POST(request: NextRequest) {
       metadataJson: input.metadataJson ?? input.metadata ?? null,
     });
 
+    if (!row) {
+      // appendHubAuditEvent returned null because the sequenceNumber unique
+      // index race exhausted its retry budget. Surface as transient so the
+      // caller can retry rather than treating the event as written.
+      return NextResponse.json(
+        { ok: false, error: "audit_append_sequence_race" },
+        { status: 503 },
+      );
+    }
+
     return NextResponse.json(
       {
         ok: true,

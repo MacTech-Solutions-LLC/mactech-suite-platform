@@ -156,18 +156,22 @@ export async function inviteCustomerUser(rawInput: InviteCustomerUserInput) {
     },
   });
 
-  void dispatchWebhookEvent({
-    eventType: "customer_user.invited",
-    eventId: auditEntry.id,
-    customerOrganizationId: org.id,
-    payload: {
-      orgId: org.id,
-      clerkOrgId: org.clerkOrgId,
-      email: input.email,
-      role: role.key,
-      clerkInvitationId,
-    },
-  });
+  if (auditEntry) {
+
+    void dispatchWebhookEvent({
+      eventType: "customer_user.invited",
+      eventId: auditEntry.id,
+      customerOrganizationId: org.id,
+      payload: {
+        orgId: org.id,
+        clerkOrgId: org.clerkOrgId,
+        email: input.email,
+        role: role.key,
+        clerkInvitationId,
+      },
+    });
+
+  }
 
   return { access, clerkInvitationId };
 }
@@ -278,17 +282,21 @@ export async function resendCustomerUserInvitation(
       },
     });
 
-    void dispatchWebhookEvent({
-      eventType: "customer_user.signin_link_sent",
-      eventId: auditEntry.id,
-      customerOrganizationId: org.id,
-      payload: {
-        orgId: org.id,
-        clerkOrgId: org.clerkOrgId,
-        email: profile.email,
-        clerkUserId: profile.clerkUserId,
-      },
-    });
+    if (auditEntry) {
+
+      void dispatchWebhookEvent({
+        eventType: "customer_user.signin_link_sent",
+        eventId: auditEntry.id,
+        customerOrganizationId: org.id,
+        payload: {
+          orgId: org.id,
+          clerkOrgId: org.clerkOrgId,
+          email: profile.email,
+          clerkUserId: profile.clerkUserId,
+        },
+      });
+
+    }
 
     return {
       mode: "signin_token" as const,
@@ -346,19 +354,23 @@ export async function resendCustomerUserInvitation(
     },
   });
 
-  void dispatchWebhookEvent({
-    eventType: "customer_user.invitation_resent",
-    eventId: auditEntry.id,
-    customerOrganizationId: org.id,
-    payload: {
-      orgId: org.id,
-      clerkOrgId: org.clerkOrgId,
-      email: profile.email,
-      role: role.key,
-      clerkInvitationId: fresh.id,
-      revokedCount: pending.length,
-    },
-  });
+  if (auditEntry) {
+
+    void dispatchWebhookEvent({
+      eventType: "customer_user.invitation_resent",
+      eventId: auditEntry.id,
+      customerOrganizationId: org.id,
+      payload: {
+        orgId: org.id,
+        clerkOrgId: org.clerkOrgId,
+        email: profile.email,
+        role: role.key,
+        clerkInvitationId: fresh.id,
+        revokedCount: pending.length,
+      },
+    });
+
+  }
 
   return {
     mode: "invitation" as const,
@@ -436,19 +448,21 @@ export async function updateOrgUserAccess(rawInput: UpdateOrgUserAccessInput) {
         clerkRoleTo: newClerkRole,
       },
     });
-    void dispatchWebhookEvent({
-      eventType: "customer_user.role_changed",
-      eventId: auditEntry.id,
-      customerOrganizationId: previous.customerOrganizationId,
-      payload: {
-        orgId: previous.customerOrganizationId,
-        clerkOrgId: previous.customerOrganization.clerkOrgId,
-        email: previous.userProfile.email,
-        clerkUserId: previous.userProfile.clerkUserId,
-        from: previous.role,
-        to: role.key,
-      },
-    });
+    if (auditEntry) {
+      void dispatchWebhookEvent({
+        eventType: "customer_user.role_changed",
+        eventId: auditEntry.id,
+        customerOrganizationId: previous.customerOrganizationId,
+        payload: {
+          orgId: previous.customerOrganizationId,
+          clerkOrgId: previous.customerOrganization.clerkOrgId,
+          email: previous.userProfile.email,
+          clerkUserId: previous.userProfile.clerkUserId,
+          from: previous.role,
+          to: role.key,
+        },
+      });
+    }
   }
 
   if (input.status && input.status !== previous.status) {
@@ -569,18 +583,22 @@ export async function addUserToOrg(rawInput: AddUserToOrgInput) {
     },
   });
 
-  void dispatchWebhookEvent({
-    eventType: "customer_user.added",
-    eventId: auditEntry.id,
-    customerOrganizationId: org.id,
-    payload: {
-      orgId: org.id,
-      clerkOrgId: org.clerkOrgId,
-      email: profile.email,
-      clerkUserId: profile.clerkUserId,
-      role: role.key,
-    },
-  });
+  if (auditEntry) {
+
+    void dispatchWebhookEvent({
+      eventType: "customer_user.added",
+      eventId: auditEntry.id,
+      customerOrganizationId: org.id,
+      payload: {
+        orgId: org.id,
+        clerkOrgId: org.clerkOrgId,
+        email: profile.email,
+        clerkUserId: profile.clerkUserId,
+        role: role.key,
+      },
+    });
+
+  }
 
   return access;
 }
@@ -637,18 +655,22 @@ export async function removeCustomerUser(rawInput: RemoveOrgUserAccessInput) {
     },
   });
 
-  void dispatchWebhookEvent({
-    eventType: "customer_user.removed",
-    eventId: auditEntry.id,
-    customerOrganizationId: access.customerOrganizationId,
-    payload: {
-      orgId: access.customerOrganizationId,
-      clerkOrgId: access.customerOrganization.clerkOrgId,
-      email: access.userProfile.email,
-      clerkUserId: access.userProfile.clerkUserId,
-      previousRole: access.role,
-    },
-  });
+  if (auditEntry) {
+
+    void dispatchWebhookEvent({
+      eventType: "customer_user.removed",
+      eventId: auditEntry.id,
+      customerOrganizationId: access.customerOrganizationId,
+      payload: {
+        orgId: access.customerOrganizationId,
+        clerkOrgId: access.customerOrganization.clerkOrgId,
+        email: access.userProfile.email,
+        clerkUserId: access.userProfile.clerkUserId,
+        previousRole: access.role,
+      },
+    });
+
+  }
 
   return { ok: true };
 }

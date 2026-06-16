@@ -196,23 +196,27 @@ export async function createCustomerOrganization(
     },
   });
 
-  void dispatchWebhookEvent({
-    eventType: "customer_org.created",
-    eventId: auditEntry.id,
-    customerOrganizationId: org.id,
-    payload: {
-      orgId: org.id,
-      clerkOrgId,
-      name: org.name,
-      slug: org.slug,
-      customerType: org.customerType,
-      subscriptionTier: org.subscriptionTier,
-      cmmcTargetLevel: org.cmmcTargetLevel,
-      cuiBoundaryType: org.cuiBoundaryType,
-      status: org.status,
-      domain: org.domain,
-    },
-  });
+  if (auditEntry) {
+
+    void dispatchWebhookEvent({
+      eventType: "customer_org.created",
+      eventId: auditEntry.id,
+      customerOrganizationId: org.id,
+      payload: {
+        orgId: org.id,
+        clerkOrgId,
+        name: org.name,
+        slug: org.slug,
+        customerType: org.customerType,
+        subscriptionTier: org.subscriptionTier,
+        cmmcTargetLevel: org.cmmcTargetLevel,
+        cuiBoundaryType: org.cuiBoundaryType,
+        status: org.status,
+        domain: org.domain,
+      },
+    });
+
+  }
 
   return { org, clerkSync };
 }
@@ -289,22 +293,26 @@ export async function updateCustomerOrganization(
     },
   });
 
-  void dispatchWebhookEvent({
-    eventType: "customer_org.updated",
-    eventId: auditEntry.id,
-    customerOrganizationId: after.id,
-    payload: {
-      orgId: after.id,
-      clerkOrgId: after.clerkOrgId,
-      changedFields: Object.keys(input),
-      name: after.name,
-      slug: after.slug,
-      status: after.status,
-      subscriptionTier: after.subscriptionTier,
-      cmmcTargetLevel: after.cmmcTargetLevel,
-      cuiBoundaryType: after.cuiBoundaryType,
-    },
-  });
+  if (auditEntry) {
+
+    void dispatchWebhookEvent({
+      eventType: "customer_org.updated",
+      eventId: auditEntry.id,
+      customerOrganizationId: after.id,
+      payload: {
+        orgId: after.id,
+        clerkOrgId: after.clerkOrgId,
+        changedFields: Object.keys(input),
+        name: after.name,
+        slug: after.slug,
+        status: after.status,
+        subscriptionTier: after.subscriptionTier,
+        cmmcTargetLevel: after.cmmcTargetLevel,
+        cuiBoundaryType: after.cuiBoundaryType,
+      },
+    });
+
+  }
 
   return { org: after, clerkSync };
 }
@@ -346,17 +354,21 @@ export async function suspendCustomerOrganization(orgId: string, reason: string)
     metadata: { reason },
   });
 
-  void dispatchWebhookEvent({
-    eventType: "customer_org.suspended",
-    eventId: auditEntry.id,
-    customerOrganizationId: org.id,
-    payload: {
-      orgId: org.id,
-      clerkOrgId: org.clerkOrgId,
-      name: org.name,
-      reason,
-    },
-  });
+  if (auditEntry) {
+
+    void dispatchWebhookEvent({
+      eventType: "customer_org.suspended",
+      eventId: auditEntry.id,
+      customerOrganizationId: org.id,
+      payload: {
+        orgId: org.id,
+        clerkOrgId: org.clerkOrgId,
+        name: org.name,
+        reason,
+      },
+    });
+
+  }
 
   return org;
 }

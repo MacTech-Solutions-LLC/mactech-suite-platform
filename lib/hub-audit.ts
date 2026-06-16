@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import type { ApiKeyScope, AuditCategory, AuditSeverity, Prisma } from "@prisma/client";
+import type { ApiKeyScope, AuditCategory, AuditLog, AuditSeverity, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { verifyApiKey } from "@/lib/services/api-key-service";
 import {
@@ -178,7 +178,9 @@ export function assertAuditLogDeleteForbidden(): never {
   return assertAuditMutationForbidden("delete");
 }
 
-async function appendAuditLogUnchecked(input: HubAuditAppendInput) {
+async function appendAuditLogUnchecked(
+  input: HubAuditAppendInput,
+): Promise<AuditLog | null> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= MAX_APPEND_RETRIES; attempt += 1) {
     try {
@@ -245,7 +247,7 @@ async function appendAuditLogUnchecked(input: HubAuditAppendInput) {
   }
   if (isUniqueSequenceRace(lastError)) {
     console.error("[hub-audit] sequence race exhausted retries (non-fatal)", lastError);
-    return null!;
+    return null;
   }
   throw lastError;
 }
