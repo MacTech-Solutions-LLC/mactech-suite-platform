@@ -106,15 +106,25 @@ async function autoProvisionFromClerk(clerkUserId: string): Promise<UserProfile 
     const primary =
       cu.emailAddresses.find((e) => e.id === cu.primaryEmailAddressId) ??
       cu.emailAddresses[0];
-    const email = primary?.emailAddress;
-    if (!email) {
+    const rawEmail = primary?.emailAddress;
+    if (!rawEmail) {
       console.warn(
         `[authz] auto-provision skipped for ${clerkUserId}: no email on Clerk profile`,
       );
       return null;
     }
+    // Lowercase so we adopt rows created via invite (whose author may
+    // have typed Mixed Case) instead of orphaning the platformRole +
+    // isInternalMacTechUser flags on a pending placeholder row.
+    const email = rawEmail.trim().toLowerCase();
 
-    const existing = await prisma.userProfile.findUnique({ where: { email } });
+    // findFirst (not findUnique) + insensitive mode so legacy rows
+    // with mixed-case emails are still adopted by this user.
+    const existing =
+      (await prisma.userProfile.findUnique({ where: { email } })) ??
+      (await prisma.userProfile.findFirst({
+        where: { email: { equals: rawEmail, mode: "insensitive" } },
+      }));
     if (existing) {
       return prisma.userProfile.update({
         where: { id: existing.id },

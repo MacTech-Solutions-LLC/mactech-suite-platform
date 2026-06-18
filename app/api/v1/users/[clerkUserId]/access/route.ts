@@ -66,12 +66,26 @@ export async function GET(
   const filterOrg = url.searchParams.get("clerkOrgId");
   const filterApp = url.searchParams.get("appKey");
 
+  // Internal MacTech operators don't have explicit OrgEntitlement rows
+  // on their home org — they don't pay per-seat for the apps they
+  // administer. Sibling apps (codex, training, …) call this endpoint
+  // and would otherwise see an empty enabledApps and bounce them with
+  // a sign-up / dashboard loop. Inject the full active customer-visible
+  // app catalog so the JIT auth in those apps grants access.
+  const internalImplicit = profile.isInternalMacTechUser
+    ? await prisma.appRegistry.findMany({
+        where: { status: "active", isInternalOnly: false },
+        select: { appKey: true, name: true },
+        orderBy: { appKey: "asc" },
+      })
+    : [];
+
   const orgs = profile.orgAccess
     .filter((a) =>
       filterOrg ? a.customerOrganization.clerkOrgId === filterOrg : true,
     )
     .map((a) => {
-      const enabledApps = a.customerOrganization.entitlements
+      const explicit = a.customerOrganization.entitlements
         .filter((e) => e.enabled && e.status === "active")
         .filter((e) => (filterApp ? e.app.appKey === filterApp : true))
         .map((e) => ({
@@ -79,8 +93,24 @@ export async function GET(
           appName: e.app.name,
           plan: e.plan,
           status: e.status,
-          expiresAt: e.expiresAt,
+          expiresAt: e.expiresAt as Date | null,
         }));
+
+      // Merge in implicit internal-user access. dedupe by appKey so
+      // an explicit entitlement row wins over the implicit shim
+      // (operators may have a real "enterprise" plan row for billing).
+      const seen = new Set(explicit.map((e) => e.appKey));
+      const implicit = internalImplicit
+        .filter((a) => (filterApp ? a.appKey === filterApp : true))
+        .filter((a) => !seen.has(a.appKey))
+        .map((a) => ({
+          appKey: a.appKey,
+          appName: a.name,
+          plan: "internal",
+          status: "active" as const,
+          expiresAt: null as Date | null,
+        }));
+      const enabledApps = [...explicit, ...implicit];
       return {
         clerkOrgId: a.customerOrganization.clerkOrgId,
         orgId: a.customerOrganization.id,

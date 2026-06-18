@@ -17,6 +17,7 @@ import {
   type AddUserToOrgInput,
   type ResendCustomerInvitationInput,
 } from "@/lib/validations/user";
+import { normalizeEmail } from "@/lib/email-normalize";
 import { writeAuditLog } from "@/lib/audit";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS, CUSTOMER_ROLE_DEFINITIONS } from "@/lib/permissions";
@@ -47,15 +48,16 @@ async function ensureUserProfileByEmail(input: {
   lastName?: string;
   clerkUserId?: string;
 }) {
+  const email = normalizeEmail(input.email);
   return prisma.userProfile.upsert({
-    where: { email: input.email },
+    where: { email },
     update: {
       firstName: input.firstName || undefined,
       lastName: input.lastName || undefined,
       clerkUserId: input.clerkUserId || undefined,
     },
     create: {
-      email: input.email,
+      email,
       firstName: input.firstName || null,
       lastName: input.lastName || null,
       clerkUserId: input.clerkUserId ?? `pending_${Date.now()}_${Math.random().toString(36).slice(2)}`,
@@ -70,7 +72,8 @@ export async function inviteCustomerUser(rawInput: InviteCustomerUserInput) {
   const ctx = await requirePlatformPermission(
     PLATFORM_PERMISSIONS.CUSTOMER_USERS_INVITE,
   );
-  const input = inviteCustomerUserSchema.parse(rawInput);
+  const parsed = inviteCustomerUserSchema.parse(rawInput);
+  const input = { ...parsed, email: normalizeEmail(parsed.email) };
 
   const org = await prisma.customerOrganization.findUnique({
     where: { id: input.customerOrganizationId },
@@ -1052,7 +1055,8 @@ export async function inviteMacTechAdmin(
   const ctx = await requirePlatformPermission(
     PLATFORM_PERMISSIONS.MACTECH_USERS_MANAGE,
   );
-  const input = inviteMacTechAdminSchema.parse(rawInput);
+  const parsed = inviteMacTechAdminSchema.parse(rawInput);
+  const input = { ...parsed, email: normalizeEmail(parsed.email) };
 
   const internalOrg = await prisma.customerOrganization.findFirst({
     where: { isInternalMacTech: true },

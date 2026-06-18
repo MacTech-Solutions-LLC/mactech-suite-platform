@@ -86,14 +86,27 @@ async function resolveOrAdoptUserProfile(clerkUserId: string) {
 }
 
 export async function upsertUserFromClerk(user: ClerkUserPayload) {
-  const email = pickPrimaryEmail(user);
-  if (!email) {
+  const rawEmail = pickPrimaryEmail(user);
+  if (!rawEmail) {
     console.warn(`[clerk-sync] Skipping user ${user.id}: no email`);
     return null;
   }
+  // Lowercase to match what we now write everywhere — without this,
+  // a row created by an invite using "Hagedorny3D@gmail.com" would
+  // not match the lowercase "hagedorny3d@gmail.com" Clerk normalizes
+  // its webhook payloads to, and we'd silently create a duplicate.
+  const email = rawEmail.trim().toLowerCase();
 
   const existing = await prisma.userProfile.findFirst({
-    where: { OR: [{ clerkUserId: user.id }, { email }] },
+    where: {
+      OR: [
+        { clerkUserId: user.id },
+        { email },
+        // Defensive: catch any pre-normalization rows still hanging
+        // around in mixed case until the one-shot data migration runs.
+        { email: { equals: rawEmail, mode: "insensitive" } },
+      ],
+    },
   });
 
   const data = {
