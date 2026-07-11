@@ -3,6 +3,7 @@ export const SUPPORTED_SUITE_OBJECT_TYPES = [
   "capture.package",
   "governance.requirement",
   "governance.review",
+  "hub.user_profile",
   "qms.document",
   "qms.document_version",
   "training.assignment",
