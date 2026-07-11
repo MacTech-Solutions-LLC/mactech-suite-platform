@@ -210,7 +210,13 @@ export function hashAuthoritySnapshot(snapshot: HubAuthoritySnapshot): string {
     ...snapshot,
     cache: { ...snapshot.cache, authorityHash: "" },
   };
-  return createHash("sha256").update(stableJson(hashInput)).digest("hex");
+  // Normalize through JSON so the hash is identical whether computed from the
+  // in-memory snapshot (server) or the transported-and-parsed snapshot (client).
+  // JSON serialization drops `undefined` and coerces Date values to ISO strings
+  // identically on both sides, so the content hash is stable across the wire —
+  // without this, any Date/undefined field made server and client hashes diverge.
+  const normalized = JSON.parse(JSON.stringify(hashInput)) as unknown;
+  return createHash("sha256").update(stableJson(normalized)).digest("hex");
 }
 
 function deny(
