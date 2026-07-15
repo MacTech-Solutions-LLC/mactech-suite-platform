@@ -4,6 +4,7 @@ import {
   resolveHubAppAccess,
   verifyHubServiceRequest,
 } from "@/lib/hub-authority";
+import { prisma } from "@/lib/db/prisma";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,7 +17,8 @@ const serviceMetadataSchema = z.object({
 });
 
 const resolveAppAccessSchema = z.object({
-  clerkUserId: z.string().min(1).max(200),
+  clerkUserId: z.string().min(1).max(200).optional(),
+  userEmail: z.string().email().max(320).optional(),
   appKey: z.string().min(1).max(80),
   requestedOrgId: z.string().min(1).max(200).optional().nullable(),
   tenantOrgId: z.string().min(1).max(200).optional().nullable(),
@@ -24,6 +26,9 @@ const resolveAppAccessSchema = z.object({
   sourceIp: z.string().max(200).optional().nullable(),
   userAgent: z.string().max(500).optional().nullable(),
   service: serviceMetadataSchema,
+}).refine((value) => Boolean(value.clerkUserId || value.userEmail), {
+  message: "clerkUserId or userEmail is required",
+  path: ["clerkUserId"],
 });
 
 export async function POST(request: NextRequest) {
@@ -62,9 +67,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const clerkUserId = input.clerkUserId ?? await resolveClerkUserIdByEmail(input.userEmail!);
+  if (!clerkUserId) {
+    return NextResponse.json(
+      { error: "hub_user_not_found", detail: "No active Hub user matches the supplied Workspace identity." },
+      { status: 403 },
+    );
+  }
+
   const snapshot = await resolveHubAppAccess(
     {
       ...input,
+      clerkUserId,
       service: {
         sourceAppKey: service.sourceAppKey,
         serviceIdentityId: service.serviceIdentityId,
@@ -76,6 +90,14 @@ export async function POST(request: NextRequest) {
   );
 
   return NextResponse.json({ ok: true, snapshot }, { status: snapshot.decision.allow ? 200 : 403 });
+}
+
+async function resolveClerkUserIdByEmail(userEmail: string): Promise<string | null> {
+  const user = await prisma.userProfile.findUnique({
+    where: { email: userEmail.trim().toLowerCase() },
+    select: { clerkUserId: true, status: true },
+  });
+  return user?.status === "active" ? user.clerkUserId : null;
 }
 
 function getIp(request: NextRequest): string | null {

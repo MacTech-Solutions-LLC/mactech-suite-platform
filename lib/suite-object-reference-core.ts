@@ -4,6 +4,7 @@ export const SUPPORTED_SUITE_OBJECT_TYPES = [
   "governance.requirement",
   "governance.review",
   "hub.user_profile",
+  "workspace.source_item",
   "qms.document",
   "qms.document_version",
   "training.assignment",
