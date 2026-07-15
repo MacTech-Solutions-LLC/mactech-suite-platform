@@ -45,15 +45,15 @@ type SuiteObjectReference = {
 - `qms.document_version`
 - `training.assignment`
 - `training.completion`
-- `pricing.model`
-- `pricing.locked_version`
+- `finance.pricing_model`
+- `finance.locked_pricing_version`
 - `proposal.package`
 - `codex.evidence_item`
 - `codex.evidence_package`
 - `mackali.finding`
 - `cyberrange.mission_export`
 
-Immutable artifacts and exports require `objectHash`: `capture.package`, `qms.document_version`, `pricing.locked_version`, `proposal.package`, `codex.evidence_package`, and `cyberrange.mission_export`.
+Immutable artifacts and exports require `objectHash`: `capture.package`, `qms.document_version`, `finance.locked_pricing_version`, `proposal.package`, `codex.evidence_package`, and `cyberrange.mission_export`.
 
 ## APIs
 
@@ -66,8 +66,8 @@ All endpoints require a service token with `object_reference_write`, an active `
 ```json
 {
   "sourceAppKey": "proposal",
-  "owningAppKey": "pricing",
-  "objectType": "pricing.locked_version",
+  "owningAppKey": "finance",
+  "objectType": "finance.locked_pricing_version",
   "objectId": "price-volume-2026-05-30",
   "objectVersion": "v3",
   "objectHash": "sha256:8f14e45fceea167a5a36dedd4bea2543",
@@ -93,7 +93,7 @@ Caller must be either the source app or owning app for the reference.
 ```json
 {
   "id": "ref_123",
-  "sourceAppKey": "pricing",
+  "sourceAppKey": "finance",
   "objectHash": "sha256:8f14e45fceea167a5a36dedd4bea2543",
   "verificationStatus": "verified"
 }
@@ -123,7 +123,7 @@ Deprecation requires `replacedByReferenceId`. Deprecated references must not be 
 | Governance | `governance.requirement` | Proposal cites a readiness requirement snapshot; Governance remains authoritative. |
 | QMS | `qms.document_version` | Governance links controlled evidence; QMS keeps document control. |
 | Training | `training.completion` | Governance readiness links completion evidence; Training owns completion details. |
-| Pricing | `pricing.locked_version` | Proposal attaches an approved price volume without editing pricing math. |
+| Finance | `finance.locked_pricing_version` | Proposal attaches an approved price volume without editing pricing math. |
 | Proposal | `proposal.package` | Governance receives award/loss handoff and package manifest. |
 | Codex | `codex.evidence_package` | Governance references CMMC evidence metadata without rendering CUI broadly. |
 | MacKali | `mackali.finding` | Governance tracks internal finding remediation without copying scanner output. |

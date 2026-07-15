@@ -1,4 +1,4 @@
-/** Canonical app keys — see mactech-suite-workspace-control/canonical-app-keys.md */
+/** Canonical app keys â€” see mactech-suite-workspace-control/canonical-app-keys.md */
 export type MacTechAppKey =
   | "hub"
   | "training"
@@ -10,9 +10,7 @@ export type MacTechAppKey =
   | "bizops"
   | "contracts-delivery"
   | "client-portal"
-  | "workspace-gateway"
-  /** @deprecated Use "finance" — legacy alias retained for DB compatibility during migration */
-  | "pricing";
+  | "workspace-gateway";
 
 export const MACTECH_APP_KEYS: readonly MacTechAppKey[] = [
   "hub",
@@ -26,8 +24,6 @@ export const MACTECH_APP_KEYS: readonly MacTechAppKey[] = [
   "contracts-delivery",
   "client-portal",
   "workspace-gateway",
-  // legacy alias — remove after DB migration retires the pricing row
-  "pricing",
 ] as const;
 
 export function isMacTechAppKey(value: string): value is MacTechAppKey {

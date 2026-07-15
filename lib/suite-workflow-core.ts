@@ -5,8 +5,7 @@ export const SUITE_APP_AUTHORITIES = {
   capture: "Opportunity discovery, solicitation intake, and Capture Package generation.",
   governance: "Compliance, risk, readiness, clauses, flowdowns, contract truth, waivers, and retention posture.",
   proposal: "Proposal execution, volumes, reviews, submission package, and award/loss handoff.",
-  pricing: "Pricing math, rates, BOE, scenarios, price volume, and Green Team approval.",
-  finance: "Actual accounting, QuickBooks, invoicing, payments, charge codes, and financial actuals.",
+  finance: "Pricing math, rates, BOE, scenarios, price volume, Green Team approval, timekeeping, actual accounting, QuickBooks, invoicing, payments, charge codes, and financial actuals.",
   qms: "Controlled documents, templates, SOPs, and quality records.",
   training: "Training requirements, assignments, completions, and evidence.",
   codex_vault: "CUI/CMMC evidence, cyber posture, SSP/POA&M, assessor evidence, and sensitive evidence storage.",
@@ -35,7 +34,7 @@ export type SuiteWorkflowGateKey =
   | "eligibility_readiness"
   | "bid_no_bid"
   | "technical_feasibility"
-  | "pricing_finance_readiness"
+  | "finance_readiness"
   | "proposal_package_readiness"
   | "executive_approval"
   | "submission_receipt_capture"
@@ -73,8 +72,8 @@ export type SuiteHandoffType =
   | "capture_to_proposal_kickoff"
   | "governance_to_bid_no_bid"
   | "governance_to_proposal_guidance"
-  | "proposal_to_pricing_request"
-  | "pricing_to_proposal_approved_volume"
+  | "proposal_to_finance_pricing_request"
+  | "finance_to_proposal_approved_volume"
   | "proposal_to_governance_award_loss"
   | "proposal_to_finance_preaward"
   | "award_to_governance_contract"
@@ -111,7 +110,7 @@ export type SuiteWorkflowHandoffPacket = {
 export type SuiteWorkflowDashboardLane =
   | "active_pursuits"
   | "bid_no_bid_queue"
-  | "pricing_reviews"
+  | "finance_pricing_reviews"
   | "proposal_deadlines"
   | "governance_blockers"
   | "finance_setup_blockers"
@@ -157,7 +156,7 @@ const MINIMUM_GATE_KEYS: SuiteWorkflowGateKey[] = [
   "eligibility_readiness",
   "bid_no_bid",
   "technical_feasibility",
-  "pricing_finance_readiness",
+  "finance_readiness",
   "proposal_package_readiness",
   "executive_approval",
   "submission_receipt_capture",
@@ -184,61 +183,61 @@ export const SUITE_WORKFLOW_TEMPLATES: Record<SuiteWorkflowTemplateKey, SuiteWor
     "capture",
     "governance",
     "proposal",
-    "pricing",
+    "finance",
     "finance",
   ]),
   subcontract_rfq: template("subcontract_rfq", "Subcontractor RFQ/RFP", "capture", [
     "capture",
     "governance",
-    "pricing",
+    "finance",
     "proposal",
     "finance",
   ]),
-  quick_commercial_quote: template("quick_commercial_quote", "Quick commercial quote", "pricing", [
+  quick_commercial_quote: template("quick_commercial_quote", "Quick commercial quote", "finance", [
     "capture",
     "governance",
-    "pricing",
+    "finance",
     "finance",
   ]),
   grant_sbir_sttr: template("grant_sbir_sttr", "Grant/SBIR/STTR", "capture", [
     "capture",
     "governance",
     "proposal",
-    "pricing",
+    "finance",
   ]),
   idiq_vehicle: template("idiq_vehicle", "IDIQ vehicle", "capture", [
     "capture",
     "governance",
     "proposal",
-    "pricing",
+    "finance",
     "finance",
   ]),
   idiq_task_order: template("idiq_task_order", "IDIQ task order", "capture", [
     "capture",
     "governance",
     "proposal",
-    "pricing",
+    "finance",
     "finance",
   ]),
   sole_source_sdvosb: template("sole_source_sdvosb", "Sole-source/SDVOSB directed opportunity", "capture", [
     "capture",
     "governance",
     "proposal",
-    "pricing",
+    "finance",
     "finance",
   ]),
   teaming_mentor_protege: template("teaming_mentor_protege", "Teaming/mentor-protege opportunity", "capture", [
     "capture",
     "governance",
     "proposal",
-    "pricing",
+    "finance",
   ]),
   cui_cmmc_codex: template("cui_cmmc_codex", "CUI/CMMC/Codex opportunity", "governance", [
     "capture",
     "governance",
     "codex_vault",
     "proposal",
-    "pricing",
+    "finance",
     "training",
   ]),
   iso_qms_compliance: template("iso_qms_compliance", "ISO/QMS/pharma/compliance opportunity", "governance", [
@@ -246,7 +245,7 @@ export const SUITE_WORKFLOW_TEMPLATES: Record<SuiteWorkflowTemplateKey, SuiteWor
     "governance",
     "qms",
     "proposal",
-    "pricing",
+    "finance",
     "training",
   ]),
   classified_cleared_support: template("classified_cleared_support", "Classified/cleared support opportunity", "governance", [
@@ -254,7 +253,7 @@ export const SUITE_WORKFLOW_TEMPLATES: Record<SuiteWorkflowTemplateKey, SuiteWor
     "governance",
     "codex_vault",
     "proposal",
-    "pricing",
+    "finance",
     "finance",
   ]),
 };
@@ -322,7 +321,7 @@ function template(
     key,
     label,
     primaryOwningApp,
-    routeApps,
+    routeApps: Array.from(new Set(routeApps)),
     defaultGates,
     requiredHandoffTypes: handoffsForRoute(routeApps),
     dashboardLanes: dashboardLanesForRoute(routeApps),
@@ -337,8 +336,8 @@ function ownerAppForGate(key: SuiteWorkflowGateKey): SuiteAppKey {
     case "bid_no_bid":
     case "technical_feasibility":
       return "governance";
-    case "pricing_finance_readiness":
-      return "pricing";
+    case "finance_readiness":
+      return "finance";
     case "proposal_package_readiness":
     case "submission_receipt_capture":
     case "award_loss_outcome":
@@ -352,7 +351,7 @@ function ownerAppForGate(key: SuiteWorkflowGateKey): SuiteAppKey {
 }
 
 function ownerForGate(key: SuiteWorkflowGateKey): SuiteApproverKey {
-  return key === "pricing_finance_readiness" || key === "executive_approval" ? "brian_macdonald" : approverForGate(key);
+  return key === "finance_readiness" || key === "executive_approval" ? "brian_macdonald" : approverForGate(key);
 }
 
 function approverForGate(key: SuiteWorkflowGateKey): SuiteApproverKey {
@@ -368,7 +367,7 @@ function approverForGate(key: SuiteWorkflowGateKey): SuiteApproverKey {
 function handoffsForRoute(routeApps: SuiteAppKey[]): SuiteHandoffType[] {
   const handoffs: SuiteHandoffType[] = ["capture_to_governance_screen", "governance_to_bid_no_bid"];
   if (routeApps.includes("proposal")) handoffs.push("capture_to_proposal_kickoff", "governance_to_proposal_guidance");
-  if (routeApps.includes("pricing")) handoffs.push("proposal_to_pricing_request", "pricing_to_proposal_approved_volume");
+  if (routeApps.includes("finance")) handoffs.push("proposal_to_finance_pricing_request", "finance_to_proposal_approved_volume");
   if (routeApps.includes("finance")) handoffs.push("proposal_to_finance_preaward", "award_to_finance_setup");
   if (routeApps.includes("qms")) handoffs.push("award_to_qms_workspace");
   if (routeApps.includes("training")) handoffs.push("award_to_training_plan");
@@ -386,7 +385,7 @@ function dashboardLanesForRoute(routeApps: SuiteAppKey[]): SuiteWorkflowDashboar
     "award_loss_outcomes",
   ];
   if (routeApps.includes("proposal")) lanes.push("proposal_deadlines");
-  if (routeApps.includes("pricing")) lanes.push("pricing_reviews");
+  if (routeApps.includes("finance")) lanes.push("finance_pricing_reviews");
   if (routeApps.includes("finance")) lanes.push("finance_setup_blockers");
   if (routeApps.includes("codex_vault")) lanes.push("cyber_security_blockers");
   return Array.from(new Set(lanes));

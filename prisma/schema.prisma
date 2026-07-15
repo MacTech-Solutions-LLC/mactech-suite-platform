@@ -470,13 +470,24 @@ model UserProfile {
   platformRole          PlatformRole @default(none)
   status                UserStatus   @default(active)
   authorityVersion      Int          @default(1)
+  jobTitle              String?
+  department            String?
+  managerUserProfileId  String?
+  employmentStartDate   DateTime?
+  employmentEndDate     DateTime?
+  employmentType        String?
+  laborCategory         String?
+  standardWeekHours     Decimal?     @db.Decimal(6, 2)
+  timekeepingRequired   Boolean      @default(false)
   lastSeenAt            DateTime?
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt
 
-  orgAccess OrgUserAccess[]
-  auditLogs AuditLog[]      @relation("AuditActor")
+  orgAccess             OrgUserAccess[]
+  auditLogs             AuditLog[]             @relation("AuditActor")
   suiteObjectReferences SuiteObjectReference[] @relation("SuiteObjectReferenceCreatedByUser")
+  manager               UserProfile?           @relation("UserReportingLine", fields: [managerUserProfileId], references: [id], onDelete: SetNull)
+  directReports         UserProfile[]          @relation("UserReportingLine")
 
   contractsCreated           Contract[]               @relation("ContractCreatedBy")
   contractMemberships        ContractMembership[]     @relation("ContractMembershipUserProfile")
@@ -488,6 +499,9 @@ model UserProfile {
   @@index([platformRole])
   @@index([status])
   @@index([isInternalMacTechUser])
+  @@index([managerUserProfileId])
+  @@index([department])
+  @@index([timekeepingRequired])
 }
 
 model CustomerOrganization {
@@ -521,16 +535,16 @@ model CustomerOrganization {
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
-  entitlements         ProductEntitlement[]
-  orgUserAccess        OrgUserAccess[]
-  auditLogs            AuditLog[]
-  securityEvents       SecurityEvent[]
-  suiteObjectReferences SuiteObjectReference[] @relation("SuiteObjectReferenceOrganization")
+  entitlements                ProductEntitlement[]
+  orgUserAccess               OrgUserAccess[]
+  auditLogs                   AuditLog[]
+  securityEvents              SecurityEvent[]
+  suiteObjectReferences       SuiteObjectReference[] @relation("SuiteObjectReferenceOrganization")
   suiteObjectReferenceTenants SuiteObjectReference[] @relation("SuiteObjectReferenceTenantOrg")
-  webhookSubscriptions WebhookSubscription[]
-  orders               Order[]
-  subscriptions        Subscription[]
-  contracts            Contract[]
+  webhookSubscriptions        WebhookSubscription[]
+  orders                      Order[]
+  subscriptions               Subscription[]
+  contracts                   Contract[]
 
   @@index([clerkOrgId])
   @@index([slug])
@@ -667,10 +681,10 @@ model AppRegistry {
   railwayResources     RailwayResource[]
   deploymentSnapshots  DeploymentSnapshot[]
   commitSummaries      CommitSummary[]
-  outgoingDependencies AppDependency[]       @relation("DependencySource")
-  incomingDependencies AppDependency[]       @relation("DependencyTarget")
-  outgoingCalls        AppCallEvent[]        @relation("CallEventSource")
-  incomingCalls        AppCallEvent[]        @relation("CallEventTarget")
+  outgoingDependencies AppDependency[]        @relation("DependencySource")
+  incomingDependencies AppDependency[]        @relation("DependencyTarget")
+  outgoingCalls        AppCallEvent[]         @relation("CallEventSource")
+  incomingCalls        AppCallEvent[]         @relation("CallEventTarget")
   sourceObjectRefs     SuiteObjectReference[] @relation("SuiteObjectReferenceSourceApp")
   ownedObjectRefs      SuiteObjectReference[] @relation("SuiteObjectReferenceOwningApp")
 
@@ -797,20 +811,20 @@ model AuditLog {
 }
 
 model AuditExportManifest {
-  id              String   @id @default(cuid())
-  exportBatchId   String   @unique
-  startDate       DateTime?
-  endDate         DateTime?
-  appFiltersJson  Json?
-  firstSequence   Int?
-  lastSequence    Int?
-  firstHash       String?
-  lastHash        String?
-  eventCount      Int
-  exportHash      String
-  signerIdentity  String
-  signature       String
-  createdAt       DateTime @default(now())
+  id             String    @id @default(cuid())
+  exportBatchId  String    @unique
+  startDate      DateTime?
+  endDate        DateTime?
+  appFiltersJson Json?
+  firstSequence  Int?
+  lastSequence   Int?
+  firstHash      String?
+  lastHash       String?
+  eventCount     Int
+  exportHash     String
+  signerIdentity String
+  signature      String
+  createdAt      DateTime  @default(now())
 
   @@index([createdAt])
   @@index([firstSequence])
@@ -911,7 +925,7 @@ model ServiceIdentity {
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
 
-  auditLogs AuditLog[] @relation("AuditServiceActor")
+  auditLogs             AuditLog[]             @relation("AuditServiceActor")
   suiteObjectReferences SuiteObjectReference[] @relation("SuiteObjectReferenceCreatedByService")
 
   @@index([appKey])
@@ -1449,7 +1463,7 @@ model AppDependency {
 // ============================================================================
 
 model AppCallEvent {
-  id                  String   @id @default(cuid())
+  id                  String  @id @default(cuid())
   // Receiver — always one of our AppRegistry rows. Nullable so we
   // can record calls into the suite even before AppRegistry has been
   // seeded for it (rare but defensive).
@@ -1468,14 +1482,14 @@ model AppCallEvent {
   // For outbound calls Suite makes, this is "github" / "railway" /
   // "openai" / etc. so the traffic graph and the per-target filter
   // can attribute symmetrically.
-  targetLabel         String   @default("identity-command-center")
+  targetLabel         String  @default("identity-command-center")
   // The HTTP path that received the call (already redacted of any
   // dynamic ids; we store the route pattern, not the literal URL).
   endpoint            String
   method              String
   statusCode          Int
-  bytesIn             Int      @default(0)
-  bytesOut            Int      @default(0)
+  bytesIn             Int     @default(0)
+  bytesOut            Int     @default(0)
   durationMs          Int?
   // ApiKey id when the call authenticated with a DB-issued key —
   // nullable for cron / webhook / unauthenticated calls.
@@ -1487,7 +1501,7 @@ model AppCallEvent {
   // — large payloads belong on AuditLog.
   metadataJson        Json?
 
-  occurredAt          DateTime @default(now())
+  occurredAt DateTime @default(now())
 
   source AppRegistry? @relation("CallEventSource", fields: [sourceAppRegistryId], references: [id], onDelete: SetNull)
   target AppRegistry? @relation("CallEventTarget", fields: [targetAppRegistryId], references: [id], onDelete: SetNull)
@@ -1585,34 +1599,34 @@ model AgentRun {
   // True if the plan contains at least one approval_required step.
   requiresApproval  Boolean        @default(false)
 
-  requestedByClerkUserId  String
-  requestedByEmail        String
+  requestedByClerkUserId String
+  requestedByEmail       String
   // Approver identity — populated when an approval row lands. Enforced
   // at the service layer to be different from requestedByClerkUserId
   // (separation of duties).
-  approvedByClerkUserId   String?
-  approvedByEmail         String?
-  approvedAt              DateTime?
-  rejectedAt              DateTime?
-  rejectionReason         String?
+  approvedByClerkUserId  String?
+  approvedByEmail        String?
+  approvedAt             DateTime?
+  rejectedAt             DateTime?
+  rejectionReason        String?
 
-  startedAt   DateTime?
-  completedAt DateTime?
+  startedAt     DateTime?
+  completedAt   DateTime?
   failureReason String?
 
   // ── Slice 5.5: IBE Gates ─────────────────────────────────────────────
   // The user-declared Intent the run must satisfy. Stored verbatim so
   // assessors can replay both the request and the contract it carried.
   // Validation rules are ported from /Users/patrick/IBE/src/intent.
-  intentGoal           String?              @db.Text
-  intentRiskTolerance  AgentRiskTolerance   @default(strict)
+  intentGoal           String?            @db.Text
+  intentRiskTolerance  AgentRiskTolerance @default(strict)
   // Resource-scope: which apps/repos this call is allowed to touch.
   // Empty array == unbounded (legacy runs and read-only fan-outs).
   // Stored as String[] (Postgres text[]) so we can index later if
   // needed; the orchestrator validates each step's input against
   // these arrays before execution.
-  intentScopeAppIds    String[]             @default([])
-  intentScopeRepoIds   String[]             @default([])
+  intentScopeAppIds    String[]           @default([])
+  intentScopeRepoIds   String[]           @default([])
   // User-selected invariant keys grouped by capability:
   //   { "<capabilityKey>": ["<invariantKey>", ...], ... }
   // The orchestrator only enforces invariants the user explicitly
@@ -1624,21 +1638,21 @@ model AgentRun {
   intentValidationJson Json?
   // Refusal explanation when status=refused. Lists which invariants
   // failed on which steps so the operator can act.
-  refusalReason        String?              @db.Text
+  refusalReason        String?            @db.Text
 
   // ── Slice 5.7: External (Claude / automation) trigger source ──────
   // When the run was created via the M2M /api/v1/agents/runs endpoint
   // instead of a browser session, this carries the ApiKey id that
   // authenticated the call. Browser-initiated runs leave it null.
-  triggeredByApiKeyId  String?
+  triggeredByApiKeyId   String?
   triggeredByApiKeyName String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  steps      AgentStep[]
-  artifacts  AgentArtifact[]
-  approvals  AgentApproval[]
+  steps     AgentStep[]
+  artifacts AgentArtifact[]
+  approvals AgentApproval[]
 
   @@index([status])
   @@index([requestedByClerkUserId])
@@ -1647,30 +1661,30 @@ model AgentRun {
 }
 
 model AgentStep {
-  id              String          @id @default(cuid())
-  agentRunId      String
+  id                String          @id @default(cuid())
+  agentRunId        String
   // Order in the plan (1-indexed). Plans execute sequentially in this
   // order; a failure aborts the run.
-  stepIndex       Int
-  capabilityKey   String          // e.g. "summarize_open_risks"
-  capabilityVersion Int           @default(1)
-  kind            AgentStepKind
-  status          AgentStepStatus @default(planned)
+  stepIndex         Int
+  capabilityKey     String // e.g. "summarize_open_risks"
+  capabilityVersion Int             @default(1)
+  kind              AgentStepKind
+  status            AgentStepStatus @default(planned)
   // The planner's natural-language description of why this step is in
   // the plan. Surfaced in the approval UI.
-  rationale       String?         @db.Text
+  rationale         String?         @db.Text
   // Inputs the planner bound to this step (resource IDs, filters, etc.).
   // Validated against the capability's input schema at execution time.
-  inputJson       Json
+  inputJson         Json
   // Output of the capability invocation. Truncated to a small JSON
   // summary; large blobs go to AgentArtifact.
-  outputJson      Json?
+  outputJson        Json?
   // AuditLog id for the capability invocation (kept here to make the
   // step row independently usable for assessor replay).
-  auditLogId      String?
+  auditLogId        String?
   // Raw error message on failure, redacted. Stored for assessor replay.
-  errorMessage    String?         @db.Text
-  durationMs      Int?
+  errorMessage      String?         @db.Text
+  durationMs        Int?
 
   // ── Slice 5.5: IBE invariant results ───────────────────────────────
   // List of { key, ok, actual, message } objects — one per invariant
@@ -1679,7 +1693,7 @@ model AgentStep {
   invariantResultsJson Json?
   // True when at least one declared invariant on this step did not
   // hold (regardless of run-level risk_tolerance).
-  invariantViolations  Boolean    @default(false)
+  invariantViolations  Boolean @default(false)
 
   startedAt   DateTime?
   completedAt DateTime?
@@ -1699,17 +1713,17 @@ model AgentStep {
 }
 
 model AgentArtifact {
-  id            String            @id @default(cuid())
-  agentRunId    String
-  agentStepId   String?
-  kind          AgentArtifactKind
-  title         String
+  id           String            @id @default(cuid())
+  agentRunId   String
+  agentStepId  String?
+  kind         AgentArtifactKind
+  title        String
   // Stored as Text — release-notes / draft PR descriptions can be long.
   // Never contains secrets — the redactor is applied before write.
-  bodyMarkdown  String            @db.Text
+  bodyMarkdown String            @db.Text
   // Optional structured payload (JSON). Used when the artifact is a
   // structured summary the UI renders directly.
-  payloadJson   Json?
+  payloadJson  Json?
 
   createdAt DateTime @default(now())
 
@@ -1739,19 +1753,19 @@ enum AgentTriggerKind {
 /// Slice 9: comparison operator for threshold triggers. Match the
 /// cron-parser style of common operators so the form UI is obvious.
 enum ThresholdOperator {
-  gt   // metric > value (fire when above)
-  gte  // metric >= value
-  lt   // metric < value (fire when below)
-  lte  // metric <= value
-  eq   // metric == value
-  ne   // metric != value
+  gt // metric > value (fire when above)
+  gte // metric >= value
+  lt // metric < value (fire when below)
+  lte // metric <= value
+  eq // metric == value
+  ne // metric != value
 }
 
 model AgentTrigger {
-  id             String   @id @default(cuid())
+  id             String           @id @default(cuid())
   name           String
-  description    String?  @db.Text
-  enabled        Boolean  @default(true)
+  description    String?          @db.Text
+  enabled        Boolean          @default(true)
   /// Slice 9: discriminator. cron triggers run on cronExpression;
   /// threshold triggers run on every tick and fire on rising-edge
   /// of (metric op value).
@@ -1762,46 +1776,46 @@ model AgentTrigger {
   // for threshold triggers.
   cronExpression String?
   // IANA timezone name; defaults to UTC so cron evaluates deterministically.
-  timezone       String   @default("UTC")
+  timezone       String           @default("UTC")
   // The Intent + free-text request that fires on each tick. Identical
   // shape to the M2M /api/v1/agents/runs body so a trigger is just a
   // saved M2M call.
-  request        String   @db.Text
+  request        String           @db.Text
   intentJson     Json
-  autoExecute    Boolean  @default(true)
+  autoExecute    Boolean          @default(true)
 
   // ── Slice 9: threshold trigger fields ─────────────────────────────
   /// Code-defined metric key; lib/agents/threshold-metrics.ts knows how
   /// to evaluate each. Examples: "open_risks_critical_count",
   /// "deployment_drift_count", "failed_workflow_count_24h".
-  thresholdMetric    String?
-  thresholdOperator  ThresholdOperator?
+  thresholdMetric       String?
+  thresholdOperator     ThresholdOperator?
   /// Stored as Float for max flexibility — most metrics are counts
   /// but rates/percentages live in the same shape.
-  thresholdValue     Float?
+  thresholdValue        Float?
   /// Last evaluated value of the metric. Used by the UI to render
   /// "currently at N" without re-querying.
-  thresholdLastValue Float?
+  thresholdLastValue    Float?
   /// True when the last evaluation found the condition true. Used to
   /// detect rising-edge transitions (fire only on false → true).
-  thresholdConditionMet Boolean @default(false)
+  thresholdConditionMet Boolean            @default(false)
   /// Minutes between fires for the same trigger even if the condition
   /// remains true. Defaults to 60min so a stuck-high metric doesn't
   /// blast the team every cron tick.
-  cooldownMinutes    Int      @default(60)
+  cooldownMinutes       Int                @default(60)
 
   // Scheduling state, advanced by the cron tick handler.
-  lastFiredAt    DateTime?
+  lastFiredAt         DateTime?
   /// For cron triggers: the next planned fire time (computed by
   /// cron-parser). For threshold triggers: null (they evaluate every
   /// tick instead).
-  nextFireAt     DateTime?
+  nextFireAt          DateTime?
   // Most-recent fire outcome, kept to surface in the management UI
   // without joining AgentRun.
-  lastRunId      String?
-  lastRunStatus  AgentRunStatus?
+  lastRunId           String?
+  lastRunStatus       AgentRunStatus?
   // Sequential failure count surfaced in the UI to flag stuck triggers.
-  consecutiveFailures Int @default(0)
+  consecutiveFailures Int             @default(0)
 
   createdByClerkUserId String
   createdByEmail       String
@@ -1816,15 +1830,15 @@ model AgentTrigger {
 }
 
 model AgentApproval {
-  id           String                @id @default(cuid())
-  agentRunId   String
-  decision     AgentApprovalDecision
+  id                  String                @id @default(cuid())
+  agentRunId          String
+  decision            AgentApprovalDecision
   approverClerkUserId String
   approverEmail       String
   // Optional scope reduction — JSON describing which step indexes were
   // dropped from the plan before approval. Empty {} = full plan approved.
   scopeReductionJson  Json?
-  notes        String?              @db.Text
+  notes               String?               @db.Text
 
   createdAt DateTime @default(now())
 
@@ -1971,22 +1985,22 @@ model Order {
 }
 
 model Subscription {
-  id                     String             @id @default(cuid())
-  customerOrganizationId String
-  packageId              String
+  id                        String             @id @default(cuid())
+  customerOrganizationId    String
+  packageId                 String
   /// The original Order that opened the subscription. Null on subscriptions
   /// imported from QBO without a corresponding MacSuite checkout.
-  orderId                String?            @unique
-  status                 SubscriptionStatus @default(active)
+  orderId                   String?            @unique
+  status                    SubscriptionStatus @default(active)
   /// QBO RecurringTransaction template ID that issues renewal invoices.
-  qboRecurringTransactionId String?         @unique
+  qboRecurringTransactionId String?            @unique
   currentPeriodStart        DateTime
   currentPeriodEnd          DateTime
-  cancelAtPeriodEnd         Boolean         @default(false)
+  cancelAtPeriodEnd         Boolean            @default(false)
   cancelledAt               DateTime?
   metadataJson              Json?
-  createdAt                 DateTime        @default(now())
-  updatedAt                 DateTime        @updatedAt
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
 
   customerOrganization CustomerOrganization @relation(fields: [customerOrganizationId], references: [id], onDelete: Cascade)
   package              Package              @relation(fields: [packageId], references: [id])
@@ -2024,24 +2038,24 @@ model Payment {
 /// MacTech's own company once and every customer purchase routes through
 /// it. Tokens are encrypted at rest with QBO_ENCRYPTION_KEY (AES-256-GCM).
 model QuickbooksConnection {
-  id                    String                @id @default(cuid())
-  realmId               String                @unique
-  environment           QuickbooksEnvironment @default(sandbox)
+  id                     String                @id @default(cuid())
+  realmId                String                @unique
+  environment            QuickbooksEnvironment @default(sandbox)
   /// AES-256-GCM ciphertext of the QBO OAuth access token.
-  accessTokenCipher     String
+  accessTokenCipher      String
   /// AES-256-GCM ciphertext of the QBO OAuth refresh token.
-  refreshTokenCipher    String
-  accessTokenExpiresAt  DateTime
-  refreshTokenExpiresAt DateTime
-  scope                 String?
-  companyName           String?
+  refreshTokenCipher     String
+  accessTokenExpiresAt   DateTime
+  refreshTokenExpiresAt  DateTime
+  scope                  String?
+  companyName            String?
   /// Clerk user ID of whoever last completed the OAuth handshake. Audit-only.
   connectedByClerkUserId String?
   lastRefreshedAt        DateTime?
   lastErrorMessage       String?
-  isActive               Boolean   @default(true)
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  isActive               Boolean               @default(true)
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
 
   @@index([isActive])
   @@index([environment])
@@ -2151,19 +2165,19 @@ model ContractMembership {
 /// Authoritative log of when each contract stage transition happened and who
 /// authorized it. evidenceRef is an opaque satellite artifact pointer.
 model ContractLifecycleEvent {
-  id           String            @id @default(cuid())
-  contractId   String
-  fromStage    ContractStage?
-  toStage      ContractStage
-  actorId      String?
-  actorType    ContractActorType @default(SYSTEM)
+  id          String            @id @default(cuid())
+  contractId  String
+  fromStage   ContractStage?
+  toStage     ContractStage
+  actorId     String?
+  actorType   ContractActorType @default(SYSTEM)
   /// Opaque pointer to the satellite artifact that evidences this transition.
-  evidenceRef  String?
-  occurredAt   DateTime          @default(now())
-  note         String?
+  evidenceRef String?
+  occurredAt  DateTime          @default(now())
+  note        String?
 
-  contract Contract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  actor    UserProfile?  @relation("ContractLifecycleEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+  contract Contract     @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  actor    UserProfile? @relation("ContractLifecycleEventActor", fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([contractId])
   @@index([contractId, toStage])

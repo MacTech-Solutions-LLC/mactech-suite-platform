@@ -142,7 +142,7 @@ QMS:
 Pricing:
 
 ```json
-{ "sourceAppKey": "pricing", "eventType": "pricing.green_team.approved", "eventCategory": "system", "action": "pricing.green_team.approved", "objectType": "PricingScenario", "objectId": "scenario_123", "metadata": { "proposalId": "prop_123" } }
+{ "sourceAppKey": "finance", "eventType": "finance.green_team.approved", "eventCategory": "system", "action": "finance.green_team.approved", "objectType": "PricingScenario", "objectId": "scenario_123", "metadata": { "proposalId": "prop_123" } }
 ```
 
 Proposal:

@@ -29,11 +29,10 @@ test("workflow map keeps Hub as coordinator while apps retain route ownership", 
   assert.deepEqual(CROSS_APP_WORKFLOW_MAP.subcontract_rfq, [
     "capture",
     "governance",
-    "pricing",
-    "proposal",
     "finance",
+    "proposal",
   ]);
-  assert.equal(getWorkflowTemplate("quick_commercial_quote").primaryOwningApp, "pricing");
+  assert.equal(getWorkflowTemplate("quick_commercial_quote").primaryOwningApp, "finance");
   assert.equal(getWorkflowTemplate("iso_qms_compliance").routeApps.includes("qms"), true);
 });
 
@@ -41,16 +40,16 @@ test("standard handoff packet requires references, snapshot ids, provenance arra
   const packet: SuiteWorkflowHandoffPacket = {
     suiteObjectReferenceId: "sor_123",
     workflowInstanceId: "wf_123",
-    sourceApp: "pricing",
+    sourceApp: "finance",
     targetApp: "proposal",
     sourceRecordId: "price_123",
     sourceSnapshotId: "snap_123",
-    handoffType: "pricing_to_proposal_approved_volume",
+    handoffType: "finance_to_proposal_approved_volume",
     handoffStatus: "approved",
     requiredApprovals: ["brian_macdonald"],
     blockingDependencies: [],
     AIProvenance: [],
-    auditEvents: ["pricing.green_team.approved"],
+    auditEvents: ["finance.green_team.approved"],
   };
 
   assert.deepEqual(validateHandoffPacket(packet), []);
@@ -59,7 +58,7 @@ test("standard handoff packet requires references, snapshot ids, provenance arra
     /suiteObjectReferenceId is required/,
   );
   assert.match(
-    validateHandoffPacket({ ...packet, sourceApp: "pricing", targetApp: "pricing" }).join(" "),
+    validateHandoffPacket({ ...packet, sourceApp: "finance", targetApp: "finance" }).join(" "),
     /sourceApp and targetApp must differ/,
   );
 });

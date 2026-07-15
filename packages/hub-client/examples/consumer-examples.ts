@@ -47,10 +47,10 @@ export function qmsExpressMiddleware() {
   };
 }
 
-export async function pricingNextRoute(request: Request) {
+export async function financeNextRoute(request: Request) {
   return hub.requireHubAppAccess({
     clerkUserId: request.headers.get("x-clerk-user-id") ?? "",
-    appKey: "pricing",
+    appKey: "finance",
     requestedOrgId: request.headers.get("x-mactech-org-id"),
   });
 }
