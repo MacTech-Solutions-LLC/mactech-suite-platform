@@ -109,7 +109,7 @@ Use `snapshot.canonicalHubUserId`, `snapshot.canonicalOrganizationId`, `snapshot
 - `hub`
 - `governance`
 - `qms`
-- `pricing`
+- `finance`
 - `proposal`
 - `growth-capture` — **Opportunity & Capture** (canonical; legacy alias `capture`)
 - `training`

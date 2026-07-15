@@ -19,7 +19,7 @@ This is the follow-on implementation queue. These items are intentionally not wi
 ## Growth & Capture
 
 - Emit Capture Package references with immutable hashes through `SuiteObjectReference`.
-- Send `capture.pursuit.created`, `capture.bid_no_bid.packet_prepared`, `capture.handoff.proposal_requested`, `capture.handoff.pricing_requested`, `capture.handoff.governance_requested` events to Hub.
+- Send `capture.pursuit.created`, `capture.bid_no_bid.packet_prepared`, `capture.handoff.proposal_requested`, `capture.handoff.finance_pricing_requested`, `capture.handoff.governance_requested` events to Hub.
 - Include cyber, CUI, CDI, CMMC, DD254, classified, insurance, bonding, and submission-instruction indicators in the Capture Package snapshot.
 - Push pursuit stage and PWin to BizOps.
 
@@ -31,32 +31,25 @@ This is the follow-on implementation queue. These items are intentionally not wi
 - Read charge code setup and PoP boundaries from Finance through Hub proxy when Finance exists — no write access, no invoice visibility.
 - Push approval events, obligation flags, and clause exceptions to BizOps.
 
-## PricingOS (appKey: `pricing`)
+## Finance (appKey: `finance`)
 
-- Own pricing math, rate snapshots, BOE, scenarios, proposed price, price volume, and Green Team approval.
-- Emit `pricing.request.created`, `pricing.scenario.created`, `pricing.green_team.approved`, and `pricing.volume.exported` events to Hub audit ledger.
-- Produce immutable approved pricing package references and hashes for ProposalOS.
-- Hand award assumptions to Finance as reference metadata only; do not own actuals, invoicing, payments, or reconciliation.
-
-## Finance (appKey: `finance`, planned/module until authorized)
-
-- Own actual accounting, QuickBooks, invoicing, payments, charge codes, revenue recognition support, reconciliation, and financial actuals.
-- Emit `finance.preaward_review.started`, `finance.charge_code_plan.created`, `finance.quickbooks_mapping.pending`, and invoice/burn-rate events to Hub audit ledger.
-- Expose charge code and PoP boundary read APIs consumed by Governance and Contracts through Hub once Finance is live.
+- Own pricing math, rate snapshots, BOE, scenarios, proposed price, price volume, Green Team approval, timekeeping, corrections, approvals, labor distribution, accounting integrations, invoicing, payments, charge codes, reconciliation, and financial actuals.
+- Emit `finance.pricing_request.created`, `finance.pricing_scenario.created`, `finance.green_team.approved`, `finance.pricing_volume.exported`, `finance.charge_code_plan.created`, and `finance.labor_distribution.posted` events to Hub.
+- Produce immutable approved pricing packages, timekeeping readiness snapshots, labor-distribution hashes, and accounting export references.
+- Consume work authorization from Contracts & Delivery; never invent contract, CLIN, period, or personnel authorization.
 - QuickBooks handoff is a Hub-proxied call — Finance never holds the OAuth token directly.
 - Push invoice aging, burn rate vs. funded value, and rate alerts to BizOps.
 
 ## Proposal
-
 - Consume Growth & Capture and Governance references for kickoff.
-- Request pricing through a standard handoff packet to PricingOS.
-- Attach only approved PricingOS price-volume references and hashes.
+- Request pricing through a standard handoff packet to Finance.
+- Attach only approved Finance price-volume references and hashes.
 - Emit submission, receipt, award/loss, and post-award handoff events.
 - Push submission status, deadlines, and awarded/lost outcome to BizOps.
 
-## Contracts (planned — splits from Governance)
+## Contracts & Delivery
 
-- Own awarded contract lifecycle: CLINs, mods, PoP, CDRLs, key personnel, teaming parties, CPARS, closeout.
+- Own awarded contract lifecycle: CLINs, mods, periods of performance, work authorizations, CDRLs, key personnel, teaming parties, CPARS, and closeout.
 - Read invoice references and charge code validation from Finance through Hub.
 - Push award notice, mod events, and PoP milestones to BizOps.
 - Governance interim registry migrates into Contracts on split authorization.

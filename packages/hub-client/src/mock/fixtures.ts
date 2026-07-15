@@ -47,7 +47,7 @@ export const FIXTURE_ENTITLEMENTS: HubAppEntitlement[] = [
   { appKey: "qms", organizationId: FIXTURE_ORG_ACME.id, status: "active" },
   { appKey: "governance", organizationId: FIXTURE_ORG_ACME.id, status: "active" },
   { appKey: "growth-capture", organizationId: FIXTURE_ORG_ACME.id, status: "active" },
-  { appKey: "pricing", organizationId: FIXTURE_ORG_ACME.id, status: "active" },
+  { appKey: "finance", organizationId: FIXTURE_ORG_ACME.id, status: "active" },
   { appKey: "proposal", organizationId: FIXTURE_ORG_ACME.id, status: "active" },
   { appKey: "bizops", organizationId: FIXTURE_ORG_ACME.id, status: "active" },
   { appKey: "contracts-delivery", organizationId: FIXTURE_ORG_ACME.id, status: "active" },

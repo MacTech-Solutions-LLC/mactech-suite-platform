@@ -9,8 +9,8 @@ import {
 
 const baseReference = {
   sourceAppKey: "proposal",
-  owningAppKey: "pricing",
-  objectType: "pricing.locked_version",
+  owningAppKey: "finance",
+  objectType: "finance.locked_pricing_version",
   objectId: "price-volume-123",
   objectHash: "sha256:1234567890abcdef",
 };

@@ -1,9 +1,9 @@
 import { enforceAppAccess } from "./shared";
 
-/** PricingOS satellite (appKey: pricing). */
-export async function pricingProtectedRoute(request: Request) {
+/** Finance satellite (appKey: finance). */
+export async function financeProtectedRoute(request: Request) {
   const snapshot = await enforceAppAccess(
-    "pricing",
+    "finance",
     request.headers.get("x-clerk-user-id") ?? "",
     request.headers.get("x-clerk-org-id") ?? undefined,
   );

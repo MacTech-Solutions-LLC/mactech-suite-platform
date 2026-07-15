@@ -11,9 +11,7 @@ Hub is the MacTech Suite workflow command center. It coordinates workflow state,
 | Tier | Surface | Build status |
 | --- | --- | --- |
 | T0 | Hub / Command Center | **Active.** Suite control plane: identity, tenancy, entitlements, app registry, audit ledger, Hub-centric OAuth connector broker. MacTech-internal only — tenants never access Hub directly. |
-| T1 | BizOps, Growth & Capture, Governance, PricingOS, Proposal, QMS, Training | **Active.** Domain authority layer — each app owns records only inside its bounded domain. |
-| T1 (planned) | Finance | Actual accounting, QuickBooks, invoicing, payments, charge codes, revenue recognition, and actuals. Starts as an integration/module until Brian authorizes a standalone app. |
-| T1 (planned) | Contracts | Splits from Governance before first tenant onboards with active contracts. Interim: Governance holds Awarded Contracts Registry. |
+| T1 | BizOps, Growth & Capture, Governance, Finance, Proposal, Contracts & Delivery, QMS, Training | **Active.** Domain authority layer — each app owns records only inside its bounded domain. |
 | T2 | Client Portal, Workspace Gateway | **Active.** Display & intake layer. Reads authoritative data; owns no core business records. Workspace Gateway is the OAuth setup surface for tenants; Hub executes and stores tokens. |
 | T3 | EnclaveWatch, Cyber Range, CUI Vault, MacKali (pending) | **Excluded from current build.** Hub holds API channels for references and audit events only — no implementation authorized. |
 
@@ -25,12 +23,11 @@ Hub is the MacTech Suite workflow command center. It coordinates workflow state,
 | Company profile, offers, campaigns, leads, team records, SAM registrations, reps/certs | BizOps (T1) |
 | Opportunity discovery, solicitation intake, qualification, pursuit planning, Capture Package | Growth & Capture (T1) |
 | Governance packets, bid/no-bid decisions, awarded contracts registry (interim) | Governance (T1) |
-| Pricing math, rate snapshots, BOE, scenarios, proposed price, price volume, and Green Team approval | PricingOS (T1) — appKey `pricing` |
-| Actual accounting, QuickBooks, invoicing, payments, charge codes, revenue recognition support, reconciliation, and financial actuals | Finance (T1 planned/module) — appKey `finance` only when the Finance surface is authorized |
+| Pricing math, rate snapshots, BOE, scenarios, proposed price, price volume, Green Team approval, timekeeping, labor distribution, accounting integrations, invoicing, payments, charge codes, reconciliation, and financial actuals | Finance (T1) — appKey `finance` |
 | Proposal workspace, drafts, submission package coordination | Proposal (T1) |
 | Quality records, procedures, controls, corrective actions | QMS (T1) |
 | Training catalog, assignments, completion records | Training (T1) |
-| Awarded contract lifecycle, CLINs, mods, deliverables, CPARS | Contracts (T1, planned) |
+| Awarded contract lifecycle, CLINs, periods of performance, work authorization, mods, deliverables, CPARS | Contracts & Delivery (T1) |
 | Tenant-facing control panel, onboarding, suite status aggregation | Client Portal (T2) |
 | OAuth setup UI, Google/Drive/Calendar connector, AI assistant actions | Workspace Gateway (T2) |
 | Secure evidence, POA&M, CUI, cyber exercises | T3 satellites — API-channel only until build authorized |
@@ -58,8 +55,7 @@ Hub proxies the external call and returns only what the satellite is authorized 
 
 | Satellite | What it requests through Hub |
 | --- | --- |
-| Finance | QuickBooks actuals proxy (own tenant), timekeeping actuals via Hub |
-| PricingOS | Approved rate snapshots, proposed pricing package references, and pricing-to-proposal export status |
+| Finance | QuickBooks actuals proxy (own tenant), approved rate snapshots, proposed pricing package references, timekeeping, labor distribution, and pricing-to-proposal export status |
 | Contracts | Invoice references (read-only), PoP financial boundaries |
 | Governance | Charge code validation, PoP boundaries (read-only, no invoice visibility) |
 | Workspace Gateway | Google Drive/Gmail artifact send-receive; Calendar propose-first via Hub broker |
@@ -83,7 +79,7 @@ All T1 apps push status events to BizOps for tenant dashboard aggregation.
 | Growth & Capture | Pursuit stage, bid/no-bid decisions, PWin |
 | Proposal | Submission status, deadlines, awarded/lost outcome |
 | Contracts | Award notice, mod events, PoP milestones |
-| PricingOS | Pricing request status, Green Team approval, approved price-volume reference |
+| Finance | Pricing request status, Green Team approval, approved price-volume reference |
 | Finance | Invoice aging, burn rate vs. funded value, actuals and charge-code alerts |
 | Governance | Approval events, obligation flags, clause exceptions |
 | QMS | Exceptions only — failed audit, overdue CAPA |
@@ -128,7 +124,7 @@ BizOps (lead/campaign) → Growth & Capture (opportunity → pursuit → bid/no-
         ↓
 Governance (bid/no-bid approval)
         ↓
-Growth & Capture → Proposal + PricingOS (parallel handoff)
+Growth & Capture → Proposal + Finance (parallel handoff)
         ↓
 Proposal → Governance (contract review)
         ↓

@@ -243,7 +243,7 @@ export type FrcsCyberScopeProfile = {
   sitewideCyberRequested?: boolean;
   optionalAddOns?: string[];
   governanceReadinessRef?: string;
-  pricingVersionRef?: string;
+  financePricingVersionRef?: string;
   evidenceRefs?: string[];
   boundaryStatement: string;
 };
@@ -257,7 +257,7 @@ export type SuiteAppKey =
   | "capture"
   | "governance"
   | "proposal"
-  | "pricing"
+  | "finance"
   | "finance"
   | "qms"
   | "training"
@@ -281,7 +281,7 @@ export type SuiteWorkflowGateKey =
   | "eligibility_readiness"
   | "bid_no_bid"
   | "technical_feasibility"
-  | "pricing_finance_readiness"
+  | "finance_readiness"
   | "proposal_package_readiness"
   | "executive_approval"
   | "submission_receipt_capture"
@@ -317,8 +317,8 @@ export type SuiteHandoffType =
   | "capture_to_proposal_kickoff"
   | "governance_to_bid_no_bid"
   | "governance_to_proposal_guidance"
-  | "proposal_to_pricing_request"
-  | "pricing_to_proposal_approved_volume"
+  | "proposal_to_finance_pricing_request"
+  | "finance_to_proposal_approved_volume"
   | "proposal_to_governance_award_loss"
   | "proposal_to_finance_preaward"
   | "award_to_governance_contract"

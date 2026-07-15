@@ -128,7 +128,7 @@ export const ORG_PERMISSIONS = {
   QMS_WRITE: "org:qms:write",
   QMS_REVIEW_READ: "org:qms:review:read",
   QMS_REVIEW_APPROVE: "org:qms:review:approve",
-  // Finance (formerly Pricing)
+  // Finance
   FINANCE_READ: "org:finance:read",
   FINANCE_WRITE: "org:finance:write",
   FINANCE_RATES_READ: "org:finance:rates:read",
@@ -136,6 +136,11 @@ export const ORG_PERMISSIONS = {
   FINANCE_INVOICE_READ: "org:finance:invoice:read",
   FINANCE_INVOICE_CREATE: "org:finance:invoice:create",
   FINANCE_INVOICE_APPROVE: "org:finance:invoice:approve",
+  FINANCE_TIME_ENTER: "finance:time:enter",
+  FINANCE_TIME_APPROVE: "finance:time:approve",
+  FINANCE_CHARGE_CODES_MANAGE: "finance:charge_codes:manage",
+  FINANCE_LABOR_DISTRIBUTION_POST: "finance:labor_distribution:post",
+  FINANCE_ACCOUNTING_EXPORT: "finance:accounting:export",
   // Contracts (Contracts & Delivery) — org-level visibility; per-contract
   // detail is gated by the contract:* namespace below.
   CONTRACTS_READ: "org:contracts:read",
@@ -503,13 +508,18 @@ export const CUSTOMER_ROLE_DEFINITIONS: Array<{
   {
     key: "finance_manager",
     name: "Finance Manager",
-    description: "Owns rates and invoicing. Connector management stays owner-only.",
+    description: "Owns rates, timekeeping controls, labor distribution, accounting exports, and invoicing. Connector management stays owner-only.",
     permissions: [
       ORG_PERMISSIONS.DASHBOARD_VIEW,
       ORG_PERMISSIONS.FINANCE_READ,
       ORG_PERMISSIONS.FINANCE_RATES_WRITE,
       ORG_PERMISSIONS.FINANCE_INVOICE_CREATE,
       ORG_PERMISSIONS.FINANCE_INVOICE_APPROVE,
+      ORG_PERMISSIONS.FINANCE_TIME_ENTER,
+      ORG_PERMISSIONS.FINANCE_TIME_APPROVE,
+      ORG_PERMISSIONS.FINANCE_CHARGE_CODES_MANAGE,
+      ORG_PERMISSIONS.FINANCE_LABOR_DISTRIBUTION_POST,
+      ORG_PERMISSIONS.FINANCE_ACCOUNTING_EXPORT,
       ORG_PERMISSIONS.REPORTS_EXPORT,
     ],
   },

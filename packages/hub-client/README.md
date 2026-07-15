@@ -109,7 +109,7 @@ Per-app consumer patterns in `examples/`:
 - `qms-consumer.ts`
 - `governance-consumer.ts`
 - `growth-capture-consumer.ts`
-- `pricing-consumer.ts`
+- `finance-consumer.ts`
 - `proposal-consumer.ts`
 - `portal-consumer.ts`
 - `live-mode-satellite.ts` — env-only live mode factory + protected route stub
