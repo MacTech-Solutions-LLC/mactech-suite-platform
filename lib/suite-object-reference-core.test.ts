@@ -48,6 +48,17 @@ test("mutable references do not require object hash", () => {
   );
 });
 
+test("Workspace source items are valid Gateway-owned references", () => {
+  assert.doesNotThrow(() =>
+    validateSuiteObjectReferenceShape({
+      sourceAppKey: "workspace-gateway",
+      owningAppKey: "workspace-gateway",
+      objectType: "workspace.source_item",
+      objectId: "docs:document:abc123",
+    }),
+  );
+});
+
 test("replacement is required when deprecating", () => {
   assert.throws(
     () => validateSuiteObjectReferenceShape({ ...baseReference, deprecatedAt: new Date() }),
