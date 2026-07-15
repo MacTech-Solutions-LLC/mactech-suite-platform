@@ -11,7 +11,7 @@ Hub is the MacTech Suite workflow command center. It coordinates workflow state,
 | Tier | Surface | Build status |
 | --- | --- | --- |
 | T0 | Hub / Command Center | **Active.** Suite control plane: identity, tenancy, entitlements, app registry, audit ledger, Hub-centric OAuth connector broker. MacTech-internal only — tenants never access Hub directly. |
-| T1 | BizOps, Growth & Capture, Governance, Finance, Proposal, Contracts & Delivery, QMS, Training | **Active.** Domain authority layer — each app owns records only inside its bounded domain. |
+| T1 | BizOps, Growth & Capture, Governance, PricingOS, Finance, Proposal, Contracts & Delivery, QMS, Training | **Active.** Domain authority layer — each app owns records only inside its bounded domain. |
 | T2 | Client Portal, Workspace Gateway | **Active.** Display & intake layer. Reads authoritative data; owns no core business records. Workspace Gateway is the OAuth setup surface for tenants; Hub executes and stores tokens. |
 | T3 | EnclaveWatch, Cyber Range, CUI Vault, MacKali (pending) | **Excluded from current build.** Hub holds API channels for references and audit events only — no implementation authorized. |
 
@@ -23,7 +23,8 @@ Hub is the MacTech Suite workflow command center. It coordinates workflow state,
 | Company profile, offers, campaigns, leads, team records, SAM registrations, reps/certs | BizOps (T1) |
 | Opportunity discovery, solicitation intake, qualification, pursuit planning, Capture Package | Growth & Capture (T1) |
 | Governance packets, bid/no-bid decisions, awarded contracts registry (interim) | Governance (T1) |
-| Pricing math, rate snapshots, BOE, scenarios, proposed price, price volume, Green Team approval, timekeeping, labor distribution, accounting integrations, invoicing, payments, charge codes, reconciliation, and financial actuals | Finance (T1) — appKey `finance` |
+| Pricing math, rate snapshots, BOE, scenarios, proposed price, price volume, cost realism, Green Team approval | PricingOS (T1) — appKey `pricing` |
+| Timekeeping, labor distribution, accounting integrations, invoicing, payments, charge codes, reconciliation, and financial actuals | Finance (T1) — appKey `finance` |
 | Proposal workspace, drafts, submission package coordination | Proposal (T1) |
 | Quality records, procedures, controls, corrective actions | QMS (T1) |
 | Training catalog, assignments, completion records | Training (T1) |
@@ -55,7 +56,8 @@ Hub proxies the external call and returns only what the satellite is authorized 
 
 | Satellite | What it requests through Hub |
 | --- | --- |
-| Finance | QuickBooks actuals proxy (own tenant), approved rate snapshots, proposed pricing package references, timekeeping, labor distribution, and pricing-to-proposal export status |
+| PricingOS | Governance-approved rate-card references and pricing package export status |
+| Finance | QuickBooks actuals proxy (own tenant), approved pricing assumptions by immutable reference, timekeeping, and labor distribution |
 | Contracts | Invoice references (read-only), PoP financial boundaries |
 | Governance | Charge code validation, PoP boundaries (read-only, no invoice visibility) |
 | Workspace Gateway | Google Drive/Gmail artifact send-receive; Calendar propose-first via Hub broker |
@@ -79,7 +81,7 @@ All T1 apps push status events to BizOps for tenant dashboard aggregation.
 | Growth & Capture | Pursuit stage, bid/no-bid decisions, PWin |
 | Proposal | Submission status, deadlines, awarded/lost outcome |
 | Contracts | Award notice, mod events, PoP milestones |
-| Finance | Pricing request status, Green Team approval, approved price-volume reference |
+| PricingOS | Pricing request status, Green Team approval, approved price-volume reference |
 | Finance | Invoice aging, burn rate vs. funded value, actuals and charge-code alerts |
 | Governance | Approval events, obligation flags, clause exceptions |
 | QMS | Exceptions only — failed audit, overdue CAPA |
@@ -124,18 +126,22 @@ BizOps (lead/campaign) → Growth & Capture (opportunity → pursuit → bid/no-
         ↓
 Governance (bid/no-bid approval)
         ↓
-Growth & Capture → Proposal + Finance (parallel handoff)
+Growth & Capture → Proposal + PricingOS (parallel handoff)
         ↓
 Proposal → Governance (contract review)
         ↓
-Proposal / award → Finance (pre-award assumptions become accounting setup)
+PricingOS → Proposal (immutable approved price volume)
         ↓
-Contracts* (award → CLINs, mods, deliverables, CPARS)
+PricingOS + Proposal / award → Finance (approved assumptions become accounting setup)
+        ↓
+Proposal → Contracts (award → CLINs, mods, work authorizations, deliverables, CPARS)
+        ↓
+Contracts → Governance (obligation baseline and closeout record references)
         ↓
 Client Portal (tenant-facing milestone visibility)
-
-* Interim: Governance holds awarded contracts registry until Contracts splits.
 ```
+
+Governance remains authoritative for clause interpretation, obligations, risk acceptance, waivers, and retention policy. Contracts & Delivery owns execution of the awarded contract lifecycle. Hub stores the workflow status and references between those authorities; it does not become either authority.
 
 ## Workflow Templates
 
@@ -173,6 +179,33 @@ Hub dashboard status renders from a compact read model:
 
 Allowed health states: `healthy`, `watch`, `blocked`, `waived`, `late`, `submitted`, `won`, `lost`, `postaward`, `closed`.
 
+## Operational Gate Read Model
+
+`buildSuiteWorkflowReadModel()` compiles the selected template, live opportunity indicators, and app-reported gate observations into a dashboard-ready workflow instance. `deriveWorkflowDashboardStatus()` then computes the current owner, current gate, workflow health, blockers, pending approvals, and next due date without mutating any downstream record.
+
+The read model enforces these rules before a workflow can be presented as complete or waived:
+
+- required gates cannot be marked `not_required`;
+- completed gates must have no open blocking dependencies;
+- every required human approver must have an approved decision with actor, timestamp, and decision identity;
+- AI actors cannot approve, reject, or waive a gate;
+- waivers require a human approver, reason, timestamp, and linked risk record;
+- runtime FCI, CUI, CDI, DFARS cyber, CMMC, SPRS, DD254, classified, cleared-personnel, or secure-enclave indicators add Patrick and Brian to the applicable gates even when the original template was not classified as cyber-heavy;
+- quality-heavy and major-infrastructure indicators add James and Brian to technical and proposal-readiness gates.
+
+Contracts & Delivery is a first-class route on every template because the workflow contract extends through award, performance, and closeout. Quick commercial quotes may use a lightweight Proposal quote record, but PricingOS still owns the math and Finance still owns actuals.
+
+## Template Registry API
+
+Authorized satellite services can read the versioned registry from:
+
+```text
+GET /api/hub/workflows/templates
+GET /api/hub/workflows/templates?key=subcontract_rfq
+```
+
+Requests use the existing Hub service token and `X-MacTech-Source-App` header. The endpoint is read-only and returns the contract version, template definitions, and cross-app route map. It does not create workflow state or write downstream data.
+
 ## App Wiring Boundary
 
-This vNext package is Hub-only. Downstream apps wire to it later by emitting references, snapshots, handoff packets, and audit events. They must not receive deep rewrites from this Hub doctrine update.
+This vNext.2 package remains Hub-owned coordination infrastructure. Downstream apps wire to it later by reading the versioned registry and emitting references, snapshots, handoff packets, and audit events. They must not receive deep rewrites from this Hub doctrine update.

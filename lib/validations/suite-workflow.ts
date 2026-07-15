@@ -6,7 +6,9 @@ export const suiteAppKeySchema = z.enum([
   "capture",
   "governance",
   "proposal",
+  "pricing",
   "finance",
+  "contracts",
   "qms",
   "training",
   "codex_vault",
@@ -17,7 +19,7 @@ export const suiteWorkflowGateKeySchema = z.enum([
   "eligibility_readiness",
   "bid_no_bid",
   "technical_feasibility",
-  "finance_readiness",
+  "pricing_finance_readiness",
   "proposal_package_readiness",
   "executive_approval",
   "submission_receipt_capture",
@@ -33,10 +35,20 @@ export const suiteHandoffTypeSchema = z.enum([
   "capture_to_proposal_kickoff",
   "governance_to_bid_no_bid",
   "governance_to_proposal_guidance",
-  "proposal_to_finance_pricing_request",
-  "finance_to_proposal_approved_volume",
+  "capture_to_pricing_request",
+  "governance_to_finance_preaward",
+  "proposal_to_pricing_request",
+  "pricing_to_proposal_approved_volume",
+  "pricing_to_governance_approved_quote",
+  "pricing_to_finance_award_assumptions",
   "proposal_to_governance_award_loss",
   "proposal_to_finance_preaward",
+  "proposal_to_contracts_award_handoff",
+  "governance_to_contracts_award_package",
+  "contracts_to_governance_obligation_baseline",
+  "contracts_to_finance_work_authorization",
+  "finance_to_contracts_invoice_reference",
+  "contracts_to_governance_closeout_record",
   "award_to_governance_contract",
   "award_to_finance_setup",
   "award_to_qms_workspace",
@@ -68,6 +80,50 @@ export const suiteWorkflowHealthSchema = z.enum([
   "postaward",
   "closed",
 ]);
+
+export const suiteWorkflowGateStatusSchema = z.enum([
+  "pending",
+  "in_progress",
+  "blocked",
+  "completed",
+  "waived",
+  "not_required",
+]);
+
+export const suiteWorkflowOutcomeSchema = z.enum(["open", "submitted", "won", "lost", "postaward", "closed"]);
+
+export const suiteWorkflowIndicatorSchema = z.enum([
+  "fci",
+  "cui",
+  "cdi",
+  "dfars_cyber",
+  "cmmc",
+  "sprs",
+  "dd254",
+  "classified_work",
+  "cleared_personnel",
+  "secure_enclave",
+  "quality_heavy",
+  "major_infrastructure",
+  "low_margin_high_risk",
+  "insurance_bonding_gap",
+]);
+
+export const suiteWorkflowApprovalStateSchema = z.object({
+  approver: suiteApproverKeySchema,
+  status: z.enum(["required", "approved", "rejected"]),
+  decidedAt: z.string().datetime().nullable(),
+  decisionBy: z.string().min(1).max(200).nullable(),
+  actorType: z.enum(["human", "ai", "system"]),
+});
+
+export const suiteWorkflowWaiverSchema = z.object({
+  reason: z.string().min(1).max(2000),
+  approver: suiteApproverKeySchema,
+  approvedAt: z.string().datetime(),
+  linkedRiskRecordId: z.string().min(1).max(300),
+  actorType: z.enum(["human", "ai", "system"]),
+});
 
 export const suiteAIProvenanceSchema = z.object({
   sourceDocument: z.string().min(1).max(500),
@@ -104,6 +160,33 @@ export const suiteWorkflowDashboardStatusSchema = z.object({
   openBlockingDependencies: z.array(z.string().min(1).max(300)),
   requiredApprovals: z.array(suiteApproverKeySchema),
   nextDueAt: z.string().datetime().optional().nullable(),
+  lastEventType: z.string().min(1).max(300),
+  lastEventAt: z.string().datetime(),
+});
+
+export const suiteWorkflowGateStateSchema = z.object({
+  key: suiteWorkflowGateKeySchema,
+  ownerApp: suiteAppKeySchema,
+  owner: suiteApproverKeySchema,
+  approver: suiteApproverKeySchema,
+  required: z.boolean(),
+  hardTriggers: z.array(z.string().min(1).max(300)).optional(),
+  status: suiteWorkflowGateStatusSchema,
+  requiredApprovers: z.array(suiteApproverKeySchema).min(1),
+  approvals: z.array(suiteWorkflowApprovalStateSchema),
+  blockingDependencies: z.array(z.string().min(1).max(300)),
+  dueAt: z.string().datetime().nullable(),
+  completedAt: z.string().datetime().nullable(),
+  waiver: suiteWorkflowWaiverSchema.nullable(),
+});
+
+export const suiteWorkflowInstanceReadModelSchema = z.object({
+  workflowInstanceId: z.string().min(1).max(200),
+  suiteObjectReferenceId: z.string().min(1).max(200),
+  templateKey: z.enum(WORKFLOW_TEMPLATE_KEYS),
+  indicators: z.array(suiteWorkflowIndicatorSchema),
+  gates: z.array(suiteWorkflowGateStateSchema).min(1),
+  outcome: suiteWorkflowOutcomeSchema,
   lastEventType: z.string().min(1).max(300),
   lastEventAt: z.string().datetime(),
 });
