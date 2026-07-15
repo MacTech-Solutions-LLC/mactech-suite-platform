@@ -20,8 +20,11 @@ export const auditIngestSchema = z.object({
   appKey: z.string().min(1).max(60).optional(),
   sourceAppKey: z.string().min(1).max(60).optional(),
   eventType: z.string().min(1).max(120),
-  eventCategory: AuditCategoryEnum.default("system"),
-  severity: AuditSeverityEnum.default("info"),
+  // .catch(): an unrecognized category/severity from a sibling app degrades to
+  // the fallback instead of rejecting the whole event (mirrors
+  // normalizeAuditCategory/normalizeAuditSeverity in lib/hub-audit.ts).
+  eventCategory: AuditCategoryEnum.default("system").catch("system"),
+  severity: AuditSeverityEnum.default("info").catch("info"),
   action: z.string().min(1).max(500),
   actorHubUserId: z.string().optional().nullable(),
   actorServiceId: z.string().optional().nullable(),
