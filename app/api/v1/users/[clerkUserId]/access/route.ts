@@ -17,6 +17,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { requireApiKey } from "@/lib/api-auth";
+import { verifyHubServiceRequest } from "@/lib/hub-authority";
 import { consumeRateLimit, rate429Response } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -26,14 +27,24 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { clerkUserId: string } },
 ) {
-  const auth = await requireApiKey(request, "user_access_read");
-  if (!auth.ok) return auth.response;
+  const apiKeyAuth = await requireApiKey(request, "user_access_read");
+  let rateLimitIdentity: string;
+  if (!apiKeyAuth.ok) {
+    const serviceAuth = await verifyHubServiceRequest(
+      request,
+      request.headers.get("x-mactech-source-app"),
+    );
+    if (!serviceAuth.ok) return apiKeyAuth.response;
+    rateLimitIdentity = serviceAuth.keyId;
+  } else {
+    rateLimitIdentity = apiKeyAuth.apiKeyId ?? apiKeyAuth.apiKeyName;
+  }
 
   // 600/min per key — JIT auth in sibling apps may call this on every
   // request before the local user row is cached. Tight enough to bound
   // one buggy app, generous enough for normal traffic.
   const rl = consumeRateLimit({
-    key: `access:${auth.apiKeyId ?? auth.apiKeyName}`,
+    key: `access:${rateLimitIdentity}`,
     limit: 600,
     windowMs: 60_000,
   });
