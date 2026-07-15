@@ -258,7 +258,7 @@ export type SuiteAppKey =
   | "governance"
   | "proposal"
   | "finance"
-  | "finance"
+  | "contracts"
   | "qms"
   | "training"
   | "codex_vault";
@@ -317,10 +317,21 @@ export type SuiteHandoffType =
   | "capture_to_proposal_kickoff"
   | "governance_to_bid_no_bid"
   | "governance_to_proposal_guidance"
+  | "capture_to_finance_pricing_request"
+  | "governance_to_finance_preaward"
   | "proposal_to_finance_pricing_request"
   | "finance_to_proposal_approved_volume"
+  | "finance_to_governance_approved_quote"
+  | "finance_to_governance_award_loss"
   | "proposal_to_governance_award_loss"
   | "proposal_to_finance_preaward"
+  | "proposal_to_contracts_award_handoff"
+  | "finance_to_contracts_award_handoff"
+  | "governance_to_contracts_award_package"
+  | "contracts_to_governance_obligation_baseline"
+  | "contracts_to_finance_work_authorization"
+  | "finance_to_contracts_invoice_reference"
+  | "contracts_to_governance_closeout_record"
   | "award_to_governance_contract"
   | "award_to_finance_setup"
   | "award_to_qms_workspace"
@@ -364,6 +375,75 @@ export type SuiteWorkflowDashboardStatus = {
   openBlockingDependencies: string[];
   requiredApprovals: SuiteApproverKey[];
   nextDueAt: string | null;
+  lastEventType: string;
+  lastEventAt: string;
+};
+
+export type SuiteWorkflowGateStatus =
+  | "pending"
+  | "in_progress"
+  | "blocked"
+  | "completed"
+  | "waived"
+  | "not_required";
+
+export type SuiteWorkflowOutcome = "open" | "submitted" | "won" | "lost" | "postaward" | "closed";
+
+export type SuiteWorkflowIndicator =
+  | "fci"
+  | "cui"
+  | "cdi"
+  | "dfars_cyber"
+  | "cmmc"
+  | "sprs"
+  | "dd254"
+  | "classified_work"
+  | "cleared_personnel"
+  | "secure_enclave"
+  | "quality_heavy"
+  | "major_infrastructure"
+  | "low_margin_high_risk"
+  | "insurance_bonding_gap";
+
+export type SuiteWorkflowApprovalState = {
+  approver: SuiteApproverKey;
+  status: "required" | "approved" | "rejected";
+  decidedAt: string | null;
+  decisionBy: string | null;
+  actorType: "human" | "ai" | "system";
+};
+
+export type SuiteWorkflowWaiver = {
+  reason: string;
+  approver: SuiteApproverKey;
+  approvedAt: string;
+  linkedRiskRecordId: string;
+  actorType: "human" | "ai" | "system";
+};
+
+export type SuiteWorkflowGateState = {
+  key: SuiteWorkflowGateKey;
+  ownerApp: SuiteAppKey;
+  owner: SuiteApproverKey;
+  approver: SuiteApproverKey;
+  required: boolean;
+  hardTriggers?: string[];
+  status: SuiteWorkflowGateStatus;
+  requiredApprovers: SuiteApproverKey[];
+  approvals: SuiteWorkflowApprovalState[];
+  blockingDependencies: string[];
+  dueAt: string | null;
+  completedAt: string | null;
+  waiver: SuiteWorkflowWaiver | null;
+};
+
+export type SuiteWorkflowInstanceReadModel = {
+  workflowInstanceId: string;
+  suiteObjectReferenceId: string;
+  templateKey: SuiteWorkflowTemplateKey;
+  indicators: SuiteWorkflowIndicator[];
+  gates: SuiteWorkflowGateState[];
+  outcome: SuiteWorkflowOutcome;
   lastEventType: string;
   lastEventAt: string;
 };

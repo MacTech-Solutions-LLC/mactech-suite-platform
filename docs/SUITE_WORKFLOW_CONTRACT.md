@@ -130,12 +130,14 @@ Proposal → Governance (contract review)
         ↓
 Proposal / award → Finance (pre-award assumptions become accounting setup)
         ↓
-Contracts* (award → CLINs, mods, deliverables, CPARS)
+Proposal or Finance → Contracts (award → CLINs, mods, work authorizations, deliverables, CPARS)
+        ↓
+Contracts → Governance (obligation baseline and closeout record references)
         ↓
 Client Portal (tenant-facing milestone visibility)
-
-* Interim: Governance holds awarded contracts registry until Contracts splits.
 ```
+
+Governance remains authoritative for clause interpretation, obligations, risk acceptance, waivers, and retention policy. Contracts & Delivery owns execution of the awarded contract lifecycle. Hub stores the workflow status and references between those authorities; it does not become either authority.
 
 ## Workflow Templates
 
@@ -173,6 +175,33 @@ Hub dashboard status renders from a compact read model:
 
 Allowed health states: `healthy`, `watch`, `blocked`, `waived`, `late`, `submitted`, `won`, `lost`, `postaward`, `closed`.
 
+## Operational Gate Read Model
+
+`buildSuiteWorkflowReadModel()` compiles the selected template, live opportunity indicators, and app-reported gate observations into a dashboard-ready workflow instance. `deriveWorkflowDashboardStatus()` then computes the current owner, current gate, workflow health, blockers, pending approvals, and next due date without mutating any downstream record.
+
+The read model enforces these rules before a workflow can be presented as complete or waived:
+
+- required gates cannot be marked `not_required`;
+- completed gates must have no open blocking dependencies;
+- every required human approver must have an approved decision with actor, timestamp, and decision identity;
+- AI actors cannot approve, reject, or waive a gate;
+- waivers require a human approver, reason, timestamp, and linked risk record;
+- runtime FCI, CUI, CDI, DFARS cyber, CMMC, SPRS, DD254, classified, cleared-personnel, or secure-enclave indicators add Patrick and Brian to the applicable gates even when the original template was not classified as cyber-heavy;
+- quality-heavy and major-infrastructure indicators add James and Brian to technical and proposal-readiness gates.
+
+Contracts & Delivery is a first-class route on every template because the workflow contract extends through award, performance, and closeout. Quick commercial quotes use Finance-to-Contracts handoffs and do not invent Proposal records.
+
+## Template Registry API
+
+Authorized satellite services can read the versioned registry from:
+
+```text
+GET /api/hub/workflows/templates
+GET /api/hub/workflows/templates?key=subcontract_rfq
+```
+
+Requests use the existing Hub service token and `X-MacTech-Source-App` header. The endpoint is read-only and returns the contract version, template definitions, and cross-app route map. It does not create workflow state or write downstream data.
+
 ## App Wiring Boundary
 
-This vNext package is Hub-only. Downstream apps wire to it later by emitting references, snapshots, handoff packets, and audit events. They must not receive deep rewrites from this Hub doctrine update.
+This vNext.1 package remains Hub-owned coordination infrastructure. Downstream apps wire to it later by reading the versioned registry and emitting references, snapshots, handoff packets, and audit events. They must not receive deep rewrites from this Hub doctrine update.

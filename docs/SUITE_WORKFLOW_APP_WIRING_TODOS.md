@@ -4,8 +4,9 @@ This is the follow-on implementation queue. These items are intentionally not wi
 
 ## Hub
 
+- **Completed in vNext.1:** versioned template registry, Contracts app authority, runtime hard-trigger approvers, operational gate read model, blocker/waiver validation, dashboard status derivation, and authenticated template-registry API.
 - Persist `SuiteWorkflowTemplate`, `SuiteWorkflowInstance`, `SuiteDependency`, `SuiteApproval`, and `SuiteEvent` only after the contract has been reviewed and Brian authorizes schema work.
-- Add dashboard queries that transform workflow events into `SuiteWorkflowDashboardStatus`.
+- Add dashboard queries that hydrate the pure `SuiteWorkflowInstanceReadModel` from approved workflow events and references.
 - Add a workflow template selector that uses Growth & Capture and Governance recommendations without overriding their authority.
 - Require waiver reason, approver, timestamp, and linked risk record before any waived gate is displayed as acceptable.
 - Implement Hub-centric OAuth connector registry — Hub brokers and rotates all external tokens (QuickBooks, Google Workspace, timekeeping) per tenant. No satellite holds credentials.
@@ -46,6 +47,7 @@ This is the follow-on implementation queue. These items are intentionally not wi
 - Attach only approved Finance price-volume references and hashes.
 - Emit submission, receipt, award/loss, and post-award handoff events.
 - Push submission status, deadlines, and awarded/lost outcome to BizOps.
+- Reconcile existing Proposal readiness and submission work through a dedicated review PR before adopting the vNext.1 packet names.
 
 ## Contracts & Delivery
 
@@ -53,6 +55,10 @@ This is the follow-on implementation queue. These items are intentionally not wi
 - Read invoice references and charge code validation from Finance through Hub.
 - Push award notice, mod events, and PoP milestones to BizOps.
 - Governance interim registry migrates into Contracts on split authorization.
+- Consume `proposal_to_contracts_award_handoff` or `finance_to_contracts_award_handoff` plus `governance_to_contracts_award_package`.
+- Emit `contracts_to_finance_work_authorization`, `contracts_to_governance_obligation_baseline`, `finance_to_contracts_invoice_reference`, and `contracts_to_governance_closeout_record` packets.
+
+See `docs/SUITE_WORKFLOW_IMPLEMENTATION_SLICES.md` for the ordered acceptance criteria across Governance, Finance, Proposal, Contracts, and end-to-end pilots.
 
 ## QMS
 
