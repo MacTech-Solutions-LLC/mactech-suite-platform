@@ -1,11 +1,12 @@
-export const SUITE_WORKFLOW_CONTRACT_VERSION = "suite-workflow-contract-vnext.1";
+export const SUITE_WORKFLOW_CONTRACT_VERSION = "suite-workflow-contract-vnext.2";
 
 export const SUITE_APP_AUTHORITIES = {
   hub: "Users, organizations, roles, app access, entitlements, suite object graph, workflow coordination, and cross-app references.",
   capture: "Opportunity discovery, solicitation intake, and Capture Package generation.",
   governance: "Compliance, risk, readiness, clauses, flowdowns, contract truth, waivers, and retention posture.",
   proposal: "Proposal execution, volumes, reviews, submission package, and award/loss handoff.",
-  finance: "Pricing math, rates, BOE, scenarios, price volume, Green Team approval, timekeeping, actual accounting, QuickBooks, invoicing, payments, charge codes, and financial actuals.",
+  pricing: "Pricing math, rates, BOE, scenarios, price volume, cost realism, and Green Team approval.",
+  finance: "Actual accounting, QuickBooks, invoicing, payments, charge codes, financial actuals, and reconciliation.",
   contracts: "Awarded contract lifecycle, CLINs, modifications, periods of performance, work authorizations, deliverables, CPARS, and closeout execution.",
   qms: "Controlled documents, templates, SOPs, and quality records.",
   training: "Training requirements, assignments, completions, and evidence.",
@@ -35,7 +36,7 @@ export type SuiteWorkflowGateKey =
   | "eligibility_readiness"
   | "bid_no_bid"
   | "technical_feasibility"
-  | "finance_readiness"
+  | "pricing_finance_readiness"
   | "proposal_package_readiness"
   | "executive_approval"
   | "submission_receipt_capture"
@@ -73,16 +74,15 @@ export type SuiteHandoffType =
   | "capture_to_proposal_kickoff"
   | "governance_to_bid_no_bid"
   | "governance_to_proposal_guidance"
-  | "capture_to_finance_pricing_request"
+  | "capture_to_pricing_request"
   | "governance_to_finance_preaward"
-  | "proposal_to_finance_pricing_request"
-  | "finance_to_proposal_approved_volume"
-  | "finance_to_governance_approved_quote"
-  | "finance_to_governance_award_loss"
+  | "proposal_to_pricing_request"
+  | "pricing_to_proposal_approved_volume"
+  | "pricing_to_governance_approved_quote"
+  | "pricing_to_finance_award_assumptions"
   | "proposal_to_governance_award_loss"
   | "proposal_to_finance_preaward"
   | "proposal_to_contracts_award_handoff"
-  | "finance_to_contracts_award_handoff"
   | "governance_to_contracts_award_package"
   | "contracts_to_governance_obligation_baseline"
   | "contracts_to_finance_work_authorization"
@@ -122,7 +122,7 @@ export type SuiteWorkflowHandoffPacket = {
 export type SuiteWorkflowDashboardLane =
   | "active_pursuits"
   | "bid_no_bid_queue"
-  | "finance_pricing_reviews"
+  | "pricing_reviews"
   | "proposal_deadlines"
   | "governance_blockers"
   | "finance_setup_blockers"
@@ -254,7 +254,7 @@ const MINIMUM_GATE_KEYS: SuiteWorkflowGateKey[] = [
   "eligibility_readiness",
   "bid_no_bid",
   "technical_feasibility",
-  "finance_readiness",
+  "pricing_finance_readiness",
   "proposal_package_readiness",
   "executive_approval",
   "submission_receipt_capture",
@@ -294,19 +294,23 @@ export const SUITE_WORKFLOW_TEMPLATES: Record<SuiteWorkflowTemplateKey, SuiteWor
     "capture",
     "governance",
     "proposal",
+    "pricing",
     "finance",
     "contracts",
   ]),
   subcontract_rfq: template("subcontract_rfq", "Subcontractor RFQ/RFP", "capture", [
     "capture",
     "governance",
-    "finance",
     "proposal",
+    "pricing",
+    "finance",
     "contracts",
   ]),
-  quick_commercial_quote: template("quick_commercial_quote", "Quick commercial quote", "finance", [
+  quick_commercial_quote: template("quick_commercial_quote", "Quick commercial quote", "pricing", [
     "capture",
     "governance",
+    "proposal",
+    "pricing",
     "finance",
     "contracts",
   ]),
@@ -314,6 +318,7 @@ export const SUITE_WORKFLOW_TEMPLATES: Record<SuiteWorkflowTemplateKey, SuiteWor
     "capture",
     "governance",
     "proposal",
+    "pricing",
     "finance",
     "contracts",
   ]),
@@ -321,6 +326,7 @@ export const SUITE_WORKFLOW_TEMPLATES: Record<SuiteWorkflowTemplateKey, SuiteWor
     "capture",
     "governance",
     "proposal",
+    "pricing",
     "finance",
     "contracts",
   ]),
@@ -328,6 +334,7 @@ export const SUITE_WORKFLOW_TEMPLATES: Record<SuiteWorkflowTemplateKey, SuiteWor
     "capture",
     "governance",
     "proposal",
+    "pricing",
     "finance",
     "contracts",
   ]),
@@ -335,6 +342,7 @@ export const SUITE_WORKFLOW_TEMPLATES: Record<SuiteWorkflowTemplateKey, SuiteWor
     "capture",
     "governance",
     "proposal",
+    "pricing",
     "finance",
     "contracts",
   ]),
@@ -342,6 +350,7 @@ export const SUITE_WORKFLOW_TEMPLATES: Record<SuiteWorkflowTemplateKey, SuiteWor
     "capture",
     "governance",
     "proposal",
+    "pricing",
     "finance",
     "contracts",
   ]),
@@ -350,6 +359,7 @@ export const SUITE_WORKFLOW_TEMPLATES: Record<SuiteWorkflowTemplateKey, SuiteWor
     "governance",
     "codex_vault",
     "proposal",
+    "pricing",
     "finance",
     "contracts",
     "training",
@@ -359,6 +369,7 @@ export const SUITE_WORKFLOW_TEMPLATES: Record<SuiteWorkflowTemplateKey, SuiteWor
     "governance",
     "qms",
     "proposal",
+    "pricing",
     "finance",
     "contracts",
     "training",
@@ -368,6 +379,7 @@ export const SUITE_WORKFLOW_TEMPLATES: Record<SuiteWorkflowTemplateKey, SuiteWor
     "governance",
     "codex_vault",
     "proposal",
+    "pricing",
     "finance",
     "contracts",
   ]),
@@ -643,8 +655,8 @@ function ownerAppForGate(key: SuiteWorkflowGateKey): SuiteAppKey {
     case "bid_no_bid":
     case "technical_feasibility":
       return "governance";
-    case "finance_readiness":
-      return "finance";
+    case "pricing_finance_readiness":
+      return "pricing";
     case "proposal_package_readiness":
     case "submission_receipt_capture":
     case "award_loss_outcome":
@@ -658,7 +670,7 @@ function ownerAppForGate(key: SuiteWorkflowGateKey): SuiteAppKey {
 }
 
 function ownerForGate(key: SuiteWorkflowGateKey): SuiteApproverKey {
-  return key === "finance_readiness" || key === "executive_approval" ? "brian_macdonald" : approverForGate(key);
+  return key === "pricing_finance_readiness" || key === "executive_approval" ? "brian_macdonald" : approverForGate(key);
 }
 
 function approverForGate(key: SuiteWorkflowGateKey): SuiteApproverKey {
@@ -674,22 +686,25 @@ function approverForGate(key: SuiteWorkflowGateKey): SuiteApproverKey {
 function handoffsForRoute(routeApps: SuiteAppKey[]): SuiteHandoffType[] {
   const handoffs: SuiteHandoffType[] = ["capture_to_governance_screen", "governance_to_bid_no_bid"];
   if (routeApps.includes("proposal")) handoffs.push("capture_to_proposal_kickoff", "governance_to_proposal_guidance");
+  if (routeApps.includes("pricing")) {
+    handoffs.push(
+      routeApps.includes("proposal") ? "proposal_to_pricing_request" : "capture_to_pricing_request",
+      routeApps.includes("proposal") ? "pricing_to_proposal_approved_volume" : "pricing_to_governance_approved_quote",
+    );
+  }
   if (routeApps.includes("finance")) {
-    if (routeApps.includes("proposal")) {
-      handoffs.push("proposal_to_finance_pricing_request", "finance_to_proposal_approved_volume", "proposal_to_finance_preaward");
-    } else {
-      handoffs.push("capture_to_finance_pricing_request", "finance_to_governance_approved_quote", "governance_to_finance_preaward");
-    }
-    handoffs.push("award_to_finance_setup");
+    handoffs.push(
+      routeApps.includes("proposal") ? "proposal_to_finance_preaward" : "governance_to_finance_preaward",
+      "award_to_finance_setup",
+    );
+    if (routeApps.includes("pricing")) handoffs.push("pricing_to_finance_award_assumptions");
   }
   if (routeApps.includes("proposal")) {
     handoffs.push("proposal_to_governance_award_loss");
-  } else if (routeApps.includes("finance")) {
-    handoffs.push("finance_to_governance_award_loss");
   }
   if (routeApps.includes("contracts")) {
     handoffs.push(
-      routeApps.includes("proposal") ? "proposal_to_contracts_award_handoff" : "finance_to_contracts_award_handoff",
+      "proposal_to_contracts_award_handoff",
       "governance_to_contracts_award_package",
       "contracts_to_governance_obligation_baseline",
       "contracts_to_finance_work_authorization",
@@ -713,7 +728,7 @@ function dashboardLanesForRoute(routeApps: SuiteAppKey[]): SuiteWorkflowDashboar
     "award_loss_outcomes",
   ];
   if (routeApps.includes("proposal")) lanes.push("proposal_deadlines");
-  if (routeApps.includes("finance")) lanes.push("finance_pricing_reviews");
+  if (routeApps.includes("pricing")) lanes.push("pricing_reviews");
   if (routeApps.includes("finance")) lanes.push("finance_setup_blockers");
   if (routeApps.includes("codex_vault")) lanes.push("cyber_security_blockers");
   return Array.from(new Set(lanes));

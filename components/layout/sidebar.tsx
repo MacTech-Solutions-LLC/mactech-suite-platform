@@ -67,6 +67,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/command-center", label: "Command Center", icon: Compass },
+      { href: "/admin/workflows", label: "Suite Workflows", icon: Network },
       { href: "/admin/agents", label: "Agents", icon: Bot, badgeKey: "agentsAwaiting", badgeTone: "warning" },
       { href: "/admin/agents/triggers", label: "Scheduled Triggers", icon: Clock },
     ],

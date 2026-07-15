@@ -1,6 +1,6 @@
 # Suite Workflow Implementation Slices
 
-This is the ordered implementation plan for Finance, Governance, Proposal, and Contracts & Delivery after the Hub vNext.1 coordination contract. Each slice is independently reviewable, additive, and preserves the owning app as the source of truth.
+This is the ordered implementation plan for PricingOS, Finance, Governance, Proposal, and Contracts & Delivery after the Hub vNext.2 coordination contract. Each slice is independently reviewable, additive, and preserves the owning app as the source of truth.
 
 ## Foundation now available in Hub
 
@@ -33,27 +33,40 @@ Acceptance:
 - an incomplete gate returns an explicit blocker rather than advancing;
 - Proposal and Contracts can verify the referenced snapshot hash without copying the source record.
 
-## Slice 2 — Finance pricing, pre-award, and actuals workflow
+## Slice 2 — PricingOS pricing and Green Team workflow
 
-Finance owns proposed price and financial actuals. It does not invent awarded contract authority.
+PricingOS owns proposed price. It does not own financial actuals or awarded contract authority.
 
 Deliverables:
 
-1. Consume `proposal_to_finance_pricing_request` or `capture_to_finance_pricing_request` packets.
-2. Emit `finance.pricing_request.created`, `finance.pricing_scenario.created`, `finance.green_team.started`, `finance.green_team.approved`, and `finance.pricing_volume.exported`.
+1. Consume `proposal_to_pricing_request` or `capture_to_pricing_request` packets.
+2. Emit `pricing.request.created`, `pricing.scenario.created`, `pricing.green_team.started`, `pricing.green_team.approved`, and `pricing.volume.exported`.
 3. Produce immutable approved pricing-package and price-volume references with version, hash, Green Team approval, BOE summary, and human approval identity.
-4. Complete the pre-award finance checklist for customer/project mapping, charge-code plan, CLIN/SLIN mapping, billing assumptions, payment terms, direct labor, subcontractors, unallowables, reimbursables, travel/ODC, tax, and cashflow risk.
-5. Consume `contracts_to_finance_work_authorization`; reject time or actuals outside the authorized contract, CLIN, period, person, or charge code.
-6. Emit labor-distribution, invoice-reference, reconciliation, and closeout status events without exposing accounting credentials to satellite apps.
+4. Send approved pricing assumptions to Finance by immutable reference; do not copy editable calculation state.
 
 Acceptance:
 
-- Proposal can attach but cannot edit an approved Finance price volume;
-- Finance cannot activate a charge code without a Contracts work authorization;
+- Proposal can attach but cannot edit an approved PricingOS price volume;
 - pricing versions remain immutable after approval;
+
+## Slice 3 — Finance pre-award and actuals workflow
+
+Finance owns accounting readiness and actuals, not pricing math.
+
+Deliverables:
+
+1. Consume `pricing_to_finance_award_assumptions` and Proposal award references.
+2. Complete the pre-award finance checklist for customer/project mapping, charge-code plan, CLIN/SLIN mapping, billing assumptions, payment terms, direct labor, subcontractors, unallowables, reimbursables, travel/ODC, tax, and cashflow risk.
+3. Consume `contracts_to_finance_work_authorization`; reject time or actuals outside the authorized contract, CLIN, period, person, or charge code.
+4. Emit labor-distribution, invoice-reference, reconciliation, and closeout status events without exposing accounting credentials to satellite apps.
+
+Acceptance:
+
+- Finance cannot activate a charge code without a Contracts work authorization;
+- Finance cannot edit the approved PricingOS package;
 - time corrections retain their original entry and complete audit trail.
 
-## Slice 3 — Proposal execution and submission workflow
+## Slice 4 — Proposal execution and submission workflow
 
 Proposal owns pursuit execution, reviews, submission packaging, receipt capture, and award/loss outcome.
 
@@ -61,7 +74,7 @@ Deliverables:
 
 1. Create a pursuit only from referenced Capture and Governance snapshots.
 2. Generate the backwards schedule, compliance matrix, volume structure, assignments, color-team plan, required forms, AI disclosure log, and submission checklist.
-3. Request Finance pricing with a standard handoff packet and accept only an approved immutable Finance package.
+3. Request PricingOS pricing with a standard handoff packet and accept only an approved immutable PricingOS package.
 4. Enforce Pink, Red, Green, Gold, and White Glove review evidence before final approval.
 5. Block submission readiness when Governance, Finance, cyber, quality, or executive approvals remain open.
 6. Record human submission, destination, timestamp, final hash, receipt number, confirmation evidence, and final artifact references.
@@ -69,18 +82,18 @@ Deliverables:
 
 Acceptance:
 
-- Proposal cannot alter Finance calculations or approve pricing;
+- Proposal cannot alter PricingOS calculations or approve pricing;
 - AI-generated content remains draft until a human review is recorded;
 - submission cannot complete without a receipt or an explicit documented receipt exception;
 - award/loss produces a deterministic, replayable event and handoff trail.
 
-## Slice 4 — Contracts & Delivery post-award workflow
+## Slice 5 — Contracts & Delivery post-award workflow
 
 Contracts owns execution of the awarded contract lifecycle while Governance owns obligation interpretation and retention policy.
 
 Deliverables:
 
-1. Accept `proposal_to_contracts_award_handoff` or `finance_to_contracts_award_handoff` plus `governance_to_contracts_award_package`.
+1. Accept `proposal_to_contracts_award_handoff` plus `governance_to_contracts_award_package`.
 2. Create awarded contract, CLIN/SLIN, modification, period-of-performance, funded-value, deliverable/CDRL, key-personnel, teaming-party, CPARS, and closeout records.
 3. Produce signed work authorizations for Finance containing contract, CLIN, period, personnel, charge-code, and funding boundaries.
 4. Send obligation-baseline and closeout-record references to Governance.
@@ -94,7 +107,7 @@ Acceptance:
 - Governance can trace every active obligation to the current contract/mod snapshot;
 - closeout cannot complete with open deliverables, unresolved obligations, unreconciled Finance status, or missing retention classification.
 
-## Slice 5 — End-to-end workflow pilots
+## Slice 6 — End-to-end workflow pilots
 
 Pilot in this order:
 
@@ -110,7 +123,7 @@ Each pilot must prove:
 - immutable snapshot and object-reference continuity;
 - blocker and waiver visibility;
 - human-only approvals;
-- Finance/Proposal/Contracts/Governance authority boundaries;
+- PricingOS/Finance/Proposal/Contracts/Governance authority boundaries;
 - replayable audit events from intake through closeout;
 - rollback without destructive data changes.
 

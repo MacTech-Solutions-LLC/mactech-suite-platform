@@ -4,7 +4,7 @@ This is the follow-on implementation queue. These items are intentionally not wi
 
 ## Hub
 
-- **Completed in vNext.1:** versioned template registry, Contracts app authority, runtime hard-trigger approvers, operational gate read model, blocker/waiver validation, dashboard status derivation, and authenticated template-registry API.
+- **Completed in vNext.2:** versioned template registry, distinct PricingOS and Finance authorities, Contracts app authority, runtime hard-trigger approvers, operational gate read model, blocker/waiver validation, dashboard status derivation, authenticated template-registry API, and the authorized Hub workflow registry UI.
 - Persist `SuiteWorkflowTemplate`, `SuiteWorkflowInstance`, `SuiteDependency`, `SuiteApproval`, and `SuiteEvent` only after the contract has been reviewed and Brian authorizes schema work.
 - Add dashboard queries that hydrate the pure `SuiteWorkflowInstanceReadModel` from approved workflow events and references.
 - Add a workflow template selector that uses Growth & Capture and Governance recommendations without overriding their authority.
@@ -20,7 +20,7 @@ This is the follow-on implementation queue. These items are intentionally not wi
 ## Growth & Capture
 
 - Emit Capture Package references with immutable hashes through `SuiteObjectReference`.
-- Send `capture.pursuit.created`, `capture.bid_no_bid.packet_prepared`, `capture.handoff.proposal_requested`, `capture.handoff.finance_pricing_requested`, `capture.handoff.governance_requested` events to Hub.
+- Send `capture.pursuit.created`, `capture.bid_no_bid.packet_prepared`, `capture.handoff.proposal_requested`, `capture.handoff.pricing_requested`, `capture.handoff.governance_requested` events to Hub.
 - Include cyber, CUI, CDI, CMMC, DD254, classified, insurance, bonding, and submission-instruction indicators in the Capture Package snapshot.
 - Push pursuit stage and PWin to BizOps.
 
@@ -32,22 +32,30 @@ This is the follow-on implementation queue. These items are intentionally not wi
 - Read charge code setup and PoP boundaries from Finance through Hub proxy when Finance exists — no write access, no invoice visibility.
 - Push approval events, obligation flags, and clause exceptions to BizOps.
 
+## PricingOS (appKey: `pricing`)
+
+- Own pricing math, rate snapshots, BOE, scenarios, proposed price, price volume, cost realism, and Green Team approval.
+- Emit `pricing.request.created`, `pricing.scenario.created`, `pricing.green_team.approved`, and `pricing.volume.exported` events to Hub.
+- Produce immutable approved pricing packages and price-volume references for Proposal, plus approved award-assumption references for Finance.
+- Never own accounting actuals, invoices, payments, or charge codes.
+
 ## Finance (appKey: `finance`)
 
-- Own pricing math, rate snapshots, BOE, scenarios, proposed price, price volume, Green Team approval, timekeeping, corrections, approvals, labor distribution, accounting integrations, invoicing, payments, charge codes, reconciliation, and financial actuals.
-- Emit `finance.pricing_request.created`, `finance.pricing_scenario.created`, `finance.green_team.approved`, `finance.pricing_volume.exported`, `finance.charge_code_plan.created`, and `finance.labor_distribution.posted` events to Hub.
-- Produce immutable approved pricing packages, timekeeping readiness snapshots, labor-distribution hashes, and accounting export references.
+- Own timekeeping, corrections, approvals, labor distribution, accounting integrations, invoicing, payments, charge codes, reconciliation, and financial actuals.
+- Consume PricingOS award assumptions by immutable reference; never edit approved pricing calculations.
+- Emit `finance.charge_code_plan.created`, `finance.labor_distribution.posted`, invoice, payment, reconciliation, and closeout events to Hub.
+- Produce timekeeping-readiness snapshots, labor-distribution hashes, and accounting export references.
 - Consume work authorization from Contracts & Delivery; never invent contract, CLIN, period, or personnel authorization.
 - QuickBooks handoff is a Hub-proxied call — Finance never holds the OAuth token directly.
 - Push invoice aging, burn rate vs. funded value, and rate alerts to BizOps.
 
 ## Proposal
 - Consume Growth & Capture and Governance references for kickoff.
-- Request pricing through a standard handoff packet to Finance.
-- Attach only approved Finance price-volume references and hashes.
+- Request pricing through a standard handoff packet to PricingOS.
+- Attach only approved PricingOS price-volume references and hashes.
 - Emit submission, receipt, award/loss, and post-award handoff events.
 - Push submission status, deadlines, and awarded/lost outcome to BizOps.
-- Reconcile existing Proposal readiness and submission work through a dedicated review PR before adopting the vNext.1 packet names.
+- Reconcile existing Proposal readiness and submission work through a dedicated review PR before adopting the vNext.2 packet names.
 
 ## Contracts & Delivery
 
@@ -55,7 +63,7 @@ This is the follow-on implementation queue. These items are intentionally not wi
 - Read invoice references and charge code validation from Finance through Hub.
 - Push award notice, mod events, and PoP milestones to BizOps.
 - Governance interim registry migrates into Contracts on split authorization.
-- Consume `proposal_to_contracts_award_handoff` or `finance_to_contracts_award_handoff` plus `governance_to_contracts_award_package`.
+- Consume `proposal_to_contracts_award_handoff` plus `governance_to_contracts_award_package`.
 - Emit `contracts_to_finance_work_authorization`, `contracts_to_governance_obligation_baseline`, `finance_to_contracts_invoice_reference`, and `contracts_to_governance_closeout_record` packets.
 
 See `docs/SUITE_WORKFLOW_IMPLEMENTATION_SLICES.md` for the ordered acceptance criteria across Governance, Finance, Proposal, Contracts, and end-to-end pilots.

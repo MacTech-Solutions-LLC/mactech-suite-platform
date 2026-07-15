@@ -33,11 +33,12 @@ test("workflow map keeps Hub as coordinator while apps retain route ownership", 
   assert.deepEqual(CROSS_APP_WORKFLOW_MAP.subcontract_rfq, [
     "capture",
     "governance",
-    "finance",
     "proposal",
+    "pricing",
+    "finance",
     "contracts",
   ]);
-  assert.equal(getWorkflowTemplate("quick_commercial_quote").primaryOwningApp, "finance");
+  assert.equal(getWorkflowTemplate("quick_commercial_quote").primaryOwningApp, "pricing");
   assert.equal(getWorkflowTemplate("iso_qms_compliance").routeApps.includes("qms"), true);
 });
 
@@ -45,16 +46,16 @@ test("standard handoff packet requires references, snapshot ids, provenance arra
   const packet: SuiteWorkflowHandoffPacket = {
     suiteObjectReferenceId: "sor_123",
     workflowInstanceId: "wf_123",
-    sourceApp: "finance",
+    sourceApp: "pricing",
     targetApp: "proposal",
     sourceRecordId: "price_123",
     sourceSnapshotId: "snap_123",
-    handoffType: "finance_to_proposal_approved_volume",
+    handoffType: "pricing_to_proposal_approved_volume",
     handoffStatus: "approved",
     requiredApprovals: ["brian_macdonald"],
     blockingDependencies: [],
     AIProvenance: [],
-    auditEvents: ["finance.green_team.approved"],
+    auditEvents: ["pricing.green_team.approved"],
   };
 
   assert.deepEqual(validateHandoffPacket(packet), []);
@@ -177,10 +178,24 @@ test("AI approval decisions cannot satisfy a required human gate", () => {
   assert.match(validateSuiteWorkflowReadModel(instance).join(" "), /AI may not approve or reject/);
 });
 
-test("Contracts is a first-class post-award route and quick quotes do not invent Proposal handoffs", () => {
+test("Pricing and Finance remain separate authorities through post-award routing", () => {
   const quickQuote = getWorkflowTemplate("quick_commercial_quote");
+  assert.equal(quickQuote.routeApps.includes("pricing"), true);
+  assert.equal(quickQuote.routeApps.includes("finance"), true);
   assert.equal(quickQuote.routeApps.includes("contracts"), true);
-  assert.equal(quickQuote.requiredHandoffTypes.includes("finance_to_contracts_award_handoff"), true);
-  assert.equal(quickQuote.requiredHandoffTypes.includes("proposal_to_contracts_award_handoff"), false);
+  assert.equal(quickQuote.requiredHandoffTypes.includes("proposal_to_pricing_request"), true);
+  assert.equal(quickQuote.requiredHandoffTypes.includes("pricing_to_proposal_approved_volume"), true);
+  assert.equal(quickQuote.requiredHandoffTypes.includes("pricing_to_finance_award_assumptions"), true);
+  assert.equal(quickQuote.requiredHandoffTypes.includes("proposal_to_contracts_award_handoff"), true);
   assert.equal(quickQuote.defaultGates.find((gate) => gate.key === "post_award_handoff")?.ownerApp, "contracts");
+});
+
+test("every pursuit routes approved pricing into Finance by reference", () => {
+  for (const key of WORKFLOW_TEMPLATE_KEYS) {
+    const template = getWorkflowTemplate(key);
+    assert.equal(template.routeApps.includes("pricing"), true, key);
+    assert.equal(template.routeApps.includes("finance"), true, key);
+    assert.ok(template.routeApps.indexOf("pricing") < template.routeApps.indexOf("finance"), key);
+    assert.equal(template.requiredHandoffTypes.includes("pricing_to_finance_award_assumptions"), true, key);
+  }
 });
