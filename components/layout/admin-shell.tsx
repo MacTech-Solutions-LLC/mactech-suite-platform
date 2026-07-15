@@ -15,9 +15,9 @@ export async function AdminShell({
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar counts={counts} />
-      <div className="flex min-h-screen flex-1 flex-col">
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
         <Topbar ctx={ctx} />
-        <main className="flex-1 overflow-x-hidden p-4 md:p-8">{children}</main>
+        <main className="min-w-0 flex-1 overflow-x-hidden p-4 md:p-8">{children}</main>
       </div>
       <Toaster />
     </div>
