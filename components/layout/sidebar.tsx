@@ -80,6 +80,12 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     ],
   },
   {
+    group: "Execution",
+    items: [
+      { href: "/admin/team", label: "Team", icon: Users },
+    ],
+  },
+  {
     group: "Access & Apps",
     items: [
       { href: "/admin/product-access", label: "Product Access", icon: Boxes },
