@@ -48,8 +48,8 @@ export default async function SuiteWorkflowsPage({
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Suite workflows"
-        description="The Hub-owned workflow registry: routing, gate ownership, human approvers, handoff contracts, and dashboard lanes. Domain records remain in their owning apps."
+        title="Workflow contract registry"
+        description="Internal implementation reference for routing, gate ownership, human approvers, and handoff contracts. This is not an operational workflow dashboard."
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -61,7 +61,7 @@ export default async function SuiteWorkflowsPage({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Runtime status boundary</CardTitle>
+          <CardTitle className="text-base">Internal preview — no live workflow state</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <p>
@@ -69,8 +69,9 @@ export default async function SuiteWorkflowsPage({
             <code className="rounded bg-muted px-1.5 py-0.5 text-foreground">/api/hub/workflows/templates</code>.
           </p>
           <p>
-            Persisted workflow instances, approval queues, waivers, blockers, and event timelines are not shown because the
-            current Hub schema does not yet store them. No synthetic status is substituted for missing runtime state.
+            Hub does not yet persist workflow instances, approval queues, waivers, blockers, or event timelines. This
+            registry is intentionally removed from normal operator navigation until those capabilities are implemented and
+            accepted in production.
           </p>
         </CardContent>
       </Card>

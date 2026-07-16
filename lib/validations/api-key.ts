@@ -7,6 +7,11 @@ export const ApiKeyScopeEnum = z.enum([
   "app_authority_resolve",
   "object_reference_write",
   "webhook_send",
+  "agents_trigger",
+  "contract_read",
+  "contract_write",
+  "profile_read",
+  "profile_write",
 ]);
 
 export const createApiKeySchema = z.object({

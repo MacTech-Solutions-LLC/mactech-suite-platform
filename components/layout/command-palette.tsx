@@ -62,7 +62,6 @@ interface Destination {
 const DESTINATIONS: Destination[] = [
   // Overview
   { href: "/command-center", label: "Command Center", group: "Overview", icon: Compass },
-  { href: "/admin/workflows", label: "Suite Workflows", group: "Overview", icon: Network, aliases: ["gates", "handoffs", "approvals"] },
   { href: "/admin/agents", label: "Agents", group: "Overview", icon: Bot, aliases: ["agentops", "m2m", "ai", "runs"] },
   { href: "/admin/agents?status=awaiting", label: "Agents · Awaiting approval", group: "Overview", icon: Bot },
   { href: "/admin/agents/triggers", label: "Scheduled Triggers", group: "Overview", icon: Clock, aliases: ["cron", "automation"] },
