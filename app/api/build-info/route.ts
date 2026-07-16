@@ -29,26 +29,25 @@
  */
 
 import { NextResponse } from "next/server";
+import { resolveBuildMetadata } from "@/lib/build-metadata";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const COMMIT = process.env.RAILWAY_GIT_COMMIT_SHA ?? "";
-const COMMIT_SHORT = COMMIT ? COMMIT.slice(0, 7) : "dev";
-const BRANCH = process.env.RAILWAY_GIT_BRANCH ?? "main";
-const REPO_OWNER = process.env.RAILWAY_GIT_REPO_OWNER ?? "MacTech-Solutions-LLC";
-const REPO_NAME = process.env.RAILWAY_GIT_REPO_NAME ?? "mactech-suite-platform";
 const RAILWAY_SERVICE_ID = process.env.RAILWAY_SERVICE_ID ?? "";
 const RAILWAY_PROJECT_ID = process.env.RAILWAY_PROJECT_ID ?? "";
 
 export function GET() {
+  const build = resolveBuildMetadata();
+
   return NextResponse.json({
     service: "suite",
     environment: process.env.NODE_ENV ?? "development",
-    repo: `${REPO_OWNER}/${REPO_NAME}`,
-    branch: BRANCH,
-    commitSha: COMMIT || null,
-    commitShortSha: COMMIT_SHORT,
+    repo: `${build.repoOwner}/${build.repoName}`,
+    branch: build.branch,
+    commitSha: build.commitSha,
+    commitShortSha: build.commitShortSha,
+    provenance: build.provenance,
     railwayServiceId: RAILWAY_SERVICE_ID || null,
     railwayProjectId: RAILWAY_PROJECT_ID || null,
     status: "ok",

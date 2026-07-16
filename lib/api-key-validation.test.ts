@@ -25,3 +25,12 @@ test("createApiKeySchema rejects unknown scopes", () => {
 
   assert.equal(parsed.success, false);
 });
+
+test("createApiKeySchema accepts current satellite contract scopes", () => {
+  const parsed = createApiKeySchema.safeParse({
+    name: "BizOps member profile",
+    scopes: ["profile_read", "profile_write", "contract_read"],
+  });
+
+  assert.equal(parsed.success, true);
+});

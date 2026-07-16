@@ -16,11 +16,12 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
+import { resolveBuildMetadata } from "@/lib/build-metadata";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const VERSION = process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 8) ?? "dev";
+const VERSION = resolveBuildMetadata().commitShortSha;
 const STARTED_AT = Date.now();
 
 export async function GET() {
