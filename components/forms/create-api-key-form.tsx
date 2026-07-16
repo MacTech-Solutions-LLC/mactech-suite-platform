@@ -20,41 +20,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { createApiKey } from "@/lib/services/api-key-service";
 import { createApiKeySchema } from "@/lib/validations/api-key";
+import { API_KEY_SCOPE_LIST } from "@/lib/api-key-scopes";
 
-const SCOPES = [
-  {
-    value: "audit_ingest",
-    label: "audit_ingest",
-    description: "POST /api/audit/ingest — forward audit events.",
-  },
-  {
-    value: "app_authority_resolve",
-    label: "app_authority_resolve",
-    description:
-      "POST /api/hub/authority/resolve-app-access — Hub-gated app access for satellite apps.",
-  },
-  {
-    value: "object_reference_write",
-    label: "object_reference_write",
-    description: "POST /api/hub/object-references/* - create, verify, and deprecate object references.",
-  },
-  {
-    value: "org_read",
-    label: "org_read",
-    description: "GET /api/v1/orgs/{clerkOrgId} — read org metadata + entitlements.",
-  },
-  {
-    value: "user_access_read",
-    label: "user_access_read",
-    description:
-      "GET /api/v1/users/{clerkUserId}/access — read a user's org memberships + per-app access.",
-  },
-  {
-    value: "webhook_send",
-    label: "webhook_send",
-    description: "Server-internal: signs outgoing webhook deliveries (rarely issued).",
-  },
-] as const;
+const SCOPES = API_KEY_SCOPE_LIST;
 
 export function CreateApiKeyForm() {
   const [open, setOpen] = useState(false);
