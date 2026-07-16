@@ -13,21 +13,15 @@
 
 import { createHash, randomBytes } from "crypto";
 import { PrismaClient, type ApiKeyScope } from "@prisma/client";
+import { API_KEY_SCOPE_VALUES } from "../lib/api-key-scopes";
 
 const KEY_PREFIX = "mts_";
 const KEY_BYTE_LENGTH = 24;
 
 const DEFAULT_SCOPES: ApiKeyScope[] = ["app_authority_resolve", "audit_ingest"];
 
-const VALID_SCOPES: readonly ApiKeyScope[] = [
-  "audit_ingest",
-  "org_read",
-  "user_access_read",
-  "app_authority_resolve",
-  "object_reference_write",
-  "webhook_send",
-  "agents_trigger",
-];
+/** Derived from the scope catalog — see lib/api-key-scopes.ts. */
+const VALID_SCOPES: readonly ApiKeyScope[] = API_KEY_SCOPE_VALUES;
 
 type CliOptions = {
   appKey: string | null;
