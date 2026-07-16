@@ -41,12 +41,32 @@ app in the suite sees it.
    service-token REST pattern already used by `/api/hub/audit`, `/api/hub/authority`,
    and `/api/hub/contracts`.
 
-2. **There is no join key between a profile and a founder.** `Founder` carries no
-   user id of any kind. A bizops profile is keyed on `hubUserId` and — by explicit
-   decision (DR-2026-06-10-01) — stores **no name and no email**. The only
-   overlapping field is `email`, which is exactly the field bizops refuses to hold.
-   bizops has the capability data and no identity; CaptureOS has the identity and
-   no user link.
+2. **The join key is the Clerk user id, and it already exists.**
+
+   *Corrected. The first draft of this ADR claimed there was no join key, and
+   proposed adding `founders.hub_user_id` populated by a reviewed email match.
+   That was wrong, because it looked only at `founders` — which indeed carries
+   no user id — and stopped there.*
+
+   CaptureOS already stores `users.clerk_user_id` (set from the token's `sub` at
+   sign-in, unique) and already records `users.founder_id` — which founder a
+   signed-in person is. The Hub keys the same human by `UserProfile.clerkUserId`
+   (also unique). So the chain runs entirely on identifiers **both systems
+   already store**:
+
+   ```
+   Clerk sub -> users.clerk_user_id -> UserProfile.clerkUserId -> capability profile
+                users.founder_id    -> founders
+   ```
+
+   → **No new column, no backfill, no email matching.** The rejected design
+   would have invented a second link to maintain *and* introduced the only
+   mechanism in this whole plan capable of attaching one person's clearance to
+   another person's card. Email is good enough to be dangerous — people change
+   addresses, share aliases, get typo'd. A Clerk id is a lookup, not a guess.
+
+   The lesson generalises: before adding an identifier, check whether the two
+   systems already share one.
 
 3. **The Hub already owns identity.** `UserProfile` holds `clerkUserId`, `email`,
    `firstName`/`lastName`, `platformRole`. It holds no capability data.
@@ -72,9 +92,11 @@ it over service-token REST.**
 - **Scope of the profile record:** capability data only. **No name, no email.**
   Identity stays in `UserProfile` and is resolved by `hubUserId` at read time.
   DR-2026-06-10-01 holds; this ADR does not relax it.
-- **Identity join:** CaptureOS's `founders` gains a nullable `hub_user_id`. The
-  Hub is the only resolver of who that is. Existing founders are backfilled by a
-  one-time, human-approved email match — not a recurring fuzzy match.
+- **Identity join:** the Clerk user id, which both systems already store. The
+  Hub exposes `GET /api/hub/profiles/by-clerk/{clerkUserId}` alongside the
+  canonical `hubUserId` route, because a *writer* holds a Hub id (bizops gets it
+  as `canonicalHubUserId`) while a *consumer* usually only has a Clerk id.
+  Nothing is added to `founders`, and nothing is backfilled.
 - **Direction:** bizops writes; other apps read. Synced fields are read-only in
   the consumer with a "managed in GovCon Ops" affordance.
 - **Tenancy:** the profile record is **user-global** (keyed on `hubUserId`, not
@@ -125,8 +147,9 @@ with an LLM's read of a PDF.
 - **A tenancy rule is inverted.** Per-org profile isolation gives way to
   user-global data with per-org visibility. Any code assuming a profile is
   org-scoped must be re-read, not just re-pointed.
-- **Three databases move.** Hub (new tables), bizops (write path + eventual
-  read-through), CaptureOS (`hub_user_id`, sync). Each is a separate migration.
+- **Two databases move, not three.** Hub (new tables) and bizops (write path).
+  CaptureOS needs **no migration at all** — it already stores every identifier
+  this design needs.
 - **A second NAICS table stays.** bizops keeps its checked-in Census table (a
   satellite with a runtime dependency on the Hub for a static reference list is
   worse than a duplicated file). CaptureOS keeps its curated one. The Hub stores
@@ -135,10 +158,11 @@ with an LLM's read of a PDF.
 
 ### Risks
 
-- **The backfill is the dangerous step.** Linking the wrong `hub_user_id` to a
-  founder attaches one person's clearance and past performance to another's
-  record. It must be a reviewed, reversible, one-time operation with output a
-  human approves before it writes — never an automatic match on first run.
+- ~~**The backfill is the dangerous step.**~~ **Eliminated.** The email-matched
+  backfill this ADR originally specified — with its approval file, its inexact
+  match warnings, and its ability to attach the wrong person's clearance — does
+  not exist, because the Clerk id made it unnecessary. The safest handling of a
+  dangerous step is not to have one.
 - **Clobbering curation is the quiet one.** CaptureOS's NAICS registry encodes
   judgement a resume cannot: *why* a code fits, whether it is primary or
   secondary, and who it routes to. A sync that treats `founder_naics_matrix` as
@@ -161,12 +185,13 @@ Each phase is one PR, reviewable and independently revertible.
 | 1 | MacSuite | `MemberCapabilityProfile` + `MemberProfileNaics` models; `GET/PUT /api/hub/profiles/{hubUserId}`, service-token auth; per-org visibility check |
 | 2 | MacSuite | `hub-client` typed wrappers + version bump (TypeScript callers) |
 | 3 | bizops | Write-through to the Hub on `applyResumeProposal` / `saveProfile` / `publishProfile` |
-| 4 | CaptureOS | `founders.hub_user_id` migration + reviewed backfill script |
-| 5 | CaptureOS | Sync: read Hub profile → `title` / `bio` / `founder_naics_matrix`; mark synced fields read-only |
+| 4 | MacSuite | `GET /api/hub/profiles/by-clerk/{clerkUserId}` (consumers hold a Clerk id, not a Hub id) |
+| 5 | CaptureOS | Sync: `users.clerk_user_id` → Hub profile → `title` / `bio` / `founder_naics_matrix` on `users.founder_id`. **No migration** |
 | 6 | MacSuite | Register `capture.mactechsolutionsllc.com` in the AppRegistry |
 
-Phase 1 is a prerequisite for everything else. Phases 4 and 6 should land before
-5, or the sync has nothing to key on and nothing to gate on.
+Phase 1 is a prerequisite for everything else. Phase 6 should land before 5, or
+the sync has nothing to gate on. Phase 4 is now a Hub route rather than a
+CaptureOS migration — the consumer needs no schema change at all.
 
 ## Prerequisites tracked elsewhere
 
