@@ -54,7 +54,11 @@ export function CreateApiKeyForm() {
           <Plus className="h-4 w-4" /> Issue API key
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      {/* Bounded to the viewport: the scope list grows with the ApiKeyScope enum
+          (six scopes at the time this dialog was written, eleven now), and an
+          unbounded dialog pushed "Issue key" off-screen with no way to reach it.
+          Height is capped and the body scrolls; header and footer stay pinned. */}
+      <DialogContent className="flex max-h-[85vh] flex-col">
         {issued ? (
           <>
             <DialogHeader>
@@ -109,7 +113,7 @@ export function CreateApiKeyForm() {
               </DialogDescription>
             </DialogHeader>
             <form
-              className="grid gap-3"
+              className="flex min-h-0 flex-1 flex-col gap-3"
               onSubmit={(event) => {
                 event.preventDefault();
                 setError(null);
@@ -142,6 +146,10 @@ export function CreateApiKeyForm() {
                 });
               }}
             >
+              {/* min-h-0 is load-bearing: a flex child defaults to min-height:auto,
+                  which refuses to shrink below its content and would let the
+                  list push the footer off-screen again rather than scroll. */}
+              <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto pr-1">
               <div className="grid gap-1.5">
                 <Label htmlFor="name">
                   Name <span className="text-destructive">*</span>
@@ -178,7 +186,7 @@ export function CreateApiKeyForm() {
                 <Label>
                   Scopes <span className="text-destructive">*</span>
                 </Label>
-                <div className="grid gap-2">
+                <div className="grid max-h-64 gap-2 overflow-y-auto rounded-md border border-border/60 p-2">
                   {SCOPES.map((s) => (
                     <label
                       key={s.value}
@@ -186,7 +194,17 @@ export function CreateApiKeyForm() {
                     >
                       <Checkbox name="scopes" value={s.value} className="mt-1" />
                       <div className="leading-tight">
-                        <div className="text-sm font-mono">{s.label}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-mono">{s.label}</span>
+                          {/* The catalog already knew which scopes hand over the
+                              ability to change data rather than read it; without
+                              this it only knew it in a type nobody reads. */}
+                          {"sensitive" in s && s.sensitive ? (
+                            <span className="rounded-sm border border-amber-500/40 bg-amber-500/10 px-1 py-px text-[10px] font-medium uppercase tracking-wide text-amber-500">
+                              write
+                            </span>
+                          ) : null}
+                        </div>
                         <div className="text-xs text-muted-foreground">
                           {s.description}
                         </div>
@@ -199,12 +217,13 @@ export function CreateApiKeyForm() {
                 <Label htmlFor="expiresAt">Expires at (optional)</Label>
                 <Input id="expiresAt" name="expiresAt" type="date" />
               </div>
+              </div>
               {error && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   {error}
                 </div>
               )}
-              <DialogFooter className="gap-2">
+              <DialogFooter className="gap-2 border-t border-border pt-3">
                 <Button
                   type="button"
                   variant="outline"
