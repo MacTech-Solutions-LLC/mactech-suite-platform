@@ -4,8 +4,13 @@
  *
  * Keys live in the `ApiKey` table — SHA-256 hashed at rest, with an explicit
  * scope set, revocable, and tracking `lastUsedAt`. Issued + managed via
- * `/admin/api-keys`. Each scope (`audit_ingest`, `org_read`,
- * `user_access_read`, `webhook_send`) is enforced per-route.
+ * `/admin/api-keys`. Scopes are enforced per-route; see `lib/api-key-scopes.ts`
+ * for the catalog of what each one grants.
+ *
+ * Note `requireApiKey` does not check the key's `appKey` tag — it returns it
+ * only for audit attribution. Routes that need the caller's app identity bound
+ * to the key must use `verifyHubServiceRequest` (lib/hub-authority.ts) or
+ * `verifyAuditServiceRequest` (lib/hub-audit.ts), which enforce the match.
  *
  * The original deployment also accepted `AUDIT_INGEST_API_KEY` from env as
  * a "legacy all-scopes" fallback so sibling apps could onboard without

@@ -11,6 +11,7 @@ import {
   PLATFORM_ROLE_DEFINITIONS,
   CUSTOMER_ROLE_DEFINITIONS,
 } from "../lib/permissions";
+import { LEGACY_ENV_KEY_NAME } from "../lib/env";
 
 const prisma = new PrismaClient();
 
@@ -678,7 +679,7 @@ async function seedLegacyApiKey() {
   if (existing) return;
   await prisma.apiKey.create({
     data: {
-      name: "legacy:AUDIT_INGEST_API_KEY",
+      name: LEGACY_ENV_KEY_NAME,
       description:
         "Pre-migration env-var key. Rotate every consumer onto a DB-issued key, then revoke this row.",
       keyHash: hash,

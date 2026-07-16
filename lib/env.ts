@@ -197,6 +197,20 @@ export function clerkWebhookConfigured(): boolean {
   return Boolean(env.CLERK_WEBHOOK_SECRET);
 }
 
+/**
+ * Name of the seeded ApiKey row that carries the legacy env var's hash.
+ * Written by prisma/seed.ts; read by /admin/api-keys to report whether the
+ * legacy key still works. The env var itself no longer grants access — only
+ * this row's status does.
+ */
+export const LEGACY_ENV_KEY_NAME = "legacy:AUDIT_INGEST_API_KEY";
+
+/**
+ * Whether AUDIT_INGEST_API_KEY is set in this environment. Note this reports
+ * only that the var is *present*, not that it grants anything: the auth
+ * fallback was removed (see lib/api-auth.ts). To decide whether the legacy key
+ * is still usable, check the status of the `LEGACY_ENV_KEY_NAME` row instead.
+ */
 export function auditIngestionConfigured(): boolean {
   return Boolean(env.AUDIT_INGEST_API_KEY);
 }
