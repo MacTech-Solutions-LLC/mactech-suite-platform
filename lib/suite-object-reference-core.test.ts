@@ -9,11 +9,16 @@ import {
 
 const baseReference = {
   sourceAppKey: "proposal",
-  owningAppKey: "finance",
-  objectType: "finance.locked_pricing_version",
+  owningAppKey: "pricing",
+  objectType: "pricing.locked_pricing_version",
   objectId: "price-volume-123",
   objectHash: "sha256:1234567890abcdef",
 };
+
+test("PricingOS is the canonical owner of immutable pricing exports", () => {
+  assert.equal(IMMUTABLE_SUITE_OBJECT_TYPES.has("pricing.locked_pricing_version"), true);
+  assert.doesNotThrow(() => validateSuiteObjectReferenceShape(baseReference));
+});
 
 test("invalid object type is denied", () => {
   assert.equal(isSupportedSuiteObjectType("loose.json_blob"), false);
