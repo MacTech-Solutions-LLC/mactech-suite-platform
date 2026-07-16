@@ -18,7 +18,8 @@ import { RotateApiKeyButton } from "@/components/forms/rotate-api-key-button";
 import { prisma } from "@/lib/db/prisma";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
-import { auditIngestionConfigured } from "@/lib/env";
+import { auditIngestionConfigured, LEGACY_ENV_KEY_NAME } from "@/lib/env";
+import { legacyApiKeyState } from "@/lib/legacy-api-key";
 import { formatDateTime, relativeTime } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +30,8 @@ export default async function ApiKeysPage() {
   const keys = await prisma.apiKey.findMany({
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
   });
+
+  const legacy = legacyApiKeyState(keys, auditIngestionConfigured());
 
   return (
     <div className="space-y-6">
@@ -48,15 +51,31 @@ export default async function ApiKeysPage() {
         </AlertDescription>
       </Alert>
 
-      {auditIngestionConfigured() && (
+      {legacy.kind === "active" && (
+        <Alert variant="warning">
+          <KeyRound className="h-4 w-4" />
+          <AlertTitle>Legacy key is still active</AlertTitle>
+          <AlertDescription>
+            The <span className="font-mono">{LEGACY_ENV_KEY_NAME}</span> row is
+            active and grants{" "}
+            <span className="font-mono">{legacy.scopes.join(", ")}</span>
+            {legacy.untagged &&
+              " — and carries no app tag, so it can assert any source app on the Hub authority and audit paths"}
+            . Rotate every consumer onto a per-app key, then revoke this row.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {legacy.kind === "inert" && (
         <Alert variant="info">
           <KeyRound className="h-4 w-4" />
-          <AlertTitle>Legacy env-var key is still active</AlertTitle>
+          <AlertTitle>AUDIT_INGEST_API_KEY is set but inert</AlertTitle>
           <AlertDescription>
-            <span className="font-mono">AUDIT_INGEST_API_KEY</span> remains
-            valid for backward compatibility (treated as having all scopes).
-            Once every sibling app has rotated to a DB-issued key, remove the
-            env var from this service&apos;s Railway settings.
+            The env var is still present in this service&apos;s Railway
+            settings, but it grants nothing on its own — the auth fallback was
+            removed, and the key it hashes to is{" "}
+            {legacy.rowExists ? "revoked" : "not in the database"}. Remove the
+            env var so it stops implying otherwise.
           </AlertDescription>
         </Alert>
       )}
