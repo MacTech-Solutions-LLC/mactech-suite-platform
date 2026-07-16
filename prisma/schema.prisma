@@ -493,6 +493,7 @@ model UserProfile {
   contractMemberships        ContractMembership[]     @relation("ContractMembershipUserProfile")
   grantedContractMemberships ContractMembership[]     @relation("ContractMembershipGrantedBy")
   contractLifecycleEvents    ContractLifecycleEvent[] @relation("ContractLifecycleEventActor")
+  capabilityProfile          MemberCapabilityProfile?
 
   @@index([email])
   @@index([clerkUserId])
@@ -502,6 +503,77 @@ model UserProfile {
   @@index([managerUserProfileId])
   @@index([department])
   @@index([timekeepingRequired])
+}
+
+/// Suite-wide member capability profile (ADR-0003).
+///
+/// A member fills this in once — today via bizops onboarding, from a resume
+/// they confirm field-by-field — and every entitled app reads it instead of
+/// keeping its own hand-maintained copy of the same person.
+///
+/// **User-global by design.** Keyed on UserProfile, not on (user, org): one
+/// person has one headline and one set of industries, and re-typing them per
+/// org is how profiles drift. *Visibility* is per-org — a caller may read this
+/// only for a user with active OrgUserAccess in an org the caller is entitled
+/// to. The record is global; the read is gated.
+///
+/// **Deliberately absent — do not add without a decision:**
+///   - name / email / phone. Identity is UserProfile's. Satellites resolve it
+///     by userProfileId at read time. This is what lets bizops keep its no-PII
+///     rule (DR-2026-06-10-01) while still owning the capability data.
+///   - clearance. Putting it here makes it readable by every entitled app in
+///     the suite. ADR-0003 accepts that eventually, but it is out of the first
+///     slice on purpose, and it should arrive with its own review rather than
+///     riding along with a headline.
+model MemberCapabilityProfile {
+  id            String @id @default(cuid())
+  userProfileId String @unique
+
+  /// Professional title as it should appear on a capability statement.
+  headline String?
+  /// Third person, no name — drops straight into a capability statement.
+  summary  String? @db.Text
+
+  laborCategory   String?
+  /// Null means unknown, NOT zero. Different claims; only one is true.
+  yearsExperience Int?
+
+  /// Which app last wrote this, for provenance on a record no single app owns.
+  sourceAppKey String?
+  /// When the owning app last had the member confirm this — distinct from
+  /// updatedAt, which moves on any write including a backfill.
+  confirmedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userProfile UserProfile             @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+  naics       MemberCapabilityNaics[]
+
+  @@index([sourceAppKey])
+}
+
+/// NAICS industries a member's experience supports, strongest first.
+///
+/// **Codes only — never titles.** Two systems already hold a NAICS table
+/// (bizops ships the Census list; CaptureOS curates one with size standards and
+/// tiers). Storing a title here would make this a third, and a NAICS revision
+/// would strand a stale one. Consumers look the title up locally.
+///
+/// `rank` is the member-confirmed ordering: 0 is what this person *is*, the
+/// tail is what they can also credibly do. Consumers may use it as a weight;
+/// they must not read absence from the tail as a negative signal.
+model MemberCapabilityNaics {
+  profileId String
+  /// Six digits. Validated against the writer's NAICS table before it lands.
+  code      String
+  /// 0-based. Strongest first.
+  rank      Int
+
+  profile MemberCapabilityProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, code])
+  @@index([code])
 }
 
 model CustomerOrganization {
@@ -903,6 +975,15 @@ enum ApiKeyScope {
   /// Phase 1 Contract Registry — satellite write access (POST create/award/lifecycle,
   /// PATCH/DELETE membership). Proposals holds this to call POST /award.
   contract_write
+  /// ADR-0003 Member capability profile — satellite read (GET /api/hub/profiles/*).
+  /// Every consumer of the suite-wide profile holds this; CaptureOS is the first.
+  profile_read
+  /// ADR-0003 Member capability profile — write (PUT /api/hub/profiles/*).
+  /// Held only by the app that owns the member-facing confirmation flow. Today
+  /// that is bizops alone: the profile is only trustworthy because a human
+  /// confirmed each field, and handing this scope to an app with no such flow
+  /// would put unconfirmed data behind the same contract.
+  profile_write
 }
 
 enum ServiceIdentityStatus {
