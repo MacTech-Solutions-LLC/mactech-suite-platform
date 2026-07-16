@@ -2,10 +2,13 @@ import { z } from "zod";
 import { API_KEY_SCOPE_VALUES } from "@/lib/api-key-scopes";
 
 /**
- * Derived from the scope catalog, which is itself exhaustive over the Prisma
- * enum. This used to be a hand-written list and had fallen five scopes behind —
- * so a key for a scope the platform genuinely uses (contract_read/_write) was
- * rejected here even when the caller asked for it correctly.
+ * Derived from the scope catalog, which is exhaustive over the Prisma enum.
+ *
+ * #158 caught the same drift and fixed it by typing the five missing values
+ * into this list by hand. That works today and re-breaks on the next scope: the
+ * list is a copy, and the reason it fell five behind was never that someone
+ * couldn't type — it was that nothing told them to. Deriving it means the next
+ * scope is a compile error here instead of a validation error in a user's face.
  */
 export const ApiKeyScopeEnum = z.enum(API_KEY_SCOPE_VALUES);
 
