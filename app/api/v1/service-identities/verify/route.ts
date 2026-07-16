@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 const requestSchema = z.object({
   appKey: z.string().min(1).max(100),
-  serviceAppKey: z.string().min(1).max(100),
+  serviceAppKey: z.string().min(1).max(100).nullable().optional(),
   apiKeyId: z.string().min(1).max(200),
   requiredScope: z.string().min(1).max(100),
   presentedCredential: z.string().min(1).max(500),
@@ -30,13 +30,14 @@ export async function POST(request: NextRequest) {
   }
 
   const serviceKey = await verifyApiKey(input.presentedCredential, "app_authority_resolve");
-  if (!serviceKey || serviceKey.appKey !== input.serviceAppKey) {
+  const resolvedServiceAppKey = serviceKey?.appKey ?? null;
+  if (!serviceKey || !resolvedServiceAppKey || (input.serviceAppKey && resolvedServiceAppKey !== input.serviceAppKey)) {
     return NextResponse.json({ error: "service_identity_denied" }, { status: 404 });
   }
 
   const [serviceIdentity, registeredApp] = await Promise.all([
-    prisma.serviceIdentity.findUnique({ where: { appKey: input.serviceAppKey } }),
-    prisma.appRegistry.findUnique({ where: { appKey: input.serviceAppKey }, select: { status: true } }),
+    prisma.serviceIdentity.findUnique({ where: { appKey: resolvedServiceAppKey } }),
+    prisma.appRegistry.findUnique({ where: { appKey: resolvedServiceAppKey }, select: { status: true } }),
   ]);
 
   if (!serviceIdentity || serviceIdentity.status !== "active" || registeredApp?.status !== "active") {
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    serviceAppKey: input.serviceAppKey,
+    serviceAppKey: resolvedServiceAppKey,
     serviceIdentityId: serviceIdentity.id,
     requiredScope: input.requiredScope,
   });
