@@ -5,6 +5,7 @@ export type MacTechAppKey =
   | "qms"
   | "governance"
   | "growth-capture"
+  | "pricing"
   | "finance"
   | "proposal"
   | "bizops"
@@ -18,6 +19,7 @@ export const MACTECH_APP_KEYS: readonly MacTechAppKey[] = [
   "qms",
   "governance",
   "growth-capture",
+  "pricing",
   "finance",
   "proposal",
   "bizops",
