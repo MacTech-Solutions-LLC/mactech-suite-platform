@@ -9,6 +9,9 @@ export const SUPPORTED_SUITE_OBJECT_TYPES = [
   "qms.document_version",
   "training.assignment",
   "training.completion",
+  "pricing.pricing_model",
+  "pricing.locked_pricing_version",
+  // Legacy aliases retained so existing references remain readable during migration.
   "finance.pricing_model",
   "finance.locked_pricing_version",
   "proposal.package",
@@ -23,6 +26,7 @@ export type SupportedSuiteObjectType = (typeof SUPPORTED_SUITE_OBJECT_TYPES)[num
 export const IMMUTABLE_SUITE_OBJECT_TYPES = new Set<string>([
   "capture.package",
   "qms.document_version",
+  "pricing.locked_pricing_version",
   "finance.locked_pricing_version",
   "proposal.package",
   "codex.evidence_package",
