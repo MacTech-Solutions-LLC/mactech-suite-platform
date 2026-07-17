@@ -33,11 +33,15 @@
  *     ownership doesn't change the safety contract — the @claude
  *     routine still requires human PR review.
  *
- * NOT included on purpose: `mactech-suite-platform` itself. The
- * agent is for cross-repo work; modifying the Suite belongs in the
- * normal git flow, not behind an agent.
+ * Includes `mactech-suite-platform` itself: the UI-Fix feedback queue
+ * routes element-pinpointed feedback about the Suite's own UI into a
+ * `@claude` routine on this repo, so the Suite is allowlisted too. The
+ * resulting PR still requires human review on GitHub — the agent never
+ * auto-merges.
  */
 export const CROSS_REPO_ALLOWLIST: readonly string[] = Object.freeze([
+  // The Suite itself — target for UI-Fix feedback about its own surfaces.
+  "MacTech-Solutions-LLC/mactech-suite-platform",
   // Customer-facing product repos (under operator's personal account)
   "WELCOMETOTHETRIBE/mactech-captureos", // capture
   "WELCOMETOTHETRIBE/CMMC", // codex
@@ -51,6 +55,11 @@ export const CROSS_REPO_ALLOWLIST: readonly string[] = Object.freeze([
   // mactech core service (separate, no-hyphen org)
   "MacTechSolutionsLLC/mactech",
 ]);
+
+/** The Suite's own repo — default @claude-routine target for feedback
+ *  filed on Suite surfaces, and the fallback for any page URL we can't
+ *  map to a more specific app repo. */
+export const SUITE_REPO_FULL_NAME = "MacTech-Solutions-LLC/mactech-suite-platform";
 
 export function isAllowlistedRepo(repoFullName: string): boolean {
   // Case-sensitive match on purpose — GitHub URLs are case-sensitive

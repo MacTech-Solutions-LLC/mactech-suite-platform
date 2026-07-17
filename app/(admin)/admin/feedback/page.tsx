@@ -23,9 +23,6 @@ export default async function FeedbackPage() {
   const items = await prisma.feedback.findMany({
     orderBy: [{ createdAt: "desc" }],
     take: 500,
-    include: {
-      agentRun: { select: { id: true, status: true, planSummary: true } },
-    },
   });
 
   const rows: FeedbackRow[] = items.map((f) => ({
@@ -44,8 +41,9 @@ export default async function FeedbackPage() {
     createdAt: f.createdAt.toISOString(),
     dispatchedAt: f.dispatchedAt?.toISOString() ?? null,
     dispatchedByEmail: f.dispatchedByEmail,
-    agentRunId: f.agentRunId,
-    agentRunStatus: f.agentRun?.status ?? null,
+    githubRepo: f.githubRepo,
+    githubIssueNumber: f.githubIssueNumber,
+    githubIssueUrl: f.githubIssueUrl,
   }));
 
   const newCount = rows.filter((r) => r.status === "new").length;

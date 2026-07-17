@@ -17,7 +17,7 @@ import { formatDistanceToNow } from "date-fns";
 import {
   Sparkles,
   ExternalLink,
-  Bot,
+  GitBranch,
   Search,
   Loader2,
   Copy,
@@ -65,8 +65,9 @@ export type FeedbackRow = {
   createdAt: string;
   dispatchedAt: string | null;
   dispatchedByEmail: string | null;
-  agentRunId: string | null;
-  agentRunStatus: string | null;
+  githubRepo: string | null;
+  githubIssueNumber: number | null;
+  githubIssueUrl: string | null;
 };
 
 type BadgeVariant = React.ComponentProps<typeof Badge>["variant"];
@@ -140,10 +141,15 @@ export function FeedbackConsole({
   const [detail, setDetail] = useState<FeedbackRow | null>(null);
   const [dispatching, setDispatching] = useState(false);
   // Set on a successful dispatch so we can show a persistent banner linking
-  // to the run — the toast alone was too easy to miss.
+  // to the @claude GitHub issue(s) filed — the toast alone was too easy to miss.
   const [lastDispatch, setLastDispatch] = useState<{
-    runId: string;
-    count: number;
+    issues: Array<{
+      repoFullName: string;
+      issueNumber: number;
+      issueUrl: string;
+      count: number;
+    }>;
+    dispatchedCount: number;
   } | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -230,17 +236,20 @@ export function FeedbackConsole({
       if (!res.ok || !data?.ok) {
         throw new Error(data?.error || `Dispatch failed (HTTP ${res.status})`);
       }
+      const issues = Array.isArray(data.issues) ? data.issues : [];
       toast({
-        title: "Claude session started",
+        title: "Filed to Claude Code",
         description: `${data.dispatchedCount} item${
           data.dispatchedCount === 1 ? "" : "s"
-        } bundled into an agent run. Review the plan in Agents.`,
+        } → ${issues.length} @claude issue${
+          issues.length === 1 ? "" : "s"
+        }. Claude Code will open a PR for review.`,
         variant: "success",
       });
       setSelected(new Set());
-      // Surface where the items went: a persistent banner linking to the run,
-      // and switch the view to Dispatched so they don't vanish from sight.
-      setLastDispatch({ runId: data.runId, count: data.dispatchedCount });
+      // Surface where the items went: a persistent banner linking to the GitHub
+      // issue(s), and switch the view to Dispatched so they don't vanish.
+      setLastDispatch({ issues, dispatchedCount: data.dispatchedCount });
       setStatusFilter("dispatched");
       startTransition(() => router.refresh());
     } catch (err) {
@@ -307,22 +316,34 @@ export function FeedbackConsole({
         ) : null}
       </div>
 
-      {/* Post-dispatch banner — persistent link to the run just created. */}
+      {/* Post-dispatch banner — persistent links to the @claude issue(s). */}
       {lastDispatch ? (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 shrink-0 text-primary" />
-            <span>
-              Sent {lastDispatch.count} item
-              {lastDispatch.count === 1 ? "" : "s"} to Claude — now marked{" "}
-              <span className="font-medium text-foreground">Dispatched</span>.{" "}
-              <Link
-                href={`/admin/agents/${lastDispatch.runId}`}
-                className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
-              >
-                Review the agent run <ArrowRight className="h-3 w-3" />
-              </Link>
-            </span>
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm">
+          <div className="flex items-start gap-2">
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <div className="space-y-1">
+              <div>
+                Sent {lastDispatch.dispatchedCount} item
+                {lastDispatch.dispatchedCount === 1 ? "" : "s"} to Claude Code — now
+                marked <span className="font-medium text-foreground">Dispatched</span>.
+                Claude Code reads each issue and opens a PR for review.
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {lastDispatch.issues.map((iss) => (
+                  <Link
+                    key={iss.issueUrl}
+                    href={iss.issueUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                  >
+                    <GitBranch className="h-3.5 w-3.5" />
+                    {iss.repoFullName.split("/")[1]} #{iss.issueNumber}
+                    <ArrowRight className="h-3 w-3" />
+                  </Link>
+                ))}
+              </div>
+            </div>
           </div>
           <button
             type="button"
@@ -438,12 +459,14 @@ export function FeedbackConsole({
                     <TableCell>
                       <div className="flex flex-col items-start gap-1">
                         <Badge variant={st.variant}>{st.label}</Badge>
-                        {r.agentRunId ? (
+                        {r.githubIssueUrl ? (
                           <Link
-                            href={`/admin/agents/${r.agentRunId}`}
+                            href={r.githubIssueUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
                           >
-                            <Bot className="h-3 w-3" /> run
+                            <GitBranch className="h-3 w-3" /> #{r.githubIssueNumber}
                           </Link>
                         ) : null}
                       </div>
@@ -657,14 +680,17 @@ function FeedbackDetailDialog({
             </Field>
           </div>
 
-          {item.agentRunId ? (
-            <Field label="Agent run">
+          {item.githubIssueUrl ? (
+            <Field label="Claude Code routine">
               <Link
-                href={`/admin/agents/${item.agentRunId}`}
+                href={item.githubIssueUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-primary hover:underline"
               >
-                <Bot className="h-3.5 w-3.5" />
-                {item.agentRunStatus ? `${item.agentRunStatus} · ` : ""}view run
+                <GitBranch className="h-3.5 w-3.5" />
+                {item.githubRepo ? `${item.githubRepo} ` : ""}#{item.githubIssueNumber}
+                <ExternalLink className="h-3 w-3" />
               </Link>
               {item.dispatchedByEmail ? (
                 <span className="ml-2 text-xs text-muted-foreground">

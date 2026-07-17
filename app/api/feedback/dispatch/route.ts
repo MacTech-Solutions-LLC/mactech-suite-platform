@@ -1,53 +1,57 @@
 /**
  * POST /api/feedback/dispatch
  *
- * Bundles a set of feedback items into a single Claude agent run — the
- * "kick off a Claude session that reads all the feedback and corrects each
- * UI/UX issue" action from /admin/feedback.
+ * The "Send to Claude" action from /admin/feedback. Instead of paying for an
+ * agent loop, this files a `@claude <feedback>` GitHub issue in the repo the
+ * feedback is about — the Claude Code GitHub App reads it and opens a PR. No
+ * Anthropic API billing from the Suite; the opened PR (human-reviewed on
+ * GitHub) is the gate.
  *
- * Body: { feedbackIds: string[] }   // if omitted/empty → all open items
- *                                    //   (status new | acknowledged)
+ * Body: { feedbackIds?: string[] }   // omitted/empty → all open items
+ *                                     //   (status new | acknowledged)
  *
  * Flow:
- *   1. Authorize: platform:feedback:manage + platform:agents:create.
- *   2. Load the target feedback rows (only open ones are dispatchable).
- *   3. Compose one structured request describing every item + its pinned
- *      element, and call createPlan() — same orchestrator the /api/agents
- *      surface uses, so the run lands in the normal plan/approval flow.
- *   4. Link the returned runId onto every dispatched row and flip them to
+ *   1. Authorize: platform:feedback:manage + platform:repositories:manage.
+ *   2. Load the target open feedback rows.
+ *   3. Group them by target repo (pageUrl → AppRegistry → repo, Suite default).
+ *   4. File one @claude routine per repo via fileClaudeRoutineIssue().
+ *   5. Record the issue link on every dispatched item and flip it to
  *      `dispatched`.
  *
- * Response: 200 { ok: true, runId, dispatchedCount }
- *
- * No IBE intent is attached (legacy "trust the planner" run, matching
- * /api/agents/plan when the caller sends no intent) — the goal here is a
- * human-reviewed plan, not an auto-executing one.
+ * Response: 200 { ok: true, dispatchedCount, issues: [{repoFullName,
+ *   issueNumber, issueUrl, count}], failures: [{repoFullName, reason, count}] }
+ * If every repo group failed, returns 502 with ok:false.
  */
 
 import { type NextRequest, NextResponse } from "next/server";
 import { AuthorizationError, requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
-import { createPlan } from "@/lib/agents/orchestrator";
 import { prisma } from "@/lib/db/prisma";
-import { buildFeedbackAgentRequest } from "@/lib/services/feedback-service";
+import { fileClaudeRoutineIssue } from "@/lib/agents/cross-repo/claude-routine";
+import {
+  buildFeedbackAgentRequest,
+  buildFeedbackContextHint,
+  groupFeedbackByRepo,
+} from "@/lib/services/feedback-service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** Statuses that are eligible to be sent into an agent run. */
+/** Statuses eligible to be sent into a @claude routine. */
 const OPEN_STATUSES = ["new", "acknowledged"] as const;
 
 export async function POST(request: NextRequest) {
   try {
-    // Dispatch needs both feedback-manage and the agent-create right.
+    // Dispatch files a GitHub issue that opens a PR, so it needs both the
+    // feedback-manage right and the repositories-manage right.
     const ctx = await requirePlatformPermission(PLATFORM_PERMISSIONS.FEEDBACK_MANAGE);
-    await requirePlatformPermission(PLATFORM_PERMISSIONS.AGENTS_CREATE);
+    await requirePlatformPermission(PLATFORM_PERMISSIONS.REPOSITORIES_MANAGE);
 
     let body: Record<string, unknown> = {};
     try {
       body = (await request.json()) as Record<string, unknown>;
     } catch {
-      // An empty body is valid — it means "dispatch all open items".
+      // An empty body is valid — "dispatch all open items".
     }
 
     const idFilter = Array.isArray(body.feedbackIds)
@@ -63,35 +67,67 @@ export async function POST(request: NextRequest) {
     });
 
     if (items.length === 0) {
+      return NextResponse.json({ ok: false, error: "no_open_feedback" }, { status: 400 });
+    }
+
+    // Map each item to the repo it's about, then file one routine per repo.
+    const appRows = await prisma.appRegistry.findMany({
+      where: { repoFullName: { not: null } },
+      select: { subdomain: true, apexDomain: true, publicUrl: true, repoFullName: true },
+    });
+    const groups = groupFeedbackByRepo(items, appRows);
+
+    const issues: Array<{
+      repoFullName: string;
+      issueNumber: number;
+      issueUrl: string;
+      count: number;
+    }> = [];
+    const failures: Array<{ repoFullName: string; reason: string; count: number }> = [];
+    const now = new Date();
+
+    for (const [repoFullName, groupItems] of Array.from(groups)) {
+      const result = await fileClaudeRoutineIssue({
+        repoFullName,
+        intent: buildFeedbackAgentRequest(groupItems),
+        contextHint: buildFeedbackContextHint(groupItems),
+      });
+
+      if (!result.ok) {
+        failures.push({ repoFullName, reason: result.reason, count: groupItems.length });
+        continue;
+      }
+
+      await prisma.feedback.updateMany({
+        where: { id: { in: groupItems.map((i) => i.id) } },
+        data: {
+          status: "dispatched",
+          githubRepo: result.repoFullName,
+          githubIssueNumber: result.issueNumber,
+          githubIssueUrl: result.issueUrl,
+          dispatchedAt: now,
+          dispatchedByEmail: ctx.userProfile.email,
+        },
+      });
+      issues.push({
+        repoFullName: result.repoFullName,
+        issueNumber: result.issueNumber,
+        issueUrl: result.issueUrl,
+        count: groupItems.length,
+      });
+    }
+
+    const dispatchedCount = issues.reduce((n, i) => n + i.count, 0);
+
+    // Nothing landed — surface the first failure reason so the UI can explain.
+    if (dispatchedCount === 0) {
       return NextResponse.json(
-        { ok: false, error: "no_open_feedback" },
-        { status: 400 },
+        { ok: false, error: failures[0]?.reason ?? "dispatch_failed", failures },
+        { status: 502 },
       );
     }
 
-    const requestText = buildFeedbackAgentRequest(items);
-
-    const { runId } = await createPlan({
-      request: requestText,
-      requesterClerkUserId: ctx.clerkUserId,
-      requesterEmail: ctx.userProfile.email,
-    });
-
-    await prisma.feedback.updateMany({
-      where: { id: { in: items.map((i) => i.id) } },
-      data: {
-        status: "dispatched",
-        agentRunId: runId,
-        dispatchedAt: new Date(),
-        dispatchedByEmail: ctx.userProfile.email,
-      },
-    });
-
-    return NextResponse.json({
-      ok: true,
-      runId,
-      dispatchedCount: items.length,
-    });
+    return NextResponse.json({ ok: true, dispatchedCount, issues, failures });
   } catch (err) {
     if (err instanceof AuthorizationError) {
       const status =

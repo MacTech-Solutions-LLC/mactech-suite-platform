@@ -35,15 +35,7 @@
 import { writeAuditLog } from "@/lib/audit";
 import { requirePlatformPermission } from "@/lib/authz";
 import { PLATFORM_PERMISSIONS } from "@/lib/permissions";
-import { crossRepoAgentConfigured } from "@/lib/env";
-import { getGitHubClient } from "@/lib/integrations/github/client";
-import {
-  AGENT_BRANCH_PREFIX,
-  AGENT_PR_FOOTER,
-  CROSS_REPO_ALLOWLIST,
-  MAX_TOTAL_LINES_PER_PR,
-  isAllowlistedRepo,
-} from "./policy";
+import { fileClaudeRoutineIssue } from "./claude-routine";
 import type { Capability, CapabilityResult } from "../types";
 
 export const open_repo_pull_request: Capability = {
@@ -60,69 +52,34 @@ export const open_repo_pull_request: Capability = {
   async invoke(input, ctx): Promise<CapabilityResult> {
     await requirePlatformPermission(PLATFORM_PERMISSIONS.REPOSITORIES_MANAGE);
 
-    if (!crossRepoAgentConfigured()) {
-      return refusal(ctx, "agent_not_configured", {
-        reason:
-          "ENABLE_CROSS_REPO_AGENT and GITHUB_TOKEN must both be set on the Suite Railway service.",
-      });
-    }
-
     const repoFullName = String(input.repoFullName ?? "").trim();
     const intent = String(input.intent ?? "").trim();
-    if (!repoFullName || !intent) {
-      return refusal(ctx, "invalid_input", {
-        reason: "repoFullName and intent are both required.",
-      });
-    }
-    if (!isAllowlistedRepo(repoFullName)) {
-      return refusal(ctx, "repo_not_allowlisted", {
-        reason: `${repoFullName} is not in CROSS_REPO_ALLOWLIST. Add it to lib/agents/cross-repo/policy.ts and re-deploy.`,
-        allowlist: [...CROSS_REPO_ALLOWLIST],
-      });
-    }
+    const contextHint = typeof input.contextHint === "string" ? input.contextHint : "";
+    const extraRules = typeof input.extraGroundRules === "string" ? input.extraGroundRules : "";
 
-    const [owner, repo] = repoFullName.split("/");
-    if (!owner || !repo) {
-      return refusal(ctx, "invalid_repo_full_name", { repoFullName });
-    }
-
-    const gh = getGitHubClient();
-    if (!gh.configured) {
-      return refusal(ctx, "github_not_configured", {
-        reason: "GITHUB_TOKEN missing or ENABLE_GITHUB_SYNC=false.",
-      });
-    }
-
-    const contextHint = typeof input.contextHint === "string" ? input.contextHint.trim() : "";
-    const extraRules = typeof input.extraGroundRules === "string" ? input.extraGroundRules.trim() : "";
-    const issueBody = renderIssueBody({ intent, contextHint, extraRules });
-    const issueTitle = `[mactech-agent] ${truncate(intent.split("\n")[0]!, 60)}`;
-
-    const result = await gh.createIssue(owner, repo, {
-      title: issueTitle,
-      body: issueBody,
-      labels: ["mactech-agent", "automation"],
+    const result = await fileClaudeRoutineIssue({
+      repoFullName,
+      intent,
+      contextHint,
+      extraRules,
     });
     if (!result.ok) {
-      return refusal(ctx, `create_issue_${result.reason}`, {
-        repoFullName,
-        ghStatus: result.status,
-      });
+      return refusal(ctx, result.reason, { repoFullName, ...(result.detail ?? {}) });
     }
 
     await writeAuditLog({
       eventType: "agent.capability.invoked",
       eventCategory: "system",
-      action: `agent: open_repo_pull_request → issue #${result.data.number} (${repoFullName}, run ${ctx.agentRunId})`,
+      action: `agent: open_repo_pull_request → issue #${result.issueNumber} (${result.repoFullName}, run ${ctx.agentRunId})`,
       actorEmail: ctx.requesterEmail,
       resourceType: "github_issue",
-      resourceId: `${repoFullName}#${result.data.number}`,
+      resourceId: `${result.repoFullName}#${result.issueNumber}`,
       metadata: {
         capability: "open_repo_pull_request",
         approverEmail: ctx.approverEmail,
-        repoFullName,
-        issueNumber: result.data.number,
-        issueUrl: result.data.htmlUrl,
+        repoFullName: result.repoFullName,
+        issueNumber: result.issueNumber,
+        issueUrl: result.issueUrl,
         delivery: "claude_code_github_app",
       },
     });
@@ -130,27 +87,27 @@ export const open_repo_pull_request: Capability = {
     return {
       summary: {
         ok: true,
-        repoFullName,
-        issueNumber: result.data.number,
-        issueUrl: result.data.htmlUrl,
+        repoFullName: result.repoFullName,
+        issueNumber: result.issueNumber,
+        issueUrl: result.issueUrl,
         intent,
       },
       artifacts: [
         {
           kind: "markdown",
-          title: `@claude routine — issue #${result.data.number} in ${repoFullName}`,
+          title: `@claude routine — issue #${result.issueNumber} in ${result.repoFullName}`,
           bodyMarkdown: [
             `# @claude routine filed`,
             "",
-            `**Repo:** ${repoFullName}`,
-            `**Issue:** ${result.data.htmlUrl}`,
+            `**Repo:** ${result.repoFullName}`,
+            `**Issue:** ${result.issueUrl}`,
             "",
             `Claude Code reads the mention and opens a PR — typically within a few minutes.`,
-            `Watch ${`https://github.com/${repoFullName}/pulls`} for the PR; review and merge there.`,
+            `Watch ${`https://github.com/${result.repoFullName}/pulls`} for the PR; review and merge there.`,
             "",
             `## Issue body sent`,
             "",
-            issueBody,
+            result.issueBody,
           ].join("\n"),
         },
       ],
@@ -186,38 +143,4 @@ async function refusal(
     },
   });
   return { summary: { ok: false, reason, ...metadata } };
-}
-
-function renderIssueBody(args: {
-  intent: string;
-  contextHint: string;
-  extraRules: string;
-}): string {
-  const parts: string[] = [
-    `@claude ${args.intent}`,
-    "",
-  ];
-  if (args.contextHint) {
-    parts.push("## Context for this change", "", args.contextHint, "");
-  }
-  parts.push(
-    "## Ground rules (MacTech Suite cross-repo agent)",
-    "",
-    `- Branch prefix: \`${AGENT_BRANCH_PREFIX}\` (e.g. \`${AGENT_BRANCH_PREFIX}fix-health-route\`).`,
-    `- Keep total lines of new/modified code under **${MAX_TOTAL_LINES_PER_PR}**. Split into multiple PRs if larger.`,
-    `- **Do NOT modify**: lockfiles (\`package-lock.json\`, \`yarn.lock\`, \`pnpm-lock.yaml\`, \`bun.lockb\`), \`.env*\` files, \`.github/workflows/*\`, \`Dockerfile\`, \`railway.toml\`, \`nixpacks.toml\`, \`middleware.ts\`, any \`.pem\` / \`.key\` / \`.tf\` files.`,
-    `- **Do NOT auto-merge.** Open the PR; a human at MacTech Solutions reviews and merges.`,
-    `- Match the existing repo's framework conventions (Next.js \`app/\` vs \`pages/\`, file casing, lint config).`,
-    `- Keep the PR description concise: what + why + how to verify.`,
-    "",
-  );
-  if (args.extraRules) {
-    parts.push("## Additional rules", "", args.extraRules, "");
-  }
-  parts.push(AGENT_PR_FOOTER.trim());
-  return parts.join("\n");
-}
-
-function truncate(s: string, n: number): string {
-  return s.length <= n ? s : s.slice(0, n - 1) + "…";
 }

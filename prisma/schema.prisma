@@ -2326,11 +2326,17 @@ model Feedback {
   userAgent   String? @db.Text
 
   // ── Dispatch linkage ─────────────────────────────────────────────────────
-  // Set when an admin bundles this item (with others) into a Claude agent run.
-  agentRun          AgentRun? @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
-  agentRunId        String?
+  // Dispatch files a `@claude <intent>` GitHub issue (Claude Code GitHub App
+  // → PR) in the repo the feedback is about. These record where it went.
+  githubRepo        String?
+  githubIssueNumber Int?
+  githubIssueUrl    String?   @db.Text
   dispatchedAt      DateTime?
   dispatchedByEmail String?
+  // Legacy: early dispatch bundled feedback into a Suite AgentRun instead of
+  // a @claude routine. Retained so historical rows keep their link.
+  agentRun          AgentRun? @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+  agentRunId        String?
 
   // ── Resolution ───────────────────────────────────────────────────────────
   resolvedAt DateTime?

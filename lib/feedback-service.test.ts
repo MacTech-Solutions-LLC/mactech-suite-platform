@@ -1,7 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Feedback } from "@prisma/client";
-import { buildFeedbackAgentRequest } from "./services/feedback-service";
+import {
+  buildFeedbackAgentRequest,
+  resolveRepoForPage,
+  groupFeedbackByRepo,
+} from "./services/feedback-service";
+import { SUITE_REPO_FULL_NAME } from "./agents/cross-repo/policy";
 
 function mk(o: Partial<Feedback> & Pick<Feedback, "id" | "category" | "content" | "pageUrl">): Feedback {
   return {
@@ -60,6 +65,75 @@ test("buildFeedbackAgentRequest uses singular grammar for one item", () => {
     mk({ id: "a", category: "general", content: "note", pageUrl: "https://x/y" }),
   ]);
   assert.match(out, /1 item follows/);
+});
+
+test("resolveRepoForPage maps app hosts and defaults to the Suite", () => {
+  const appRows = [
+    {
+      subdomain: "qms",
+      apexDomain: "mactechsolutionsllc.com",
+      publicUrl: "https://qms.mactechsolutionsllc.com",
+      repoFullName: "MacTech-Solutions-LLC/QMS",
+    },
+  ];
+  // A QMS-app page → the QMS repo.
+  assert.equal(
+    resolveRepoForPage("https://qms.mactechsolutionsllc.com/controls", appRows),
+    "MacTech-Solutions-LLC/QMS",
+  );
+  // A Suite page → the Suite repo (fallback).
+  assert.equal(
+    resolveRepoForPage("https://www.suite.mactechsolutionsllc.com/admin/subdomains", appRows),
+    SUITE_REPO_FULL_NAME,
+  );
+  // Garbage URL → still safe, defaults to Suite.
+  assert.equal(resolveRepoForPage("not-a-url", appRows), SUITE_REPO_FULL_NAME);
+});
+
+test("groupFeedbackByRepo buckets items by resolved repo", () => {
+  const mk = (id: string, pageUrl: string) =>
+    ({
+      id,
+      category: "ux",
+      status: "new",
+      content: "x",
+      pageUrl,
+      elementSelector: null,
+      elementId: null,
+      elementClass: null,
+      elementText: null,
+      elementType: null,
+      submittedBy: null,
+      userAgent: null,
+      adminNotes: null,
+      githubRepo: null,
+      githubIssueNumber: null,
+      githubIssueUrl: null,
+      agentRunId: null,
+      dispatchedAt: null,
+      dispatchedByEmail: null,
+      resolvedAt: null,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    }) as Parameters<typeof groupFeedbackByRepo>[0][number];
+  const appRows = [
+    {
+      subdomain: "qms",
+      apexDomain: "mactechsolutionsllc.com",
+      publicUrl: null,
+      repoFullName: "MacTech-Solutions-LLC/QMS",
+    },
+  ];
+  const groups = groupFeedbackByRepo(
+    [
+      mk("a", "https://www.suite.mactechsolutionsllc.com/admin/x"),
+      mk("b", "https://qms.mactechsolutionsllc.com/y"),
+      mk("c", "https://www.suite.mactechsolutionsllc.com/admin/z"),
+    ],
+    appRows,
+  );
+  assert.equal(groups.get(SUITE_REPO_FULL_NAME)?.length, 2);
+  assert.equal(groups.get("MacTech-Solutions-LLC/QMS")?.length, 1);
 });
 
 test("buildFeedbackAgentRequest caps length and notes omissions", () => {
