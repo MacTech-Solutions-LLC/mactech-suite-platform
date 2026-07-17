@@ -1734,6 +1734,9 @@ model AgentRun {
   steps     AgentStep[]
   artifacts AgentArtifact[]
   approvals AgentApproval[]
+  // UI-Fix feedback items an admin bundled into this run ("kick off a
+  // Claude session"). Empty for every non-feedback-initiated run.
+  feedbackItems Feedback[]
 
   @@index([status])
   @@index([requestedByClerkUserId])
@@ -2264,4 +2267,81 @@ model ContractLifecycleEvent {
   @@index([contractId, toStage])
   @@index([occurredAt])
   @@index([actorId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USER FEEDBACK (UI-Fix Chrome extension → admin review → agent dispatch)
+// ─────────────────────────────────────────────────────────────────────────────
+// Teammates run the UI-Fix element-pinpoint extension on any MacTech surface,
+// pin an element, and file a note. The extension POSTs to the public ingest
+// route /api/public/feedback (shared-secret auth), which lands a row here.
+// An internal admin triages the queue on /admin/feedback and can bundle
+// selected items into a single Claude agent run via createPlan() — the
+// resulting AgentRun.id is linked back onto every dispatched item.
+
+enum FeedbackCategory {
+  bug
+  ux
+  feature
+  general
+}
+
+enum FeedbackStatus {
+  // Freshly ingested, not yet triaged. Drives the sidebar badge count.
+  new
+  // An admin has seen it and is keeping it in the queue.
+  acknowledged
+  // Bundled into an agent run — agentRunId is set.
+  dispatched
+  // Fixed / actioned. Terminal.
+  resolved
+  // Won't-fix / noise. Terminal.
+  dismissed
+}
+
+model Feedback {
+  id       String           @id @default(cuid())
+  category FeedbackCategory @default(general)
+  status   FeedbackStatus   @default(new)
+
+  // The teammate's note. Free text; may be long.
+  content String @db.Text
+
+  // Where they were, and the element they pinned. Mirrors the extension
+  // payload verbatim — see ui-fix/content/picker.js buildPayload().
+  pageUrl         String  @db.Text
+  elementSelector String? @db.Text
+  elementId       String?
+  elementClass    String? @db.Text
+  // Reviewer-friendly location trail, e.g.
+  //   Page /dashboard "SCTM" › Main content › "Controls" › <button> "Save"
+  elementText     String? @db.Text
+  elementType     String?
+
+  // Optional self-identification from the extension options ("your name /
+  // email"). Null when the teammate left it blank. Not an auth identity —
+  // just an attribution hint for the reviewer.
+  submittedBy String?
+  // Captured server-side from the ingest request for extra context.
+  userAgent   String? @db.Text
+
+  // ── Dispatch linkage ─────────────────────────────────────────────────────
+  // Set when an admin bundles this item (with others) into a Claude agent run.
+  agentRun          AgentRun? @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+  agentRunId        String?
+  dispatchedAt      DateTime?
+  dispatchedByEmail String?
+
+  // ── Resolution ───────────────────────────────────────────────────────────
+  resolvedAt DateTime?
+  adminNotes String?   @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([category])
+  @@index([createdAt])
+  @@index([status, createdAt])
+  @@index([agentRunId])
 }

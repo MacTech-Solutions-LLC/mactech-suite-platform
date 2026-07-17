@@ -31,6 +31,8 @@ export interface SidebarCounts {
   /** Commits in the last 24h that picked up a riskFlag (security-
    *  relevant change worth a glance). */
   commitsFlagged24h: number;
+  /** UI-Fix feedback items still in the `new` (un-triaged) state. */
+  feedbackNew: number;
 }
 
 const ZERO: SidebarCounts = {
@@ -41,6 +43,7 @@ const ZERO: SidebarCounts = {
   securityEventsOpen: 0,
   publicStatusDown: 0,
   commitsFlagged24h: 0,
+  feedbackNew: 0,
 };
 
 export async function getSidebarCounts(): Promise<SidebarCounts> {
@@ -54,6 +57,7 @@ export async function getSidebarCounts(): Promise<SidebarCounts> {
       securityEventsOpen,
       publicStatusDown,
       commitsFlagged24h,
+      feedbackNew,
       brokenLatest,
     ] = await Promise.all([
       prisma.agentRun.count({ where: { status: "awaiting_approval" } }),
@@ -87,6 +91,8 @@ export async function getSidebarCounts(): Promise<SidebarCounts> {
           NOT: { riskFlagsJson: { equals: [] } },
         },
       }),
+      // UI-Fix feedback still awaiting triage. Cheap indexed count.
+      prisma.feedback.count({ where: { status: "new" } }),
       // Broken deployments — the latest snapshot per active Railway
       // resource that's failed/crashed. Done as a $queryRaw because
       // Prisma doesn't have a clean "latest per group" without a
@@ -112,6 +118,7 @@ export async function getSidebarCounts(): Promise<SidebarCounts> {
       securityEventsOpen,
       publicStatusDown: Number(publicStatusDown[0]?.count ?? 0),
       commitsFlagged24h,
+      feedbackNew,
     };
   } catch (err) {
     // The sidebar must NEVER throw the layout — render zeros if any

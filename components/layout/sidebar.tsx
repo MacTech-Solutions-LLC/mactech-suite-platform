@@ -32,6 +32,7 @@ import {
   Receipt,
   ReceiptText,
   Repeat,
+  MessageSquareText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -69,6 +70,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
       { href: "/command-center", label: "Command Center", icon: Compass },
       { href: "/admin/agents", label: "Agents", icon: Bot, badgeKey: "agentsAwaiting", badgeTone: "warning" },
       { href: "/admin/agents/triggers", label: "Scheduled Triggers", icon: Clock },
+      { href: "/admin/feedback", label: "User Feedback", icon: MessageSquareText, badgeKey: "feedbackNew", badgeTone: "warning" },
     ],
   },
   {

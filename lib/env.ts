@@ -62,6 +62,13 @@ const RawEnvSchema = z.object({
    *  scheduler hits the endpoint (Railway cron, GitHub Actions, etc.).
    *  Without this, the cron endpoint refuses every call. */
   CRON_SECRET: z.string().optional(),
+  /** Shared secret protecting the public feedback-ingest route
+   *  (POST /api/public/feedback). The UI-Fix Chrome extension sends it as
+   *  `Authorization: Bearer <FEEDBACK_INGEST_SECRET>`; the route rejects any
+   *  request whose bearer token does not match (timing-safe). Distributed to
+   *  the teammates who run the extension. Generate with `openssl rand -hex 32`.
+   *  Without it, the ingest route returns 503. */
+  FEEDBACK_INGEST_SECRET: z.string().optional(),
   /** Slice 8: Resend API key for outbound team emails (AskAIPanel
    *  + email_team_summary capability). Without it, the email client
    *  no-ops gracefully — the AI narrative still renders in the UI,
@@ -217,6 +224,12 @@ export function auditIngestionConfigured(): boolean {
 
 export function commandCenterCronConfigured(): boolean {
   return Boolean(env.COMMAND_CENTER_CRON_SECRET);
+}
+
+/** True when the public feedback-ingest route can authenticate the
+ *  UI-Fix extension. Without it, POST /api/public/feedback returns 503. */
+export function feedbackIngestConfigured(): boolean {
+  return Boolean(env.FEEDBACK_INGEST_SECRET);
 }
 
 export function githubSyncConfigured(): boolean {

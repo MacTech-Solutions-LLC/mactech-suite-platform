@@ -76,6 +76,14 @@ export const PLATFORM_PERMISSIONS = {
   AGENTS_APPROVE: "platform:agents:approve",
   AGENTS_MANAGE: "platform:agents:manage",
 
+  // ── User Feedback (UI-Fix Chrome extension) ─────────────────────────────
+  // The review queue for feedback teammates file from the UI-Fix element-
+  // pinpoint extension. VIEW: read the queue + item detail. MANAGE: change
+  // an item's status, add notes, and bundle items into a Claude agent run
+  // ("kick off a session"). Dispatching also requires AGENTS_CREATE.
+  FEEDBACK_VIEW: "platform:feedback:view",
+  FEEDBACK_MANAGE: "platform:feedback:manage",
+
   // ── Commercial Operations ───────────────────────────────────────────────
   // The hub surface for the buyer journey: catalog (Packages),
   // transactions (Orders), recurring billing (Subscriptions), and the
@@ -242,6 +250,9 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, PlatformPermission[
     PLATFORM_PERMISSIONS.AGENTS_VIEW,
     PLATFORM_PERMISSIONS.AGENTS_CREATE,
     PLATFORM_PERMISSIONS.AGENTS_APPROVE,
+    // User Feedback: admins triage the queue and dispatch fixes to an agent.
+    PLATFORM_PERMISSIONS.FEEDBACK_VIEW,
+    PLATFORM_PERMISSIONS.FEEDBACK_MANAGE,
     // Commercial Operations: admins manage catalog + orders + subs.
     // QBO mutate (reconnect / disconnect) is super-admin only via
     // Object.values mapping above.
@@ -269,6 +280,8 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, PlatformPermission[
     // Read-only visibility into the agent run history; support owns
     // triage and needs to see what an admin asked the agent to do.
     PLATFORM_PERMISSIONS.AGENTS_VIEW,
+    // Support triages the feedback queue (read-only); dispatch is admin-only.
+    PLATFORM_PERMISSIONS.FEEDBACK_VIEW,
     PLATFORM_PERMISSIONS.PACKAGES_VIEW,
     PLATFORM_PERMISSIONS.ORDERS_VIEW,
     PLATFORM_PERMISSIONS.SUBSCRIPTIONS_VIEW,
