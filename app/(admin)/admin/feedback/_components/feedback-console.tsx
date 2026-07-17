@@ -22,6 +22,8 @@ import {
   Loader2,
   Copy,
   Check,
+  X,
+  ArrowRight,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -137,7 +139,28 @@ export function FeedbackConsole({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detail, setDetail] = useState<FeedbackRow | null>(null);
   const [dispatching, setDispatching] = useState(false);
+  // Set on a successful dispatch so we can show a persistent banner linking
+  // to the run — the toast alone was too easy to miss.
+  const [lastDispatch, setLastDispatch] = useState<{
+    runId: string;
+    count: number;
+  } | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Per-status counts for the filter chips, so a dispatched/resolved item
+  // never feels "lost" — the number next to each label shows where it went.
+  const statusCounts = useMemo(
+    () => ({
+      open: rows.filter(isOpen).length,
+      new: rows.filter((r) => r.status === "new").length,
+      acknowledged: rows.filter((r) => r.status === "acknowledged").length,
+      dispatched: rows.filter((r) => r.status === "dispatched").length,
+      resolved: rows.filter((r) => r.status === "resolved").length,
+      dismissed: rows.filter((r) => r.status === "dismissed").length,
+      all: rows.length,
+    }),
+    [rows],
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -215,6 +238,10 @@ export function FeedbackConsole({
         variant: "success",
       });
       setSelected(new Set());
+      // Surface where the items went: a persistent banner linking to the run,
+      // and switch the view to Dispatched so they don't vanish from sight.
+      setLastDispatch({ runId: data.runId, count: data.dispatchedCount });
+      setStatusFilter("dispatched");
       startTransition(() => router.refresh());
     } catch (err) {
       toast({
@@ -280,6 +307,34 @@ export function FeedbackConsole({
         ) : null}
       </div>
 
+      {/* Post-dispatch banner — persistent link to the run just created. */}
+      {lastDispatch ? (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+            <span>
+              Sent {lastDispatch.count} item
+              {lastDispatch.count === 1 ? "" : "s"} to Claude — now marked{" "}
+              <span className="font-medium text-foreground">Dispatched</span>.{" "}
+              <Link
+                href={`/admin/agents/${lastDispatch.runId}`}
+                className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+              >
+                Review the agent run <ArrowRight className="h-3 w-3" />
+              </Link>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setLastDispatch(null)}
+            className="text-muted-foreground hover:text-foreground"
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null}
+
       {/* Filters */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -287,6 +342,7 @@ export function FeedbackConsole({
             <FilterChip
               key={f.key}
               active={statusFilter === f.key}
+              count={statusCounts[f.key]}
               onClick={() => setStatusFilter(f.key)}
             >
               {f.label}
@@ -430,23 +486,35 @@ function FilterChip({
   active,
   onClick,
   children,
+  count,
 }: {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
+  count?: number;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
         active
           ? "border-primary/40 bg-primary/15 text-foreground"
           : "border-border text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
       )}
     >
       {children}
+      {typeof count === "number" && count > 0 ? (
+        <span
+          className={cn(
+            "rounded-full px-1.5 text-[10px] tabular-nums",
+            active ? "bg-primary/20 text-foreground" : "bg-secondary text-muted-foreground",
+          )}
+        >
+          {count}
+        </span>
+      ) : null}
     </button>
   );
 }
