@@ -32,6 +32,8 @@ export default function RootLayout({
 }) {
   return (
     <ClerkProvider
+      signInFallbackRedirectUrl="/welcome"
+      signUpFallbackRedirectUrl="/welcome"
       appearance={{
         variables: {
           colorPrimary: "#22d3ee", // sky-400; explicit hex so Clerk's internal contrast picker resolves correctly
