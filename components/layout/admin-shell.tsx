@@ -14,7 +14,7 @@ export async function AdminShell({
   const counts = await getSidebarCounts();
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar counts={counts} />
+      <Sidebar counts={counts} ctx={ctx} />
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
         <Topbar ctx={ctx} />
         <main className="min-w-0 flex-1 overflow-x-hidden p-4 md:p-8">{children}</main>

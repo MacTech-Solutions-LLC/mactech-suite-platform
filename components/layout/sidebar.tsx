@@ -48,6 +48,8 @@ import { cn } from "@/lib/utils";
  */
 
 import type { SidebarCounts } from "@/lib/services/command-center/sidebar-counts-service";
+import type { CommandCenterAuthContext } from "@/lib/authz";
+import { PLATFORM_PERMISSIONS, type PlatformPermission } from "@/lib/permissions";
 
 type BadgeTone = "destructive" | "warning";
 
@@ -60,6 +62,7 @@ type NavItem = {
    *  badge if the value is > 0. Tone controls the colour. */
   badgeKey?: keyof SidebarCounts;
   badgeTone?: BadgeTone;
+  permission?: PlatformPermission;
 };
 
 const NAV: Array<{ group: string; items: NavItem[] }> = [
@@ -69,6 +72,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/command-center", label: "Command Center", icon: Compass },
       { href: "/admin/agents", label: "Agents", icon: Bot, badgeKey: "agentsAwaiting", badgeTone: "warning" },
+      { href: "/admin/ai", label: "MacTech AI", icon: Bot, permission: PLATFORM_PERMISSIONS.AI_ACCESS },
       { href: "/admin/agents/triggers", label: "Scheduled Triggers", icon: Clock },
       { href: "/admin/feedback", label: "User Feedback", icon: MessageSquareText, badgeKey: "feedbackNew", badgeTone: "warning" },
     ],
@@ -148,7 +152,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
   },
 ];
 
-export function Sidebar({ counts }: { counts?: SidebarCounts }) {
+export function Sidebar({ counts, ctx }: { counts?: SidebarCounts; ctx: CommandCenterAuthContext }) {
   const pathname = usePathname();
   // Pick the single nav item whose href is the longest prefix of the
   // current pathname — avoids "/admin/agents" being highlighted when
@@ -157,6 +161,7 @@ export function Sidebar({ counts }: { counts?: SidebarCounts }) {
     let best: string | null = null;
     for (const group of NAV) {
       for (const item of group.items) {
+        if (item.permission && !ctx.permissions.includes(item.permission)) continue;
         if (item.disabled) continue;
         if (item.href === "#" || item.href.startsWith("#")) continue;
         if (pathname === item.href) {
@@ -196,6 +201,7 @@ export function Sidebar({ counts }: { counts?: SidebarCounts }) {
             </div>
             <ul className="space-y-0.5">
               {group.items.map((item) => {
+                if (item.permission && !ctx.permissions.includes(item.permission)) return null;
                 const active = !item.disabled && activeHref === item.href;
                 const Icon = item.icon;
                 if (item.disabled) {
