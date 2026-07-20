@@ -60,7 +60,7 @@ export async function executeAiTool(input: {
         const args = parsed.data as { title: string; agency: string; proposalDueDate: string; notes?: string };
         const data = await domainFetch(`${baseUrl}/api/proposal/pursuits`, {
           method: "POST",
-          body: JSON.stringify({ ...args, status: "DRAFT", riskLevel: "MEDIUM", submissionMethod: "PORTAL" }),
+          body: JSON.stringify(buildProposalDraftPayload(args)),
         }, input.cookieHeader, input.requestId, controller.signal) as Record<string, unknown>;
         const domainData = data.data as Record<string, unknown> | undefined;
         const recordId = typeof domainData?.pursuitId === "string" ? domainData.pursuitId : undefined;
@@ -81,6 +81,17 @@ export async function executeAiTool(input: {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export function buildProposalDraftPayload(args: {
+  title: string;
+  agency: string;
+  proposalDueDate: string;
+  notes?: string;
+}) {
+  // ProposalOS owns this contract. Preserve its canonical enum values while
+  // forcing the only status the AI draft adapter is allowed to create.
+  return { ...args, status: "DRAFT" as const, riskLevel: "medium" as const, submissionMethod: "electronic" as const };
 }
 
 async function createApprovalRequest(input: {

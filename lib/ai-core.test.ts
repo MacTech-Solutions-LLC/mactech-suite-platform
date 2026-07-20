@@ -8,6 +8,7 @@ import { NvidiaAiProvider } from "./ai/providers/nvidia-provider";
 import { AiProviderError } from "./ai/providers/provider";
 import { DeterministicRetrievalAdapter, type RetrievalDocument } from "./ai/retrieval/retrieval-service";
 import { getToolDefinition } from "./ai/tools/tool-registry";
+import { buildProposalDraftPayload } from "./ai/tools/tool-executor";
 
 const baseRequest = {
   organizationId: "tenant-a",
@@ -72,6 +73,17 @@ test("tool registry rejects unknown tools and strict schemas reject unknown argu
   assert.ok(tool);
   assert.equal(tool.inputSchema.safeParse({ query: "radar", arbitraryUrl: "https://example.test" }).success, false);
   assert.equal(getToolDefinition("suite.submit_proposal")?.approvalPolicy, "HUMAN_REQUIRED");
+});
+
+test("ProposalOS draft adapter preserves domain enum values and cannot publish", () => {
+  const payload = buildProposalDraftPayload({
+    title: "Synthetic acceptance draft",
+    agency: "Synthetic Test Agency",
+    proposalDueDate: "2026-08-31T17:00:00.000Z",
+  });
+  assert.equal(payload.status, "DRAFT");
+  assert.equal(payload.riskLevel, "medium");
+  assert.equal(payload.submissionMethod, "electronic");
 });
 
 test("mock provider is deterministic and streams", async () => {
