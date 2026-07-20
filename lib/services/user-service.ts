@@ -110,7 +110,7 @@ export async function inviteCustomerUser(rawInput: InviteCustomerUserInput) {
         // Land them on /sign-up so Clerk's hosted <SignUp /> component
         // can consume the `__clerk_ticket` query param, create the
         // user, accept the org membership, then forward to /welcome
-        // (configured via SignUp afterSignUpUrl).
+        // (configured via the Clerk sign-up fallback redirect).
         redirectUrl: `${env.NEXT_PUBLIC_APP_URL}/sign-up`,
       }),
     );

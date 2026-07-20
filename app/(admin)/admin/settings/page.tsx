@@ -131,7 +131,11 @@ export default async function SettingsPage() {
           <CardContent className="space-y-2 text-sm">
             <Row label="App URL" value={env.NEXT_PUBLIC_APP_URL} mono />
             <Row label="Sign in URL" value={env.NEXT_PUBLIC_CLERK_SIGN_IN_URL} mono />
-            <Row label="After sign in" value={env.NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL} mono />
+            <Row
+              label="Sign-in fallback"
+              value={env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL}
+              mono
+            />
             <Row label="Registered apps" value={String(registeredApps)} />
             <Row label="Internal MacTech users" value={String(internalUsers)} />
             <Row label="Customer organizations" value={String(customerOrgs)} />
