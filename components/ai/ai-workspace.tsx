@@ -8,7 +8,7 @@ type Citation = { documentId: string; title: string; sourceApplication: string; 
 type ToolResult = { toolName: string; status: string; riskLevel: string; label?: string; approvalId?: string; recordId?: string; recordUrl?: string; data?: unknown };
 type Message = { id: string; role: "user" | "assistant"; content: string; requestId?: string; citations?: Citation[]; toolResult?: ToolResult; error?: string };
 
-export function AiWorkspace({ organizations, canAdmin }: { organizations: Array<{ id: string; name: string }>; canAdmin: boolean }) {
+export function AiWorkspace({ organizations, canAdmin, initialConversationId }: { organizations: Array<{ id: string; name: string }>; canAdmin: boolean; initialConversationId: string }) {
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
   const [classification, setClassification] = useState("PUBLIC");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -17,7 +17,7 @@ export function AiWorkspace({ organizations, canAdmin }: { organizations: Array<
   const [toolName, setToolName] = useState("");
   const [toolArgs, setToolArgs] = useState("{}");
   const [running, setRunning] = useState(false);
-  const [conversationId, setConversationId] = useState(() => crypto.randomUUID());
+  const [conversationId, setConversationId] = useState(initialConversationId);
   const abortRef = useRef<AbortController | null>(null);
   const selectedOrganization = useMemo(() => organizations.find((org) => org.id === organizationId), [organizations, organizationId]);
 
