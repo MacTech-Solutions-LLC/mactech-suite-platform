@@ -100,7 +100,8 @@ authorization decisions read from the local schema.
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | yes | Clerk publishable key |
 | `CLERK_SECRET_KEY` | yes | Clerk secret key (server-only) |
 | `NEXT_PUBLIC_CLERK_SIGN_IN_URL` | optional | Defaults to `/sign-in` |
-| `NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL` | optional | Defaults to `/dashboard` |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL` | optional | Defaults to `/dashboard` |
+| `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL` | optional | Defaults to `/dashboard` |
 | `CLERK_WEBHOOK_SECRET` | recommended | Signing secret for `/api/webhooks/clerk` |
 | `AUDIT_INGEST_API_KEY` | recommended | Bearer key required by `/api/audit/ingest` |
 | `SEED_SUPER_ADMIN_EMAIL` | optional | Bootstraps a `mactech_super_admin` profile on seed |
