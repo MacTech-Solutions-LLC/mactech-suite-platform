@@ -1,7 +1,20 @@
 import { writeAuditLog } from "@/lib/audit";
 import type { AiAuthority } from "@/lib/ai/auth/resolve-ai-authority";
+import { getAiConfig } from "@/lib/ai/config";
 import type { AiClassification } from "@/lib/ai/schemas/chat";
 import { contentHash, scanAndRedactSecrets } from "./redaction";
+
+export function buildAiContentAuditFields(prompt: string | undefined, response: string | undefined, storeContent: boolean) {
+  const promptScan = scanAndRedactSecrets(prompt ?? "");
+  const responseScan = scanAndRedactSecrets(response ?? "");
+  return {
+    promptHash: prompt ? contentHash(prompt) : null,
+    responseHash: response ? contentHash(response) : null,
+    promptRedactedExcerpt: storeContent && prompt ? promptScan.redacted.slice(0, 180) : null,
+    responseRedactedExcerpt: storeContent && response ? responseScan.redacted.slice(0, 180) : null,
+    secretLabels: Array.from(new Set(promptScan.labels.concat(responseScan.labels))),
+  };
+}
 
 export async function writeAiAudit(input: {
   authority: AiAuthority;
@@ -23,8 +36,11 @@ export async function writeAiAudit(input: {
   approvalId?: string;
   tokenUsage?: unknown;
 }) {
-  const promptScan = scanAndRedactSecrets(input.prompt ?? "");
-  const responseScan = scanAndRedactSecrets(input.response ?? "");
+  const contentFields = buildAiContentAuditFields(
+    input.prompt,
+    input.response,
+    getAiConfig().storeConversationContent,
+  );
   return writeAuditLog({
     eventType: input.eventType,
     eventCategory: "system",
@@ -53,11 +69,7 @@ export async function writeAiAudit(input: {
       outcome: input.outcome,
       latencyMs: input.latencyMs ?? null,
       tokenUsage: input.tokenUsage ?? null,
-      promptHash: input.prompt ? contentHash(input.prompt) : null,
-      responseHash: input.response ? contentHash(input.response) : null,
-      promptRedactedExcerpt: input.prompt ? promptScan.redacted.slice(0, 180) : null,
-      responseRedactedExcerpt: input.response ? responseScan.redacted.slice(0, 180) : null,
-      secretLabels: Array.from(new Set(promptScan.labels.concat(responseScan.labels))),
+      ...contentFields,
     },
   });
 }
