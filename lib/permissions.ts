@@ -76,6 +76,19 @@ export const PLATFORM_PERMISSIONS = {
   AGENTS_APPROVE: "platform:agents:approve",
   AGENTS_MANAGE: "platform:agents:manage",
 
+  // MacTech AI. These deliberately use the suite-wide `ai.*` namespace so
+  // the same permission names can be carried in Hub authority snapshots for
+  // both internal operators and tenant members.
+  AI_ACCESS: "ai.access",
+  AI_CHAT: "ai.chat",
+  AI_RETRIEVE: "ai.retrieve",
+  AI_TOOL_READ: "ai.tool.read",
+  AI_TOOL_DRAFT: "ai.tool.draft",
+  AI_TOOL_EXECUTE: "ai.tool.execute",
+  AI_APPROVE: "ai.approve",
+  AI_ADMIN: "ai.admin",
+  AI_VIEW_AUDIT: "ai.view_audit",
+
   // ── User Feedback (UI-Fix Chrome extension) ─────────────────────────────
   // The review queue for feedback teammates file from the UI-Fix element-
   // pinpoint extension. VIEW: read the queue + item detail. MANAGE: change
@@ -125,6 +138,15 @@ export const ORG_PERMISSIONS = {
   REPORTS_EXPORT: "org:reports:export",
   AUDIT_VIEW: "org:audit:view",
   SETTINGS_MANAGE: "org:settings:manage",
+  AI_ACCESS: "ai.access",
+  AI_CHAT: "ai.chat",
+  AI_RETRIEVE: "ai.retrieve",
+  AI_TOOL_READ: "ai.tool.read",
+  AI_TOOL_DRAFT: "ai.tool.draft",
+  AI_TOOL_EXECUTE: "ai.tool.execute",
+  AI_APPROVE: "ai.approve",
+  AI_ADMIN: "ai.admin",
+  AI_VIEW_AUDIT: "ai.view_audit",
 
   // ── Suite app domains (SUITE_PERMISSION_MATRIX v1) ──────────────────────
   // Proposals (Proposal app)
@@ -250,6 +272,15 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, PlatformPermission[
     PLATFORM_PERMISSIONS.AGENTS_VIEW,
     PLATFORM_PERMISSIONS.AGENTS_CREATE,
     PLATFORM_PERMISSIONS.AGENTS_APPROVE,
+    PLATFORM_PERMISSIONS.AI_ACCESS,
+    PLATFORM_PERMISSIONS.AI_CHAT,
+    PLATFORM_PERMISSIONS.AI_RETRIEVE,
+    PLATFORM_PERMISSIONS.AI_TOOL_READ,
+    PLATFORM_PERMISSIONS.AI_TOOL_DRAFT,
+    PLATFORM_PERMISSIONS.AI_TOOL_EXECUTE,
+    PLATFORM_PERMISSIONS.AI_APPROVE,
+    PLATFORM_PERMISSIONS.AI_ADMIN,
+    PLATFORM_PERMISSIONS.AI_VIEW_AUDIT,
     // User Feedback: admins triage the queue and dispatch fixes to an agent.
     PLATFORM_PERMISSIONS.FEEDBACK_VIEW,
     PLATFORM_PERMISSIONS.FEEDBACK_MANAGE,
@@ -280,6 +311,10 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, PlatformPermission[
     // Read-only visibility into the agent run history; support owns
     // triage and needs to see what an admin asked the agent to do.
     PLATFORM_PERMISSIONS.AGENTS_VIEW,
+    PLATFORM_PERMISSIONS.AI_ACCESS,
+    PLATFORM_PERMISSIONS.AI_CHAT,
+    PLATFORM_PERMISSIONS.AI_RETRIEVE,
+    PLATFORM_PERMISSIONS.AI_TOOL_READ,
     // Support triages the feedback queue (read-only); dispatch is admin-only.
     PLATFORM_PERMISSIONS.FEEDBACK_VIEW,
     PLATFORM_PERMISSIONS.PACKAGES_VIEW,

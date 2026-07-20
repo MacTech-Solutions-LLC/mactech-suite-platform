@@ -117,6 +117,25 @@ const RawEnvSchema = z.object({
   CLOUDFLARE_API_TOKEN: z.string().optional(),
   CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
+  // MacTech AI / NVIDIA NIM. External inference remains opt-in even when a
+  // key is configured so preview environments cannot send data accidentally.
+  AI_ENABLED: z.string().default("false").transform((v) => v.toLowerCase() === "true"),
+  AI_PROVIDER: z.enum(["nvidia", "mock"]).default("mock"),
+  AI_EXTERNAL_INFERENCE_ENABLED: z.string().default("false").transform((v) => v.toLowerCase() === "true"),
+  AI_DEVELOPMENT_MODE: z.string().default("false").transform((v) => v.toLowerCase() === "true"),
+  NVIDIA_API_KEY: z.string().optional(),
+  NVIDIA_BASE_URL: z.string().url().default("https://integrate.api.nvidia.com/v1"),
+  NVIDIA_CHAT_MODEL: z.string().optional(),
+  NVIDIA_EMBEDDING_MODEL: z.string().optional(),
+  AI_MAX_INPUT_CHARS: z.coerce.number().int().positive().max(100000).default(16000),
+  AI_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().max(8192).default(1200),
+  AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().max(120000).default(30000),
+  AI_ALLOWED_CLASSIFICATIONS: z.string().default("PUBLIC,INTERNAL"),
+  AI_STORE_CONVERSATION_CONTENT: z.string().default("false").transform((v) => v.toLowerCase() === "true"),
+  AI_AUDIT_RETENTION_DAYS: z.coerce.number().int().positive().default(365),
+  AI_MAX_RETRIEVAL_CHUNKS: z.coerce.number().int().positive().max(20).default(5),
+  OPPORTUNITIES_BASE_URL: z.string().url().optional(),
+  PROPOSAL_BASE_URL: z.string().url().optional(),
   /** Slice 13.1: opt-in flag to enable the cross-repo agent. Even
    *  with GITHUB_TOKEN set, the capability refuses unless this is
    *  "true" — guards against an accidental preview deploy gaining
