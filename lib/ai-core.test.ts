@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { evaluateAiAuthority } from "./ai/auth/resolve-ai-authority";
 import { scanAndRedactSecrets } from "./ai/audit/redaction";
+import { buildAiContentAuditFields } from "./ai/audit/ai-audit-service";
 import { evaluateClassification } from "./ai/classification/classification-policy";
 import { MockAiProvider } from "./ai/providers/mock-provider";
 import { NvidiaAiProvider } from "./ai/providers/nvidia-provider";
@@ -35,6 +36,18 @@ test("secret scanner catches and redacts provider, bearer, password, and connect
   assert.ok(scan.labels.includes("nvidia_api_key"));
   assert.ok(!scan.redacted.includes("hunter2"));
   assert.ok(!scan.redacted.includes("postgresql://"));
+});
+
+test("AI audit content retention defaults to hashes without excerpts", () => {
+  const metadata = buildAiContentAuditFields("public synthetic prompt", "synthetic response", false);
+  assert.ok(metadata.promptHash);
+  assert.ok(metadata.responseHash);
+  assert.equal(metadata.promptRedactedExcerpt, null);
+  assert.equal(metadata.responseRedactedExcerpt, null);
+
+  const optedIn = buildAiContentAuditFields("password=hunter2", "safe", true);
+  assert.equal(optedIn.promptRedactedExcerpt, "[REDACTED:password_assignment]");
+  assert.ok(optedIn.secretLabels.includes("password_assignment"));
 });
 
 test("Hub AI authority fails closed on each missing authority condition", () => {
